@@ -2,6 +2,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <vector>
+#include <wrl/client.h>
 #ifdef _DEBUG
 #include <iostream>
 #endif
@@ -10,6 +11,17 @@
 #pragma comment(lib, "dxgi.lib")
 
 using namespace std;
+using Microsoft::WRL::ComPtr;
+// DirectXの初期化に必要なグローバル変数
+ID3D12Device* device = nullptr;
+IDXGIFactory6* dxgiFactory = nullptr;
+IDXGISwapChain4* swapChain = nullptr;
+ID3D12GraphicsCommandList* commandList = nullptr;
+ID3D12CommandAllocator* commandAllocator = nullptr;
+ID3D12DescriptorHeap* rtvHeap = nullptr;
+ID3D12CommandQueue* commandQueue = nullptr;
+
+ComPtr<ID3D12DebugDevice> debugDevice;
 
 // @brief コンソール画面にフォーマット付き文字列を出力する関数
 void DebugOutputFormatString(const char* format, ...)
@@ -21,20 +33,44 @@ void DebugOutputFormatString(const char* format, ...)
 	va_end(args);
 #endif
 }
+
+void EnableDebugLayer()
+{
+#ifdef _DEBUG
+	ID3D12Debug* debugLayer = nullptr;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugLayer))))
+	{
+		debugLayer->EnableDebugLayer();
+		debugLayer->Release();
+	}
+	else
+	{
+		DebugOutputFormatString("Debug Layerの有効化に失敗\n");
+	}
+#endif
+}
+
 // @brief DirectXの初期化処理
 bool InitializeDirectX(HWND hwnd)
 {
 	DebugOutputFormatString("DirectXの初期化を開始\n");
-	ID3D12Device* device = nullptr;
-	IDXGIFactory6* dxgiFactory = nullptr;
-	IDXGISwapChain4* swapChain = nullptr;
+
+	EnableDebugLayer(); // デバッグレイヤーを有効化
 
 	// DXGIファクトリの作成
+#ifdef _DEBUG
+	if (CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&dxgiFactory)) != S_OK)
+	{
+		DebugOutputFormatString("DXGIファクトリの作成に失敗\n");
+		return false;
+	}
+#else
 	if (CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)) != S_OK)
 	{
 		DebugOutputFormatString("DXGIファクトリの作成に失敗\n");
 		return false;
 	}
+#endif
 	// アダプタの取得
 	std::vector<IDXGIAdapter*> adapters;
 
@@ -93,13 +129,16 @@ bool InitializeDirectX(HWND hwnd)
 		DebugOutputFormatString("DirectXの初期化に失敗\n");
 		return false;
 	}
+#ifdef _DEBUG
+	device->QueryInterface(IID_PPV_ARGS(&debugDevice));
+#endif // _DEBUG
+
 
 	DebugOutputFormatString("DirectXの初期化が正常に終了\n");
 
 	//-----
 	// コマンドリスト
-	ID3D12CommandList* commandList = nullptr;
-	ID3D12CommandAllocator* commandAllocator = nullptr;
+
 
 	if (device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)) != S_OK)
 	{
@@ -114,7 +153,7 @@ bool InitializeDirectX(HWND hwnd)
 	}
 
 	// コマンドリストの実行
-	ID3D12CommandQueue* commandQueue = nullptr;
+
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	// コマンドリストと合わせます。
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -162,7 +201,76 @@ bool InitializeDirectX(HWND hwnd)
 		return false;
 	}
 
+	// レンダーターターゲットビューの作成
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+	rtvHeapDesc.NumDescriptors = 2; // バックバッファの数
+	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV; // レンダーターゲットビュー
+	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // フラグはなし
+	rtvHeapDesc.NodeMask = 0; // ノードマスクは0（単一アダプター使用時）
+
+	if (device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap)) != S_OK)
+	{
+		DebugOutputFormatString("レンダーターゲットビューのヒープの作成に失敗\n");
+		return false;
+	}
+
+	// スワップチェインの取得
+	DXGI_SWAP_CHAIN_DESC swapChainDesc2;
+	if (swapChain->GetDesc(&swapChainDesc2) != S_OK)
+	{
+		DebugOutputFormatString("スワップチェインの取得に失敗\n");
+		return false;
+	}
+
+	// バックバッファの取得
+	vector<ID3D12Resource*> backBuffers(swapChainDesc2.BufferCount);
+	for (UINT i = 0; i < swapChainDesc2.BufferCount; ++i)
+	{
+		if (swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffers[i])) != S_OK)
+		{
+			DebugOutputFormatString("バックバッファの取得に失敗\n");
+			return false;
+		}
+	}
+
+	// レンダーターゲットビューの作成
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+	for (UINT i = 0; i < swapChainDesc2.BufferCount; ++i)
+	{
+		device->CreateRenderTargetView(backBuffers[i], nullptr, rtvHandle);
+		rtvHandle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
+
+
 	return true;
+}
+
+void UpdateDirectX(HWND hwnd)
+{
+	// DirectXの更新処理をここに記述
+	// 例えば、レンダリングやリソースの更新など
+
+	// コマンドリストのリセット
+	commandAllocator->Reset();
+
+	auto bbidx = swapChain->GetCurrentBackBufferIndex(); // 現在のバックバッファのインデックスを取得
+
+	auto rtvH = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+	rtvH.ptr += bbidx * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	commandList->OMSetRenderTargets(1, &rtvH, true, nullptr); // レンダーターゲットを設定
+
+	// 画面をクリア
+	const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 黒色でクリア
+	commandList->ClearRenderTargetView(rtvH, clearColor, 0, nullptr);
+
+	commandList->Close(); // コマンドリストを閉じる
+
+	ID3D12CommandList* commandLists[] = { commandList };
+	commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists); // コマンドリストを実行
+	commandAllocator->Reset(); // コマンドアロケータをリセット
+	commandList->Reset(commandAllocator, nullptr); // コマンドリストをリセット
+
+	swapChain->Present(1, 0); // スワップチェインをプレゼント（画面に表示）
 }
 
 LRESULT WindowProcedure(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -228,9 +336,14 @@ int WINAPI WINAPI WinMain(HINSTANCE hInstance, LPSTR lpCmdLine)
 
 			if (msg.message == WM_QUIT) break; // WM_QUITメッセージが来たら終了
 		}
+
+		UpdateDirectX(hwnd); // DirectXの更新処理
 	}
 
 	UnregisterClassW(wc.lpszClassName, wc.hInstance); // ウィンドウクラスの登録解除
+
+	debugDevice->ReportLiveDeviceObjects(D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL);
+	debugDevice->ReportLiveDeviceObjects(D3D12_RLDO_SUMMARY | D3D12_RLDO_IGNORE_INTERNAL);
 	
 	return 0;
 }
