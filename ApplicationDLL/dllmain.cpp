@@ -84,7 +84,7 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 
 	if (g_hwnd != NULL)
 	{
-		g_DxDevice.Initialize(g_hwnd);
+		g_DxDevice.Initialize(g_hwnd, 400, 300);
 	}
 
     return g_hwnd;
@@ -124,4 +124,7 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    g_DxDevice.Render(); // DirectXの更新処理
+
 }

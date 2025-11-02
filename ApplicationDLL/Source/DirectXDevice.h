@@ -4,16 +4,21 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <wrl/client.h>
+
+using namespace std;
+using Microsoft::WRL::ComPtr;
+
 class DirectXDevice :  public GraphicsDevice
 {
 public:
-	virtual ~DirectXDevice() {}
+	virtual ~DirectXDevice();
 
-	bool Initialize(HWND hwnd);
+	bool Initialize(HWND hwnd, UINT width, UINT height);
 
 	void EnableDebugLayer();
 
-	static ID3D12Device* GetDevice() { return m_Device; }
+	//static const ID3D12Device* GetDevice() { return m_pDevice.Get(); }
 
 	/// <summary>
 	/// DirectXのグラフィックインターフェースファクトリを作成する。
@@ -27,8 +32,35 @@ public:
 
 	bool CreateDevice();
 
+	bool CreateCommandList();
+
+	bool CreateCommandQueue();
+
+	bool CreateSwapChain(HWND hwnd, UINT width, UINT height);
+
+	bool CreateRenderTargetView();
+
+	bool CreateFence();
+
+	void Render();
+
+	void WaitForPreviousFrame();
+
 private:
-	static ID3D12Device* m_Device;
-	IDXGIFactory6* m_DxgiFactory = nullptr;
+
+#ifdef _DEBUG
+	void ReportLiveDeviceObjects();
+#endif
+
+	ComPtr<ID3D12Device> m_pDevice = nullptr;
+	ComPtr<IDXGIFactory6> m_pDxgiFactory = nullptr;
+	ComPtr<IDXGISwapChain4> m_pSwapChain = nullptr;
+	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = nullptr;
+	ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
+	ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
+	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap = nullptr;
+	ComPtr<ID3D12Fence> m_pFence = nullptr;
+	UINT64 m_FenceValue = 0; // フェンスの値
+	vector<ComPtr<ID3D12Resource>> m_pBackBuffers;
 };
 

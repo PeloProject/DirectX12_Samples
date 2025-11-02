@@ -2,34 +2,100 @@
 #include "pch.h"
 #include <Windows.h>
 #include "DirectXDevice.h"
-
-
-
-ID3D12Device* DirectXDevice::m_Device = nullptr;
+#ifdef _DEBUG
+#include <dxgidebug.h>
+#pragma comment(lib, "dxguid.lib")
+#endif
 
 #ifdef _DEBUG
 // @brief デバッグレイヤーを有効化する関数
 void DirectXDevice::EnableDebugLayer()
 {
-	ID3D12Debug* debugLayer = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugLayer))))
-	{
-		debugLayer->EnableDebugLayer();
-		debugLayer->Release();
+	ComPtr<ID3D12Debug> debugController;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+		debugController->EnableDebugLayer();
+
+		// より詳細なデバッグ情報
+		ComPtr<ID3D12Debug1> debugController1;
+		if (SUCCEEDED(debugController.As(&debugController1))) {
+			debugController1->SetEnableGPUBasedValidation(TRUE);
+			debugController1->SetEnableSynchronizedCommandQueueValidation(TRUE);
+		}
+
+		// 情報メッセージも表示
+		ComPtr<ID3D12Debug3> debugController3;
+		if (SUCCEEDED(debugController.As(&debugController3))) {
+			debugController3->SetEnableGPUBasedValidation(TRUE);
+		}
 	}
-	else
-	{
-		LOG_DEBUG("Debug Layerの有効化に失敗");
+
+	// DXGIデバッグも有効化
+	ComPtr<IDXGIInfoQueue> dxgiInfoQueue;
+	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiInfoQueue)))) {
+		dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, true);
+		dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true);
 	}
 }
 #endif
 
-bool DirectXDevice::Initialize(HWND hwnd)
+DirectXDevice::~DirectXDevice()
+{
+	WaitForPreviousFrame(); // 終了前にGPUの処理が終わるのを待つ
+
+	m_pSwapChain.Reset();
+	m_pCommandList.Reset();
+	m_pCommandAllocator.Reset();
+	m_pCommandQueue.Reset();
+	m_pRenderTargetViewHeap.Reset();
+	m_pFence.Reset();
+	for( int i = 0; i < m_pBackBuffers.size(); ++i )
+	{
+		m_pBackBuffers[i].Reset();
+	}
+	m_pBackBuffers.clear();
+	// アプリケーション終了前に追加
+#ifdef _DEBUG
+	ReportLiveDeviceObjects();
+#endif
+	m_pDevice.Reset();
+	m_pDxgiFactory.Reset();
+}
+
+#ifdef _DEBUG
+void DirectXDevice::ReportLiveDeviceObjects()
+{
+	// D3D12デバイスのライブオブジェクト
+	ComPtr<ID3D12DebugDevice> debugDevice;
+	if (m_pDevice && SUCCEEDED(m_pDevice.As(&debugDevice))) {
+		debugDevice->ReportLiveDeviceObjects(
+			D3D12_RLDO_SUMMARY |        // サマリー表示
+			D3D12_RLDO_DETAIL |         // 詳細表示
+			D3D12_RLDO_IGNORE_INTERNAL  // 内部オブジェクトは無視
+		);
+	}
+
+	// DXGIのライブオブジェクト
+	ComPtr<IDXGIDebug1> dxgiDebug;
+	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
+		dxgiDebug->ReportLiveObjects(
+			DXGI_DEBUG_ALL,
+			DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL)
+		);
+	}
+}
+#endif
+
+bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
 	LOG_DEBUG("DirectXの初期化を開始");
 	EnableDebugLayer(); // デバッグレイヤーを有効化
 	CreateDXGIFactory(); // DXGIファクトリの作成
 	CreateDevice();      // デバイスの作成
+	CreateCommandList();// コマンドリストの作成
+	CreateCommandQueue();// コマンドキューの作成
+	CreateSwapChain(hwnd, width, height);// スワップチェインの作成
+	CreateRenderTargetView();// レンダーターゲットビューの作成
+	CreateFence();			// フェンスの作成
 	return true;
 }
 
@@ -42,7 +108,7 @@ bool DirectXDevice::CreateDXGIFactory()
 {
 	// DXGIファクトリの作成
 #ifdef _DEBUG
-	if (CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&m_DxgiFactory)) != S_OK)
+	if (CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&m_pDxgiFactory)) != S_OK)
 	{
 		LOG_DEBUG("DXGIファクトリの作成に失敗");
 		return false;
@@ -57,6 +123,10 @@ bool DirectXDevice::CreateDXGIFactory()
 	return true;
 }
 
+/// <summary>
+/// DirectXのアダプタを取得
+/// </summary>
+/// <returns></returns>
 IDXGIAdapter* DirectXDevice::GetAdapter()
 {
 	// アダプタの取得
@@ -64,7 +134,7 @@ IDXGIAdapter* DirectXDevice::GetAdapter()
 
 	IDXGIAdapter* tempAdapter = nullptr;
 
-	for (UINT i = 0; m_DxgiFactory->EnumAdapters(i, &tempAdapter) != DXGI_ERROR_NOT_FOUND; ++i)
+	for (UINT i = 0; m_pDxgiFactory->EnumAdapters(i, &tempAdapter) != DXGI_ERROR_NOT_FOUND; ++i)
 	{
 		adapters.push_back(tempAdapter);
 	}
@@ -95,6 +165,10 @@ IDXGIAdapter* DirectXDevice::GetAdapter()
 	return nullptr;
 }
 
+/// <summary>
+/// DirectXデバイスの作成
+/// </summary>
+/// <returns></returns>
 bool DirectXDevice::CreateDevice()
 {
 	IDXGIAdapter* adapter = GetAdapter();
@@ -111,19 +185,221 @@ bool DirectXDevice::CreateDevice()
 
 	for (auto level : levels)
 	{
-		if (D3D12CreateDevice(adapter, level, IID_PPV_ARGS(&m_Device)) == S_OK)
+		if (D3D12CreateDevice(adapter, level, IID_PPV_ARGS(m_pDevice.GetAddressOf())) == S_OK)
 		{
 			featureLevel = level;
 			break;
 		}
 	}
 
-	if (m_Device == nullptr)
+	if (m_pDevice == nullptr)
 	{
-		//DebugOutputFormatString("DirectXの初期化に失敗\n");
+		LOG_DEBUG("DirectXの初期化に失敗\n");
 		return false;
 	}
 #ifdef _DEBUG
 	//m_Device->QueryInterface(IID_PPV_ARGS(&debugDevice));
 #endif // _DEBUG
+	return true;
+}
+
+bool DirectXDevice::CreateCommandList()
+{
+	if (m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(m_pCommandAllocator.GetAddressOf())) != S_OK)
+	{
+		LOG_DEBUG("コマンドアロケータの作成に失敗\n");
+		return false;
+	}
+
+	if (m_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_pCommandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_pCommandList)) != S_OK)
+	{
+		LOG_DEBUG("コマンドリストの作成に失敗\n");
+		return false;
+	}
+
+	return true;
+}
+
+bool DirectXDevice::CreateCommandQueue()
+{
+	// コマンドリストの実行 これは後々必要になるのでここで作成しておく
+
+	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+	// コマンドリストと合わせます。
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+	// タイムアウトなし
+	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	// プライオリティの指定は無し
+	queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+	// アダプターを１つしか使用しない時は０でよい
+	queueDesc.NodeMask = 0;
+	if (m_pDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_pCommandQueue)) != S_OK)
+	{
+		LOG_DEBUG("コマンドキューの作成に失敗\n");
+		return false;
+	}
+
+	return true;
+}
+
+bool DirectXDevice::CreateSwapChain(HWND hwnd, UINT width, UINT height)
+{
+	// スワップチェインの作成
+	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+
+	swapChainDesc.Width = width; // ウィンドウの幅
+	swapChainDesc.Height = height; // ウィンドウの高さ
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // バッファのフォーマット
+	swapChainDesc.Stereo = false; // ステレオ表示はしない
+
+
+	swapChainDesc.SampleDesc.Count = 1; // マルチサンプリングの数
+	swapChainDesc.SampleDesc.Quality = 0; // マルチサンプリングの品質
+	swapChainDesc.BufferUsage = DXGI_USAGE_BACK_BUFFER; // バッファの使用法
+	swapChainDesc.BufferCount = 2; // バッファ数
+
+
+	swapChainDesc.Scaling = DXGI_SCALING_STRETCH; // バックバッファは伸び縮み可能
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // フリップ後は速やかに破棄
+	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED; // アルファモードは指定しない
+	swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // ウィンドウ、フルスクリーンモード変更を許可
+
+	if (m_pDxgiFactory->CreateSwapChainForHwnd(
+		m_pCommandQueue.Get(),
+		hwnd,
+		&swapChainDesc,
+		nullptr,
+		nullptr,
+		(IDXGISwapChain1**)m_pSwapChain.GetAddressOf()) != S_OK)
+	{
+		LOG_DEBUG("スワップチェインの作成に失敗\n");
+		return false;
+	}
+
+	return true;
+}
+
+bool DirectXDevice::CreateRenderTargetView()
+{
+	// レンダーターターゲットビューの作成
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+	rtvHeapDesc.NumDescriptors = 2; // バックバッファの数
+	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV; // レンダーターゲットビュー
+	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE; // フラグはなし
+	rtvHeapDesc.NodeMask = 0; // ノードマスクは0（単一アダプター使用時）
+
+	if (m_pDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_pRenderTargetViewHeap)) != S_OK)
+	{
+		LOG_DEBUG("レンダーターゲットビューのヒープの作成に失敗\n");
+		return false;
+	}
+
+	// スワップチェインの取得
+	DXGI_SWAP_CHAIN_DESC swapChainDesc2;
+	if (m_pSwapChain->GetDesc(&swapChainDesc2) != S_OK)
+	{
+		LOG_DEBUG("スワップチェインの取得に失敗\n");
+		return false;
+	}
+
+	// バックバッファの取得
+	m_pBackBuffers.resize(swapChainDesc2.BufferCount);
+	for (UINT i = 0; i < swapChainDesc2.BufferCount; ++i)
+	{
+		if (m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&m_pBackBuffers[i])) != S_OK)
+		{
+			LOG_DEBUG("バックバッファの取得に失敗\n");
+			return false;
+		}
+	}
+
+	// レンダーターゲットビューの作成
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_pRenderTargetViewHeap->GetCPUDescriptorHandleForHeapStart();
+	for (UINT i = 0; i < swapChainDesc2.BufferCount; ++i)
+	{
+		m_pDevice->CreateRenderTargetView(m_pBackBuffers[i].Get(), nullptr, rtvHandle);
+		rtvHandle.ptr += m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
+
+	return true;
+}
+
+bool DirectXDevice::CreateFence()
+{
+	// フェンスの作成
+	if (m_pDevice->CreateFence(m_FenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_pFence)) != S_OK)
+	{
+		LOG_DEBUG("フェンスの作成に失敗\n");
+		return false;
+	}
+	return true;
+}
+
+/// <summary>
+/// レンダリング処理
+/// </summary>
+void DirectXDevice::Render()
+{
+	// DirectXの更新処理をここに記述
+	// 例えば、レンダリングやリソースの更新など
+
+	auto bbidx = m_pSwapChain->GetCurrentBackBufferIndex(); // 現在のバックバッファのインデックスを取得
+
+	D3D12_RESOURCE_BARRIER barrierDesc = {};
+	// バックバッファを描画可能状態に変更
+	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrierDesc.Transition.pResource = m_pBackBuffers[bbidx].Get(); // バックバッファのリソースを設定
+	barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT; // もともとの状態
+	barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET; // 変更後の状態
+	m_pCommandList->ResourceBarrier(1, &barrierDesc);
+
+	// レンダーターゲットの設定
+	auto rtvH = m_pRenderTargetViewHeap->GetCPUDescriptorHandleForHeapStart();
+	rtvH.ptr += bbidx * m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	m_pCommandList->OMSetRenderTargets(1, &rtvH, true, nullptr); // レンダーターゲットを設定
+
+	// 画面をクリア
+	const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 黒色でクリア
+	m_pCommandList->ClearRenderTargetView(rtvH, clearColor, 0, nullptr);
+
+	// バックバッファをプレゼント可能状態に変更
+	barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET; // もともとの状態
+	barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT; // 変更後の状態
+	m_pCommandList->ResourceBarrier(1, &barrierDesc);
+
+
+	m_pCommandList->Close(); // コマンドリストを閉じる
+
+	ID3D12CommandList* commandLists[] = { m_pCommandList.Get()};
+	m_pCommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists); // コマンドリストを実行
+
+	WaitForPreviousFrame();
+
+	m_pCommandAllocator->Reset(); // コマンドアロケータをリセット
+	m_pCommandList->Reset(m_pCommandAllocator.Get(), nullptr); // コマンドリストをリセット
+
+	m_pSwapChain->Present(1, 0); // スワップチェインをプレゼント（画面に表示）
+}
+
+void DirectXDevice::WaitForPreviousFrame()
+{
+	// 前のフレームが完了するまで待機
+	m_pCommandQueue->Signal(m_pFence.Get(), ++m_FenceValue);
+	if (m_pFence->GetCompletedValue() < m_FenceValue)
+	{
+		HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		if (eventHandle != nullptr)
+		{
+			m_pFence->SetEventOnCompletion(m_FenceValue, eventHandle);
+			WaitForSingleObject(eventHandle, INFINITE);
+			CloseHandle(eventHandle);
+		}
+		else
+		{
+			// エラー処理（ログ出力や例外など、プロジェクトの方針に合わせて記述）
+			LOG_DEBUG("イベントハンドルの作成に失敗しました");
+		}
+	}
 }
