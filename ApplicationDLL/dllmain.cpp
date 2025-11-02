@@ -56,8 +56,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 }
 
+/// <summary>
+/// ウィンドウの作成
+/// </summary>
+/// <returns></returns>
 extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 {
+    // コンソールをUTF-8モードに設定
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
     HINSTANCE hInstance = GetModuleHandle(NULL);
 
     LPCTSTR className = _T("NativeWindowClass");
@@ -86,7 +94,7 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 	{
 		g_DxDevice.Initialize(g_hwnd, 400, 300);
 	}
-
+    OutputDebugStringA("=== Main Loop START ===\n");
     return g_hwnd;
 }
 
@@ -107,15 +115,23 @@ extern "C" __declspec(dllexport) void HideNativeWindow()
     }
 }
 
+/// <summary>
+/// ウィンドウの破棄
+/// </summary>
 extern "C" __declspec(dllexport) void DestroyNativeWindow()
 {
     if (g_hwnd != NULL)
     {
+        g_DxDevice.Shutdown();  // この関数を追加する
         DestroyWindow(g_hwnd);
         g_hwnd = NULL;
     }
 }
 
+
+/// <summary>
+/// メインループ
+/// </summary>
 extern "C" __declspec(dllexport) void MessageLoopIteration()
 {
     MSG msg = {};

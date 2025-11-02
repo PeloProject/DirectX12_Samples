@@ -80,6 +80,11 @@ namespace Editor
             }
         }
 
+        /// <summary>
+        /// ウィンドウをWPFに埋め込む
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void BtnEmbed_Click(object sender, RoutedEventArgs e)
         {
             if (nativeHwnd != IntPtr.Zero && hwndHost == null)

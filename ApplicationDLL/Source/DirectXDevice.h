@@ -46,10 +46,12 @@ public:
 
 	void WaitForPreviousFrame();
 
+	void Shutdown();  // ★追加
+
 private:
 
 #ifdef _DEBUG
-	void ReportLiveDeviceObjects();
+	void ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugDevice);
 #endif
 
 	ComPtr<ID3D12Device> m_pDevice = nullptr;
@@ -60,7 +62,10 @@ private:
 	ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap = nullptr;
 	ComPtr<ID3D12Fence> m_pFence = nullptr;
+	ComPtr<IDXGIAdapter> m_pAdapters = nullptr;
 	UINT64 m_FenceValue = 0; // フェンスの値
 	vector<ComPtr<ID3D12Resource>> m_pBackBuffers;
+
+	bool m_isShutdown = false;  // ★追加
 };
 
