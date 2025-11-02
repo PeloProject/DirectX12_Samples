@@ -20,7 +20,8 @@ ID3D12GraphicsCommandList* commandList = nullptr;
 ID3D12CommandAllocator* commandAllocator = nullptr;
 ID3D12DescriptorHeap* rtvHeap = nullptr;
 ID3D12CommandQueue* commandQueue = nullptr;
-
+ID3D12Fence* fence = nullptr;
+UINT64 fenceValue = 0; // フェンスの値
 ComPtr<ID3D12DebugDevice> debugDevice;
 
 // @brief コンソール画面にフォーマット付き文字列を出力する関数
@@ -34,6 +35,7 @@ void DebugOutputFormatString(const char* format, ...)
 #endif
 }
 
+// @brief デバッグレイヤーを有効化する関数
 void EnableDebugLayer()
 {
 #ifdef _DEBUG
@@ -241,6 +243,13 @@ bool InitializeDirectX(HWND hwnd)
 		rtvHandle.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	}
 
+	// フェンスの作成
+	if (device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)) != S_OK)
+	{
+		DebugOutputFormatString("フェンスの作成に失敗\n");
+		return false;
+	}
+
 
 	return true;
 }
@@ -267,6 +276,16 @@ void UpdateDirectX(HWND hwnd)
 
 	ID3D12CommandList* commandLists[] = { commandList };
 	commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists); // コマンドリストを実行
+
+	commandQueue->Signal(fence, ++fenceValue); // フェンスにシグナルを送る
+	if (fence->GetCompletedValue() != fenceValue)
+	{
+		HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr); // イベントハンドルを作成
+		fence->SetEventOnCompletion(fenceValue, eventHandle); // フェンスの完了イベントを設定
+		WaitForSingleObject(eventHandle, INFINITE); // イベントが完了するまで待機
+		CloseHandle(eventHandle); // イベントハンドルを閉じる
+	}
+
 	commandAllocator->Reset(); // コマンドアロケータをリセット
 	commandList->Reset(commandAllocator, nullptr); // コマンドリストをリセット
 

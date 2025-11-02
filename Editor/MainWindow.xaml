@@ -1,0 +1,90 @@
+﻿<Window x:Class="Editor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WPF Native Window Manager" 
+        Width="600" 
+        Height="500"
+        Background="#F0F0F0">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 操作ボタンパネル -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10" Background="White">
+            <Button x:Name="BtnCreate" 
+                    Click="BtnCreate_Click" 
+                    Width="100" 
+                    Height="35" 
+                    Margin="5"
+                    Background="#0078D4"
+                    Foreground="White"
+                    FontSize="12">
+                作成
+            </Button>
+            <Button x:Name="BtnEmbed" 
+                    Click="BtnEmbed_Click" 
+                    Width="100" 
+                    Height="35" 
+                    Margin="5"
+                    Background="#107C10"
+                    Foreground="White"
+                    FontSize="12"
+                    IsEnabled="False">
+                埋め込む
+            </Button>
+            <Button x:Name="BtnShow" 
+                    Click="BtnShow_Click" 
+                    Width="100" 
+                    Height="35" 
+                    Margin="5"
+                    Background="#0078D4"
+                    Foreground="White"
+                    FontSize="12"
+                    IsEnabled="False">
+                表示
+            </Button>
+            <Button x:Name="BtnHide" 
+                    Click="BtnHide_Click" 
+                    Width="100" 
+                    Height="35" 
+                    Margin="5"
+                    Background="#F7630C"
+                    Foreground="White"
+                    FontSize="12">
+                非表示
+            </Button>
+            <Button x:Name="BtnDestroy" 
+                    Click="BtnDestroy_Click" 
+                    Width="100" 
+                    Height="35" 
+                    Margin="5"
+                    Background="#C239B3"
+                    Foreground="White"
+                    FontSize="12">
+                破棄
+            </Button>
+        </StackPanel>
+
+        <!-- ネイティブウィンドウ表示パネル -->
+        <Border Grid.Row="1" 
+                Background="White" 
+                BorderBrush="#CCCCCC" 
+                BorderThickness="1" 
+                Margin="10">
+            <StackPanel x:Name="NativeWindowPanel" 
+                        Background="White"
+                        Margin="5"/>
+        </Border>
+
+        <!-- ステータスバー -->
+        <TextBlock x:Name="StatusText" 
+                   Grid.Row="2" 
+                   Text="ウィンドウを作成してください" 
+                   Margin="10" 
+                   Foreground="#666666"
+                   FontSize="11"/>
+    </Grid>
+</Window>
