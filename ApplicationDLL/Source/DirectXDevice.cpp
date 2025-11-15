@@ -7,6 +7,10 @@
 #pragma comment(lib, "dxguid.lib")
 #endif
 
+// 静的メンバー変数の初期化
+ComPtr<ID3D12Device> DirectXDevice::m_pDevice = nullptr;
+
+
 #ifdef _DEBUG
 // @brief デバッグレイヤーを有効化する関数
 void DirectXDevice::EnableDebugLayer()
@@ -294,6 +298,10 @@ bool DirectXDevice::CreateDevice()
 	return true;
 }
 
+/// <summary>
+/// コマンドリストの作成
+/// </summary>
+/// <returns></returns>
 bool DirectXDevice::CreateCommandList()
 {
 	if (m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(m_pCommandAllocator.GetAddressOf())) != S_OK)

@@ -1,4 +1,4 @@
-﻿// pch.h: プリコンパイル済みヘッダー ファイルです。
+// pch.h: プリコンパイル済みヘッダー ファイルです。
 // 次のファイルは、その後のビルドのビルド パフォーマンスを向上させるため 1 回だけコンパイルされます。
 // コード補完や多くのコード参照機能などの IntelliSense パフォーマンスにも影響します。
 // ただし、ここに一覧表示されているファイルは、ビルド間でいずれかが更新されると、すべてが再コンパイルされます。
@@ -9,11 +9,19 @@
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 
+// Windows ヘッダーより先に標準ライブラリをインクルード
+#include <math.h>      // これを追加
+#include <cmath>       // これを追加
+#include <cstdlib>     // これも追加
 // プリコンパイルするヘッダーをここに追加します
-#include "framework.h"
+#define WIN32_LEAN_AND_MEAN             // Windows ヘッダーからほとんど使用されていない部分を除外する
+// Windows ヘッダー ファイル
+#include <windows.h>
+#include <DirectXMath.h>
+#include <d3dcompiler.h>
 #include <vector>
-
 
 // @brief コンソール画面にフォーマット付き文字列を出力する関数  
 inline void DebugOutputFormatString(const wchar_t* type, const char* format, ...)  

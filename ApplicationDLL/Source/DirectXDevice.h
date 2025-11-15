@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "GraphicsDevice.h"
 
@@ -18,14 +18,14 @@ public:
 
 	void EnableDebugLayer();
 
-	//static const ID3D12Device* GetDevice() { return m_pDevice.Get(); }
+	static ID3D12Device* GetDevice() { return m_pDevice.Get(); }
 
 	/// <summary>
-	/// DirectX‚ÌƒOƒ‰ƒtƒBƒbƒNƒCƒ“ƒ^[ƒtƒF[ƒXƒtƒ@ƒNƒgƒŠ‚ğì¬‚·‚éB
-	/// ˆê”Ô‰‚ß‚Éì¬‚·‚é•K—v‚ª‚ ‚è‚Ü‚·B
-	/// GPUAƒfƒBƒXƒvƒŒƒCAƒEƒBƒ“ƒhƒEƒVƒXƒeƒ€ŠÔ‚Ì’áƒŒƒxƒ‹ƒCƒ“ƒ^[ƒtƒF[ƒX’ñ‹Ÿ‚·‚é‚à‚Ì‚Æ‚È‚è‚Ü‚·B
+	/// DirectXã®ã‚°ãƒ©ãƒ•ã‚£ãƒƒã‚¯ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹ãƒ•ã‚¡ã‚¯ãƒˆãƒªã‚’ä½œæˆã™ã‚‹ã€‚
+	/// ä¸€ç•ªåˆã‚ã«ä½œæˆã™ã‚‹å¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚
+	/// GPUã€ãƒ‡ã‚£ã‚¹ãƒ—ãƒ¬ã‚¤ã€ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã‚·ã‚¹ãƒ†ãƒ é–“ã®ä½ãƒ¬ãƒ™ãƒ«ã‚¤ãƒ³ã‚¿ãƒ¼ãƒ•ã‚§ãƒ¼ã‚¹æä¾›ã™ã‚‹ã‚‚ã®ã¨ãªã‚Šã¾ã™ã€‚
 	/// </summary>
-	/// <returns>¶¬‚ª¬Œ÷‚µ‚½‚©</returns>
+	/// <returns>ç”ŸæˆãŒæˆåŠŸã—ãŸã‹</returns>
 	bool CreateDXGIFactory();
 
 	IDXGIAdapter* GetAdapter();
@@ -46,7 +46,7 @@ public:
 
 	void WaitForPreviousFrame();
 
-	void Shutdown();  // š’Ç‰Á
+	void Shutdown();  // â˜…è¿½åŠ 
 
 private:
 
@@ -54,7 +54,7 @@ private:
 	void ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugDevice);
 #endif
 
-	ComPtr<ID3D12Device> m_pDevice = nullptr;
+	static ComPtr<ID3D12Device> m_pDevice; // åˆæœŸåŒ–ã¯cppã§è¡Œã†
 	ComPtr<IDXGIFactory6> m_pDxgiFactory = nullptr;
 	ComPtr<IDXGISwapChain4> m_pSwapChain = nullptr;
 	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = nullptr;
@@ -63,9 +63,8 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap = nullptr;
 	ComPtr<ID3D12Fence> m_pFence = nullptr;
 	ComPtr<IDXGIAdapter> m_pAdapters = nullptr;
-	UINT64 m_FenceValue = 0; // ƒtƒFƒ“ƒX‚Ì’l
+	UINT64 m_FenceValue = 0; // ãƒ•ã‚§ãƒ³ã‚¹ã®å€¤
 	vector<ComPtr<ID3D12Resource>> m_pBackBuffers;
 
-	bool m_isShutdown = false;  // š’Ç‰Á
+	bool m_isShutdown = false;  // â˜…è¿½åŠ 
 };
-
