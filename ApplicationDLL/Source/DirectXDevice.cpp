@@ -9,7 +9,7 @@
 
 // 静的メンバー変数の初期化
 ComPtr<ID3D12Device> DirectXDevice::m_pDevice = nullptr;
-
+ComPtr<ID3D12GraphicsCommandList> DirectXDevice::m_pCommandList = nullptr;
 
 #ifdef _DEBUG
 // @brief デバッグレイヤーを有効化する関数
@@ -434,14 +434,8 @@ bool DirectXDevice::CreateFence()
 	return true;
 }
 
-/// <summary>
-/// レンダリング処理
-/// </summary>
-void DirectXDevice::Render()
+void DirectXDevice::PreRender()
 {
-	// DirectXの更新処理をここに記述
-	// 例えば、レンダリングやリソースの更新など
-
 	auto bbidx = m_pSwapChain->GetCurrentBackBufferIndex(); // 現在のバックバッファのインデックスを取得
 
 	D3D12_RESOURCE_BARRIER barrierDesc = {};
@@ -467,7 +461,15 @@ void DirectXDevice::Render()
 	barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET; // もともとの状態
 	barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT; // 変更後の状態
 	m_pCommandList->ResourceBarrier(1, &barrierDesc);
+}
 
+/// <summary>
+/// レンダリング処理
+/// </summary>
+void DirectXDevice::Render()
+{
+	// DirectXの更新処理をここに記述
+	// 例えば、レンダリングやリソースの更新など
 
 	m_pCommandList->Close(); // コマンドリストを閉じる
 

@@ -1,6 +1,7 @@
 ﻿// dllmain.cpp : DLL アプリケーションのエントリ ポイントを定義します。
 #include "pch.h"
 #include "Source/DirectXDevice.h"
+#include "SceneManager.h"
 
 //BOOL APIENTRY DllMain( HMODULE hModule,
 //                       DWORD  ul_reason_for_call,
@@ -19,6 +20,7 @@
 //}
 
 #include <tchar.h>
+#include <PolygonTest.h>
 
 static HWND g_hwnd = NULL;
 static DirectXDevice g_DxDevice;
@@ -93,6 +95,8 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 	if (g_hwnd != NULL)
 	{
 		g_DxDevice.Initialize(g_hwnd, 400, 300);
+       
+		SceneManager::GetInstance().ChangeScene(0);
 	}
     OutputDebugStringA("=== Main Loop START ===\n");
     return g_hwnd;
@@ -141,6 +145,9 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
         DispatchMessage(&msg);
     }
 
-    g_DxDevice.Render(); // DirectXの更新処理
+    SceneManager::GetInstance().Update(1.0f / 60.0f); // シーンの更新処理
 
+    g_DxDevice.PreRender();                 // DirectXのレンダー前更新処理
+	SceneManager::GetInstance().Render();   // シーンのレンダリング処理
+    g_DxDevice.Render();                    // DirectXの更新処理
 }

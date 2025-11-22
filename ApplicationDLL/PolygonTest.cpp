@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "PolygonTest.h"
 #include "DirectXDevice.h"
 
@@ -8,6 +8,54 @@ PolygonTest::PolygonTest()
 	m_Vertices[0] = { -1.0, -1.0, 0.0f };
 	m_Vertices[1] = { -1.0,  1.0, 0.0f };
 	m_Vertices[2] = {  1.0, -1.0, 0.0f };
+
+	CreateGpuResources();
+}
+
+HRESULT PolygonTest::CompileShaders()
+{
+	ID3DBlob* errorBlob = nullptr;
+	HRESULT hr = D3DCompileFromFile(
+		L"Shader/BasicVertexShader.hlsl",
+		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
+		"BasicVS",
+		"vs_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&m_pVertexShaderBlob,
+		&errorBlob
+	);
+
+	if (!SUCCEEDED(hr)) {
+		if (errorBlob) {
+			LOG_DEBUG("Vertex Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		return S_FALSE;
+	}
+
+	hr = D3DCompileFromFile(
+		L"Shader/BasicPixelShader.hlsl",
+		nullptr,
+		D3D_COMPILE_STANDARD_FILE_INCLUDE,
+		"BasicPS",
+		"ps_5_0",
+		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
+		0,
+		&m_pPixelShaderBlob,
+		&errorBlob
+	);
+
+	if (!SUCCEEDED(hr)) {
+		if (errorBlob) {
+			LOG_DEBUG("Pixcel Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		return S_FALSE;
+	}
+
+	return S_OK;
 }
 
 void PolygonTest::CreateGpuResources()
@@ -58,71 +106,136 @@ void PolygonTest::CreateGpuResources()
 	}
 
 	// 頂点バッファビューの設定
-	D3D12_VERTEX_BUFFER_VIEW vbView = {};
-	vbView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
-	vbView.SizeInBytes = sizeof(m_Vertices);		// 全バイト数
-	vbView.StrideInBytes = sizeof(m_Vertices[0]);	// 1頂点あたりのサイズ
+	m_VertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
+	m_VertexBufferView.SizeInBytes = sizeof(m_Vertices);		// 全バイト数
+	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);	// 1頂点あたりのサイズ
 
-
-	ID3DBlob* vsBlob = nullptr;
-	ID3DBlob* errorBlob = nullptr;
-	hr = D3DCompileFromFile(
-		L"Shader/BasicVertexShader.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"BasicVs",
-		"vs_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&vsBlob,
-		&errorBlob
-	);
-
-	if( !SUCCEEDED(hr) ) {
-		if( errorBlob ) {
-			LOG_DEBUG("Vertex Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
-			errorBlob->Release();
-		}
+	// シェーダーのコンパイル
+	hr = CompileShaders();
+	if (!SUCCEEDED(hr)) {
 		return;
 	}
 
-	ID3DBlob* psBlob = nullptr;
-	hr = D3DCompileFromFile(
-		L"Shader/BasicVertexShader.hlsl",
-		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		"BasicVs",
-		"vs_5_0",
-		D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-		0,
-		&psBlob,
-		&errorBlob
-	);
+	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+	rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
+	ID3DBlob* errorBlob = nullptr;
+	ID3DBlob* rootSignatureBlob = nullptr;
+	hr = D3D12SerializeRootSignature(
+		&rootSignatureDesc, // ルートシグネチャの設定
+		D3D_ROOT_SIGNATURE_VERSION_1, // ルートシグネチャのバージョン
+		&rootSignatureBlob,	// シリアライズされたルートシグネチャの格納先
+		&errorBlob				// エラーメッセージの格納先
+	);
 	if (!SUCCEEDED(hr)) {
 		if (errorBlob) {
-			LOG_DEBUG("Pixcel Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
+			LOG_DEBUG("Root Signature Serialize Error: %s", (char*)errorBlob->GetBufferPointer());
 			errorBlob->Release();
 		}
 		return;
 	}
 
+	// ルートシグネチャの生成
+	hr = DirectXDevice::GetDevice()->CreateRootSignature(
+		0,
+		rootSignatureBlob->GetBufferPointer(),
+		rootSignatureBlob->GetBufferSize(),
+		IID_PPV_ARGS(&m_pRootSignature)
+	);
+	rootSignatureBlob->Release();
+	if (!SUCCEEDED(hr)) {
+		return;
+	}
+
+	// グラフィックスパイプラインステートの設定
+	CreateGraphicsPipelineState();
+
+}
+
+void PolygonTest::CreateGraphicsPipelineState()
+{
 	D3D12_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
-		{
-			"POSITION",
-			0,
-			DXGI_FORMAT_R32G32B32_FLOAT,
-			0,
-			D3D12_APPEND_ALIGNED_ELEMENT,
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-			0
-		},
+	{
+		"POSITION",
+		0,
+		DXGI_FORMAT_R32G32B32_FLOAT,
+		0,
+		D3D12_APPEND_ALIGNED_ELEMENT,
+		D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+		0
+	},
 	};
 
+
+	// グラフィックスパイプラインステートの設定
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC gpipelineDesc = {};
+	// パイプラインステートにルートシグネチャを設定
+	gpipelineDesc.pRootSignature = m_pRootSignature.Get();
+
+	gpipelineDesc.VS.BytecodeLength = m_pVertexShaderBlob->GetBufferSize();
+	gpipelineDesc.VS.pShaderBytecode = m_pVertexShaderBlob->GetBufferPointer();
+	gpipelineDesc.PS.BytecodeLength = m_pPixelShaderBlob->GetBufferSize();
+	gpipelineDesc.PS.pShaderBytecode = m_pPixelShaderBlob->GetBufferPointer();
+	gpipelineDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+	gpipelineDesc.RasterizerState.MultisampleEnable = false;
+	gpipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;	// 背面カリングしない
+	gpipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	gpipelineDesc.RasterizerState.DepthClipEnable = true;			// 深度クリップを有効にする
+
+
+	// ブレンドステートの設定
+	gpipelineDesc.BlendState.AlphaToCoverageEnable = false;		// マルチサンプル時のアルファトゥカバレッジを無効にする
+	gpipelineDesc.BlendState.IndependentBlendEnable = false;	// 独立ブレンドを無効にする
+
+	D3D12_RENDER_TARGET_BLEND_DESC renderTargetBlendDesc = {};
+	renderTargetBlendDesc.BlendEnable = false;
+	renderTargetBlendDesc.LogicOpEnable = false;
+	renderTargetBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	gpipelineDesc.BlendState.RenderTarget[0] = renderTargetBlendDesc;
+
+	// 入力レイアウトの設定
+	gpipelineDesc.InputLayout.pInputElementDescs = inputLayoutDesc;		// 入力レイアウトの先頭アドレス
+	gpipelineDesc.InputLayout.NumElements = _countof(inputLayoutDesc);	// 入力レイアウトの数
+
+	// トラアングルストリップの場合に頂点を切り離す場合の設定
+	gpipelineDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+
+	gpipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // プリミティブトポロジータイプを三角形に設定
+
+	gpipelineDesc.NumRenderTargets = 1; // レンダーターゲットの数
+	gpipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM; // レンダーターゲットのフォーマットを設定
+	gpipelineDesc.SampleDesc.Count = 1;		// マルチサンプリングの設定
+	gpipelineDesc.SampleDesc.Quality = 0;	// マルチサンプリングの品質レベル（最低）
+
+	HRESULT hr = DirectXDevice::GetDevice()->CreateGraphicsPipelineState(&gpipelineDesc, IID_PPV_ARGS(&m_pPipelineState));
+	if (!SUCCEEDED(hr)) {
+		return;
+	}
 }
 
 void PolygonTest::ApplyTransformations()
 {
 	DirectX::XMFLOAT3* vertexMap = nullptr;
 
+}
+
+void PolygonTest::Render()
+{
+	D3D12_VIEWPORT viewport = {};
+	viewport.Width = 400;
+	viewport.Height = 300;
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
+	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = DirectXDevice::GetCommandList();
+	m_pCommandList.Get()->SetPipelineState(m_pPipelineState.Get());
+	m_pCommandList.Get()->SetGraphicsRootSignature(m_pRootSignature.Get());
+	m_pCommandList.Get()->RSSetViewports(1, &viewport);
+	D3D12_RECT scissorRect = { 0, 0, 400, 300 };
+	m_pCommandList.Get()->RSSetScissorRects(1, &scissorRect);
+	m_pCommandList.Get()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pCommandList.Get()->IASetVertexBuffers(0, 1, &m_VertexBufferView);
+	m_pCommandList.Get()->DrawInstanced(3, 1, 0, 0);
 }

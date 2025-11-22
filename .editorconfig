@@ -1,0 +1,3 @@
+# .editorconfig
+[.hlsl]
+charset = utf-8

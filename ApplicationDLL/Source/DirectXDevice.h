@@ -4,7 +4,7 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <wrl/client.h>
+
 
 using namespace std;
 using Microsoft::WRL::ComPtr;
@@ -19,6 +19,8 @@ public:
 	void EnableDebugLayer();
 
 	static ID3D12Device* GetDevice() { return m_pDevice.Get(); }
+	static ID3D12GraphicsCommandList* GetCommandList() { return m_pCommandList.Get(); }
+
 
 	/// <summary>
 	/// DirectXのグラフィックインターフェースファクトリを作成する。
@@ -43,6 +45,7 @@ public:
 	bool CreateFence();
 
 	void Render();
+	void PreRender();
 
 	void WaitForPreviousFrame();
 
@@ -57,7 +60,7 @@ private:
 	static ComPtr<ID3D12Device> m_pDevice; // 初期化はcppで行う
 	ComPtr<IDXGIFactory6> m_pDxgiFactory = nullptr;
 	ComPtr<IDXGISwapChain4> m_pSwapChain = nullptr;
-	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = nullptr;
+	static ComPtr<ID3D12GraphicsCommandList> m_pCommandList;
 	ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
 	ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap = nullptr;

@@ -1,4 +1,4 @@
-// pch.h: プリコンパイル済みヘッダー ファイルです。
+﻿// pch.h: プリコンパイル済みヘッダー ファイルです。
 // 次のファイルは、その後のビルドのビルド パフォーマンスを向上させるため 1 回だけコンパイルされます。
 // コード補完や多くのコード参照機能などの IntelliSense パフォーマンスにも影響します。
 // ただし、ここに一覧表示されているファイルは、ビルド間でいずれかが更新されると、すべてが再コンパイルされます。
@@ -22,6 +22,7 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 #include <vector>
+#include <wrl/client.h>
 
 // @brief コンソール画面にフォーマット付き文字列を出力する関数  
 inline void DebugOutputFormatString(const wchar_t* type, const char* format, ...)  
