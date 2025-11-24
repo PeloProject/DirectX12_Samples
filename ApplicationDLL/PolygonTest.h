@@ -15,6 +15,8 @@ public:
 	void Render();
 private:
 
+	void CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
+	void CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
 	void CreateGpuResources();
 	void ApplyTransformations();
 
@@ -29,7 +31,7 @@ private:
 	/// </summary>
 	HRESULT CompileShaders();
 
-	Vector3 m_Vertices[3];
+	Vector3 m_Vertices[4];
 
 	ComPtr<ID3D12PipelineState> m_pPipelineState = nullptr;
 
@@ -38,6 +40,11 @@ private:
 
 	ComPtr<ID3D12RootSignature> m_pRootSignature = nullptr;
 
-	D3D12_VERTEX_BUFFER_VIEW m_VertexBufferView = {};
+	ComPtr<ID3D12Resource> m_pVertexBuffer = nullptr;
+	ComPtr<ID3D12Resource> m_pIndexBuffer = nullptr;
+	D3D12_VERTEX_BUFFER_VIEW	m_VertexBufferView = {};
+	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
+
+	std::vector<short> m_Indices;
 };
 

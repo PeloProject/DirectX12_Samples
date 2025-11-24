@@ -3,13 +3,14 @@
 #include <Windows.h>
 #include "DirectXDevice.h"
 #ifdef _DEBUG
+//#define GRAPHICS_DEBUG_MODE
 #include <dxgidebug.h>
 #pragma comment(lib, "dxguid.lib")
 #endif
 
 // 静的メンバー変数の初期化
-ComPtr<ID3D12Device> DirectXDevice::m_pDevice = nullptr;
-ComPtr<ID3D12GraphicsCommandList> DirectXDevice::m_pCommandList = nullptr;
+ComPtr<ID3D12Device> DirectXDevice::m_pDevice;
+ComPtr<ID3D12GraphicsCommandList> DirectXDevice::m_pCommandList;
 
 #ifdef _DEBUG
 // @brief デバッグレイヤーを有効化する関数
@@ -145,7 +146,7 @@ bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
 	LOG_DEBUG("DirectXの初期化を開始");
 	EnableDebugLayer(); // デバッグレイヤーを有効化
-	CreateDXGIFactory(); // DXGIファクトリの作成
+	CreateGraphicsInterface(); // DXGIファクトリの作成
 	CreateDevice();      // デバイスの作成
 	CreateCommandList();// コマンドリストの作成
 	CreateCommandQueue();// コマンドキューの作成
@@ -160,17 +161,42 @@ bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 /// GPU、ディスプレイ、ウィンドウシステム間の低レベルインターフェース提供するものとなります。
 /// </summary>
 /// <returns></returns>
-bool DirectXDevice::CreateDXGIFactory()
+bool DirectXDevice::CreateGraphicsInterface()
 {
 	// DXGIファクトリの作成
 #ifdef _DEBUG
-	if (CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&m_pDxgiFactory)) != S_OK)
+
+	//HRESULT hr = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&m_pDxgiFactory));
+	HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&m_pDxgiFactory));
+
+	if (FAILED(hr))
 	{
-		LOG_DEBUG("DXGIファクトリの作成に失敗");
-		return false;
+		char errorMsg[256];
+		sprintf_s(errorMsg, "CreateDXGIFactory2 failed with HRESULT: 0x%08X\n", hr);
+		OutputDebugStringA(errorMsg);
+
+		// 具体的なエラーコードによる分岐
+		switch (hr)
+		{
+		case E_INVALIDARG:
+			OutputDebugStringA("Error: E_INVALIDARG - Invalid argument\n");
+			break;
+		case E_OUTOFMEMORY:
+			OutputDebugStringA("Error: E_OUTOFMEMORY\n");
+			break;
+		case DXGI_ERROR_NOT_FOUND:
+			OutputDebugStringA("Error: DXGI_ERROR_NOT_FOUND\n");
+			break;
+		case DXGI_ERROR_UNSUPPORTED:
+			OutputDebugStringA("Error: DXGI_ERROR_UNSUPPORTED - Debug layer not supported\n");
+			break;
+		default:
+			OutputDebugStringA("Error: Unknown error\n");
+			break;
+		}
 	}
 #else
-	if (CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgiFactory)) != S_OK)
+	if (CreateDXGIFactory2(0, IID_PPV_ARGS(&m_pDxgiFactory)) != S_OK)
 	{
 		LOG_DEBUG("DXGIファクトリの作成に失敗");
 		return false;
@@ -191,7 +217,7 @@ IDXGIAdapter* DirectXDevice::GetAdapter()
 	// アダプタの取得（GPU優先で取得）
 	for (UINT i = 0; ; ++i)
 	{
-		ComPtr<IDXGIAdapter> tempAdapter = nullptr;
+		ComPtr<IDXGIAdapter> tempAdapter;
 		if (m_pDxgiFactory->EnumAdapters(i, &tempAdapter) == DXGI_ERROR_NOT_FOUND)
 		{
 			break;

@@ -3,6 +3,7 @@
 #include "Source/DirectXDevice.h"
 #include "SceneManager.h"
 
+
 //BOOL APIENTRY DllMain( HMODULE hModule,
 //                       DWORD  ul_reason_for_call,
 //                       LPVOID lpReserved
@@ -86,7 +87,8 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
         _T("Native Window"),
         WS_POPUP,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        400, 300,
+        Application::GetWindowWidth(),
+        Application::GetWindowHeight(),
         NULL, NULL,
         hInstance,
         NULL
@@ -94,7 +96,7 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 
 	if (g_hwnd != NULL)
 	{
-		g_DxDevice.Initialize(g_hwnd, 400, 300);
+		g_DxDevice.Initialize(g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight());
        
 		SceneManager::GetInstance().ChangeScene(0);
 	}
@@ -138,6 +140,10 @@ extern "C" __declspec(dllexport) void DestroyNativeWindow()
 /// </summary>
 extern "C" __declspec(dllexport) void MessageLoopIteration()
 {
+    if (g_hwnd == NULL)
+    {
+        return;
+    }
     MSG msg = {};
     while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
     {

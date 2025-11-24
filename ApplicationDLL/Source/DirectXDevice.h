@@ -16,9 +16,11 @@ public:
 
 	bool Initialize(HWND hwnd, UINT width, UINT height);
 
+	bool IsGraphicsDebugMode();
 	void EnableDebugLayer();
 
 	static ID3D12Device* GetDevice() { return m_pDevice.Get(); }
+	static ComPtr<ID3D12Device> GetDeviceComPtr() { return m_pDevice; }
 	static ID3D12GraphicsCommandList* GetCommandList() { return m_pCommandList.Get(); }
 
 
@@ -28,7 +30,7 @@ public:
 	/// GPU、ディスプレイ、ウィンドウシステム間の低レベルインターフェース提供するものとなります。
 	/// </summary>
 	/// <returns>生成が成功したか</returns>
-	bool CreateDXGIFactory();
+	bool CreateGraphicsInterface();
 
 	IDXGIAdapter* GetAdapter();
 
@@ -58,14 +60,14 @@ private:
 #endif
 
 	static ComPtr<ID3D12Device> m_pDevice; // 初期化はcppで行う
-	ComPtr<IDXGIFactory6> m_pDxgiFactory = nullptr;
-	ComPtr<IDXGISwapChain4> m_pSwapChain = nullptr;
+	ComPtr<IDXGIFactory4> m_pDxgiFactory;
+	ComPtr<IDXGISwapChain4> m_pSwapChain;
 	static ComPtr<ID3D12GraphicsCommandList> m_pCommandList;
-	ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
-	ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
-	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap = nullptr;
-	ComPtr<ID3D12Fence> m_pFence = nullptr;
-	ComPtr<IDXGIAdapter> m_pAdapters = nullptr;
+	ComPtr<ID3D12CommandAllocator> m_pCommandAllocator;
+	ComPtr<ID3D12CommandQueue> m_pCommandQueue;
+	ComPtr<ID3D12DescriptorHeap> m_pRenderTargetViewHeap;
+	ComPtr<ID3D12Fence> m_pFence;
+	ComPtr<IDXGIAdapter> m_pAdapters;
 	UINT64 m_FenceValue = 0; // フェンスの値
 	vector<ComPtr<ID3D12Resource>> m_pBackBuffers;
 

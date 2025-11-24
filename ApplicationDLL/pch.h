@@ -24,6 +24,8 @@
 #include <vector>
 #include <wrl/client.h>
 
+#include "Application.h"
+
 // @brief コンソール画面にフォーマット付き文字列を出力する関数  
 inline void DebugOutputFormatString(const wchar_t* type, const char* format, ...)  
 {  

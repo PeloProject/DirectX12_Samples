@@ -3,15 +3,26 @@
 #include "DirectXDevice.h"
 
 
+//=========================================================================================
+// 
+// @brief コンストラクタ
+// 
+//=========================================================================================
 PolygonTest::PolygonTest()
 {
-	m_Vertices[0] = { -1.0, -1.0, 0.0f };
-	m_Vertices[1] = { -1.0,  1.0, 0.0f };
-	m_Vertices[2] = {  1.0, -1.0, 0.0f };
+	m_Vertices[0] = { -0.4f, -0.7f, 0.0f };
+	m_Vertices[1] = { -0.4f,  0.7f, 0.0f };
+	m_Vertices[2] = {  0.4f, -0.7f, 0.0f };
+	m_Vertices[3] = {  0.4f,  0.7f, 0.0f };
 
 	CreateGpuResources();
 }
 
+//=========================================================================================
+// 
+// @brief シェーダーのコンパイル
+// 
+//=========================================================================================
 HRESULT PolygonTest::CompileShaders()
 {
 	ID3DBlob* errorBlob = nullptr;
@@ -58,10 +69,80 @@ HRESULT PolygonTest::CompileShaders()
 	return S_OK;
 }
 
+void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+{
+	// Gpuメモリの確保
+	HRESULT hr = DirectXDevice::GetDevice()->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_pVertexBuffer)
+	);
+	if (!SUCCEEDED(hr)) {
+		return;
+	}
+
+	// 頂点データの転送
+	DirectX::XMFLOAT3* vertexMap = nullptr;
+	hr = m_pVertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&vertexMap));
+	if (SUCCEEDED(hr)) {
+		memcpy(vertexMap, m_Vertices, sizeof(m_Vertices));
+		D3D12_RANGE writtenRange = { 0, sizeof(m_Vertices) }; // 書き込み範囲
+		m_pVertexBuffer->Unmap(0, &writtenRange);
+	}
+
+	// 頂点バッファビューの設定
+	m_VertexBufferView.BufferLocation = m_pVertexBuffer->GetGPUVirtualAddress();
+	m_VertexBufferView.SizeInBytes = sizeof(m_Vertices);		// 全バイト数
+	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);	// 1頂点あたりのサイズ
+}
+void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+{
+	HRESULT hr = DirectXDevice::GetDeviceComPtr()->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_pIndexBuffer)
+	);
+
+	if (!SUCCEEDED(hr)) {
+		LOG_DEBUG("Index Buffer Create Error");
+		return;
+	}
+
+
+
+	// インデックスバッファの作成
+	unsigned short indices[] = {
+	0, 1, 2,
+	2, 1, 3
+	//3, 2, 1
+	};
+
+	m_Indices = vector<short>(std::begin(indices), std::end(indices));
+
+	// インデックスデータの転送
+	unsigned short* indexMap = nullptr;
+	m_pIndexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&indexMap));
+	if (!SUCCEEDED(hr)) {
+		return;
+	}
+
+	std::copy(std::begin(m_Indices), std::end(m_Indices), indexMap);
+	m_pIndexBuffer->Unmap(0, nullptr);
+
+	// インデックスバッファビューの設定
+	m_IndexBufferView.BufferLocation = m_pIndexBuffer->GetGPUVirtualAddress();
+	m_IndexBufferView.Format = DXGI_FORMAT_R16_UINT;
+	m_IndexBufferView.SizeInBytes = sizeof(m_Indices[0])* m_Indices.size();
+}
+
 void PolygonTest::CreateGpuResources()
 {
-	ID3D12Resource* vertexBuffer = nullptr;
-
 	// ヒーププロパティの設定
 	D3D12_HEAP_PROPERTIES heapProps = {};
 	heapProps.Type = D3D12_HEAP_TYPE_UPLOAD; // アップロード可能なヒープタイプ
@@ -83,35 +164,11 @@ void PolygonTest::CreateGpuResources()
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-	// Gpuメモリの確保
-	HRESULT hr = DirectXDevice::GetDevice()->CreateCommittedResource(
-		&heapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&resourceDesc,
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&vertexBuffer)
-	);
-	if( !SUCCEEDED(hr) ) {
-		return;
-	}
-
-	// 頂点データの転送
-	DirectX::XMFLOAT3* vertexMap = nullptr;
-	hr = vertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&vertexMap));
-	if (SUCCEEDED(hr)) {
-		memcpy(vertexMap, m_Vertices, sizeof(m_Vertices));
-		D3D12_RANGE writtenRange = { 0, sizeof(m_Vertices) }; // 書き込み範囲
-		vertexBuffer->Unmap(0, &writtenRange);
-	}
-
-	// 頂点バッファビューの設定
-	m_VertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
-	m_VertexBufferView.SizeInBytes = sizeof(m_Vertices);		// 全バイト数
-	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);	// 1頂点あたりのサイズ
+	CreateVertexBuffer(heapProps, resourceDesc);
+	CreateIndexBuffer(heapProps, resourceDesc);
 
 	// シェーダーのコンパイル
-	hr = CompileShaders();
+	HRESULT hr = CompileShaders();
 	if (!SUCCEEDED(hr)) {
 		return;
 	}
@@ -222,8 +279,8 @@ void PolygonTest::ApplyTransformations()
 void PolygonTest::Render()
 {
 	D3D12_VIEWPORT viewport = {};
-	viewport.Width = 400;
-	viewport.Height = 300;
+	viewport.Width = Application::GetWindowWidth();
+	viewport.Height = Application::GetWindowHeight();
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -233,9 +290,11 @@ void PolygonTest::Render()
 	m_pCommandList.Get()->SetPipelineState(m_pPipelineState.Get());
 	m_pCommandList.Get()->SetGraphicsRootSignature(m_pRootSignature.Get());
 	m_pCommandList.Get()->RSSetViewports(1, &viewport);
-	D3D12_RECT scissorRect = { 0, 0, 400, 300 };
+	D3D12_RECT scissorRect = { 0, 0, viewport.Width, viewport.Height };
 	m_pCommandList.Get()->RSSetScissorRects(1, &scissorRect);
 	m_pCommandList.Get()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_pCommandList.Get()->IASetVertexBuffers(0, 1, &m_VertexBufferView);
-	m_pCommandList.Get()->DrawInstanced(3, 1, 0, 0);
+	m_pCommandList.Get()->IASetIndexBuffer(&m_IndexBufferView);
+	//m_pCommandList.Get()->DrawInstanced(6, 1, 0, 0);
+	m_pCommandList.Get()->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }
