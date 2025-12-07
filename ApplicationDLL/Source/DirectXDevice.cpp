@@ -145,7 +145,10 @@ void DirectXDevice::ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugDevi
 bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
 	LOG_DEBUG("DirectXの初期化を開始");
+
+#ifdef _DEBUG
 	EnableDebugLayer(); // デバッグレイヤーを有効化
+#endif
 	CreateGraphicsInterface(); // DXGIファクトリの作成
 	CreateDevice();      // デバイスの作成
 	CreateCommandList();// コマンドリストの作成
@@ -460,19 +463,21 @@ bool DirectXDevice::CreateFence()
 	return true;
 }
 
+/// <summary>
+/// DirectXのレンダリング前処理
+/// </summary>
 void DirectXDevice::PreRender()
 {
 	auto bbidx = m_pSwapChain->GetCurrentBackBufferIndex(); // 現在のバックバッファのインデックスを取得
 
-	D3D12_RESOURCE_BARRIER barrierDesc = {};
 	// バックバッファを描画可能状態に変更
-	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrierDesc.Transition.pResource = m_pBackBuffers[bbidx].Get(); // バックバッファのリソースを設定
-	barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT; // もともとの状態
-	barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET; // 変更後の状態
-	m_pCommandList->ResourceBarrier(1, &barrierDesc);
+	m_BarrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	m_BarrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	m_BarrierDesc.Transition.pResource = m_pBackBuffers[bbidx].Get(); // バックバッファのリソースを設定
+	m_BarrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	m_BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT; // もともとの状態
+	m_BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET; // 変更後の状態
+	m_pCommandList->ResourceBarrier(1, &m_BarrierDesc);
 
 	// レンダーターゲットの設定
 	auto rtvH = m_pRenderTargetViewHeap->GetCPUDescriptorHandleForHeapStart();
@@ -483,10 +488,6 @@ void DirectXDevice::PreRender()
 	const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 黒色でクリア
 	m_pCommandList->ClearRenderTargetView(rtvH, clearColor, 0, nullptr);
 
-	// バックバッファをプレゼント可能状態に変更
-	barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET; // もともとの状態
-	barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT; // 変更後の状態
-	m_pCommandList->ResourceBarrier(1, &barrierDesc);
 }
 
 /// <summary>
@@ -496,6 +497,11 @@ void DirectXDevice::Render()
 {
 	// DirectXの更新処理をここに記述
 	// 例えば、レンダリングやリソースの更新など
+
+	// バックバッファをプレゼント可能状態に変更
+	m_BarrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET; // もともとの状態
+	m_BarrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT; // 変更後の状態
+	m_pCommandList->ResourceBarrier(1, &m_BarrierDesc);
 
 	m_pCommandList->Close(); // コマンドリストを閉じる
 
@@ -510,6 +516,11 @@ void DirectXDevice::Render()
 	m_pSwapChain->Present(1, 0); // スワップチェインをプレゼント（画面に表示）
 }
 
+/// <summary>
+/// 前のフレーム（GPU 上のコマンド実行）が完了するまで待機します。コマンドキューにフェンスをシグナルし、
+/// フェンスの完了値が到達していない場合はイベントを作成して待機し、完了後にイベントハンドルを閉じます。
+/// イベント作成に失敗した場合はログ出力などのエラー処理が行われます。
+/// </summary>
 void DirectXDevice::WaitForPreviousFrame()
 {
 	// 前のフレームが完了するまで待機

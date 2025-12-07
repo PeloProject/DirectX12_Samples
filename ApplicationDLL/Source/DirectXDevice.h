@@ -70,6 +70,7 @@ private:
 	ComPtr<IDXGIAdapter> m_pAdapters;
 	UINT64 m_FenceValue = 0; // フェンスの値
 	vector<ComPtr<ID3D12Resource>> m_pBackBuffers;
-
+	
+	D3D12_RESOURCE_BARRIER m_BarrierDesc = {};
 	bool m_isShutdown = false;  // ★追加
 };

@@ -22,6 +22,7 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 #include <vector>
+#include <stdexcept>
 #include <wrl/client.h>
 
 #include "Application.h"

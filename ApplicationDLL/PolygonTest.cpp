@@ -10,12 +10,24 @@
 //=========================================================================================
 PolygonTest::PolygonTest()
 {
-	m_Vertices[0] = { -0.4f, -0.7f, 0.0f };
-	m_Vertices[1] = { -0.4f,  0.7f, 0.0f };
-	m_Vertices[2] = {  0.4f, -0.7f, 0.0f };
-	m_Vertices[3] = {  0.4f,  0.7f, 0.0f };
+	m_Vertices[0] = { { -0.4f, -0.7f, 0.0f }, { 0.0f, 1.0f } };
+	m_Vertices[1] = { { -0.4f,  0.7f, 0.0f }, { 0.0f, 0.0f } };
+	m_Vertices[2] = { {  0.4f, -0.7f, 0.0f }, { 1.0f, 1.0f } };
+	m_Vertices[3] = { {  0.4f,  0.7f, 0.0f }, { 1.0f, 0.0f } };
 
-	CreateGpuResources();
+	m_TextureData.resize(256 * 256);
+	for (auto& tex : m_TextureData)
+	{
+		tex.R = rand() % 256;
+		tex.G = rand() % 256;
+		tex.B = rand() % 256;
+		tex.A = 255;
+	}
+
+	if (CreateGpuResources() != S_OK)
+	{ 
+		throw std::runtime_error("CreateGpuResources is failed.");
+	}
 }
 
 //=========================================================================================
@@ -69,6 +81,11 @@ HRESULT PolygonTest::CompileShaders()
 	return S_OK;
 }
 
+/// <summary>
+/// 頂点バッファ用のコミット済みGPUリソースを作成し、クラス内の頂点データを転送して頂点バッファビューを設定します。
+/// </summary>
+/// <param name="heapProps">D3D12_HEAP_PROPERTIES 構造体。頂点バッファのためのヒープ割り当てのプロパティ（メモリ種類や作成方法など）を指定します。</param>
+/// <param name="resourceDesc">D3D12_RESOURCE_DESC 構造体。作成するリソースのサイズ、フォーマット、使用方法などの記述を指定します。</param>
 void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	// Gpuメモリの確保
@@ -85,7 +102,7 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 	}
 
 	// 頂点データの転送
-	DirectX::XMFLOAT3* vertexMap = nullptr;
+	Vertex* vertexMap = nullptr;
 	hr = m_pVertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&vertexMap));
 	if (SUCCEEDED(hr)) {
 		memcpy(vertexMap, m_Vertices, sizeof(m_Vertices));
@@ -98,6 +115,12 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 	m_VertexBufferView.SizeInBytes = sizeof(m_Vertices);		// 全バイト数
 	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);	// 1頂点あたりのサイズ
 }
+
+/// <summary>
+/// indexバッファ用のコミット済みGPUリソースを作成し、クラス内のインデックスデータを転送してインデックスバッファビューを設定します。
+/// </summary>
+/// <param name="heapProps"></param>
+/// <param name="resourceDesc"></param>
 void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	HRESULT hr = DirectXDevice::GetDeviceComPtr()->CreateCommittedResource(
@@ -138,10 +161,10 @@ void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, cons
 	// インデックスバッファビューの設定
 	m_IndexBufferView.BufferLocation = m_pIndexBuffer->GetGPUVirtualAddress();
 	m_IndexBufferView.Format = DXGI_FORMAT_R16_UINT;
-	m_IndexBufferView.SizeInBytes = sizeof(m_Indices[0])* m_Indices.size();
+	m_IndexBufferView.SizeInBytes = static_cast<UINT>(sizeof(m_Indices[0])* m_Indices.size());
 }
 
-void PolygonTest::CreateGpuResources()
+HRESULT PolygonTest::CreateGpuResources()
 {
 	// ヒーププロパティの設定
 	D3D12_HEAP_PROPERTIES heapProps = {};
@@ -170,7 +193,7 @@ void PolygonTest::CreateGpuResources()
 	// シェーダーのコンパイル
 	HRESULT hr = CompileShaders();
 	if (!SUCCEEDED(hr)) {
-		return;
+		return hr;
 	}
 
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
@@ -189,7 +212,7 @@ void PolygonTest::CreateGpuResources()
 			LOG_DEBUG("Root Signature Serialize Error: %s", (char*)errorBlob->GetBufferPointer());
 			errorBlob->Release();
 		}
-		return;
+		return hr;
 	}
 
 	// ルートシグネチャの生成
@@ -201,26 +224,42 @@ void PolygonTest::CreateGpuResources()
 	);
 	rootSignatureBlob->Release();
 	if (!SUCCEEDED(hr)) {
-		return;
+		return hr;
 	}
+
+	CreateTextureBuffer();
 
 	// グラフィックスパイプラインステートの設定
 	CreateGraphicsPipelineState();
 
+	return hr;
 }
 
+
+/// <summary>
+/// グラフィックスパイプラインステートを作成します。
+/// </summary>
 void PolygonTest::CreateGraphicsPipelineState()
 {
 	D3D12_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
-	{
-		"POSITION",
-		0,
-		DXGI_FORMAT_R32G32B32_FLOAT,
-		0,
-		D3D12_APPEND_ALIGNED_ELEMENT,
-		D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-		0
-	},
+		{ // 座標乗法
+			"POSITION",
+			0,
+			DXGI_FORMAT_R32G32B32_FLOAT,
+			0,
+			D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+			0
+		},
+		{ //UV座標
+			"TEXCOORD",
+			0,
+			DXGI_FORMAT_R32G32_FLOAT,
+			0,
+			D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+			0
+		}
 	};
 
 
@@ -270,6 +309,77 @@ void PolygonTest::CreateGraphicsPipelineState()
 	}
 }
 
+/// <summary>
+/// Texture用のコミット済みGPUリソースを作成します。
+/// </summary>
+/// <returns></returns>
+HRESULT PolygonTest::CreateTextureBuffer()
+{
+	// ヒーププロパティの設定
+	D3D12_HEAP_PROPERTIES heapProps = {};
+	heapProps.Type = D3D12_HEAP_TYPE_CUSTOM;
+	heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+	heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	heapProps.CreationNodeMask = 0;
+	heapProps.VisibleNodeMask = 0;
+
+	// テクスチャリソースの設定
+	D3D12_RESOURCE_DESC resourceDesc = {};
+	resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	resourceDesc.Width = 256;
+	resourceDesc.Height = 256;
+	resourceDesc.DepthOrArraySize = 1;
+	resourceDesc.SampleDesc.Count = 1;
+	resourceDesc.SampleDesc.Quality = 0;
+	resourceDesc.MipLevels = 1;
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	// テクスチャ用のGPUリソースを作成
+	HRESULT hr = DirectXDevice::GetDevice()->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		nullptr,
+		IID_PPV_ARGS(&m_pTextureBuffer)
+	);
+
+	if (!SUCCEEDED(hr)) {
+		LOG_DEBUG("Texture Buffer Create Error");
+		return hr;
+	}
+
+	// テクスチャデータの転送
+	hr = m_pTextureBuffer->WriteToSubresource(
+		0,
+		nullptr,
+		m_TextureData.data(),
+		256 * sizeof(TextureRGBA),
+		256 * 256 * sizeof(TextureRGBA)
+	);
+	if (!SUCCEEDED(hr)) {
+		LOG_DEBUG("Texture Data Write Error");
+		return hr;
+	}
+
+	ComPtr<ID3D12DescriptorHeap> descriptorHeap;
+	// シェーダーリソースビューの設定
+	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc = {};
+	descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // シェーダーから見えるようにする
+	descriptorHeapDesc.NodeMask = 0;
+	descriptorHeapDesc.NumDescriptors = 1; // ディスクリプタの数
+	descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // シェーダーリソースビュー用のヒープタイプ
+
+	hr = DirectXDevice::GetDevice()->CreateDescriptorHeap(
+		&descriptorHeapDesc,
+		IID_PPV_ARGS(&descriptorHeap)
+	);
+
+	return hr;
+}
+
 void PolygonTest::ApplyTransformations()
 {
 	DirectX::XMFLOAT3* vertexMap = nullptr;
@@ -279,8 +389,8 @@ void PolygonTest::ApplyTransformations()
 void PolygonTest::Render()
 {
 	D3D12_VIEWPORT viewport = {};
-	viewport.Width = Application::GetWindowWidth();
-	viewport.Height = Application::GetWindowHeight();
+	viewport.Width = static_cast<FLOAT>(Application::GetWindowWidth());
+	viewport.Height = static_cast<FLOAT>(Application::GetWindowHeight());
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -290,7 +400,7 @@ void PolygonTest::Render()
 	m_pCommandList.Get()->SetPipelineState(m_pPipelineState.Get());
 	m_pCommandList.Get()->SetGraphicsRootSignature(m_pRootSignature.Get());
 	m_pCommandList.Get()->RSSetViewports(1, &viewport);
-	D3D12_RECT scissorRect = { 0, 0, viewport.Width, viewport.Height };
+	D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height) };
 	m_pCommandList.Get()->RSSetScissorRects(1, &scissorRect);
 	m_pCommandList.Get()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_pCommandList.Get()->IASetVertexBuffers(0, 1, &m_VertexBufferView);
