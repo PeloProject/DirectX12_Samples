@@ -4,9 +4,10 @@ class Application
 public:
 	static int GetWindowWidth() { return m_WindowWidth; }
 	static int GetWindowHeight() { return m_WindowHeight; }
+	static void SetWindowSize(int width, int height);
 private:
 
-	static constexpr int m_WindowWidth = 400;
-	static constexpr int m_WindowHeight = 300;
+	static int m_WindowWidth;
+	static int m_WindowHeight;
 };
 

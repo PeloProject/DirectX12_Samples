@@ -22,6 +22,7 @@ public:
 	static ID3D12Device* GetDevice() { return m_pDevice.Get(); }
 	static ComPtr<ID3D12Device> GetDeviceComPtr() { return m_pDevice; }
 	static ID3D12GraphicsCommandList* GetCommandList() { return m_pCommandList.Get(); }
+	ID3D12CommandQueue* GetCommandQueue() const { return m_pCommandQueue.Get(); }
 
 
 	/// <summary>
@@ -48,6 +49,7 @@ public:
 
 	void Render();
 	void PreRender();
+	bool Resize(UINT width, UINT height);
 
 	void WaitForPreviousFrame();
 

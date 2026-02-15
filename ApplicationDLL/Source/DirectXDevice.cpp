@@ -452,6 +452,38 @@ bool DirectXDevice::CreateRenderTargetView()
 	return true;
 }
 
+bool DirectXDevice::Resize(UINT width, UINT height)
+{
+	if (m_pSwapChain == nullptr || width == 0 || height == 0)
+	{
+		return false;
+	}
+
+	WaitForPreviousFrame();
+
+	for (auto& buffer : m_pBackBuffers)
+	{
+		buffer.Reset();
+	}
+	m_pBackBuffers.clear();
+	m_pRenderTargetViewHeap.Reset();
+
+	HRESULT hr = m_pSwapChain->ResizeBuffers(
+		0,
+		width,
+		height,
+		DXGI_FORMAT_UNKNOWN,
+		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	if (FAILED(hr))
+	{
+		LOG_DEBUG("ResizeBuffers failed: 0x%08X", hr);
+		return false;
+	}
+
+	m_BarrierDesc.Transition.pResource = nullptr;
+	return CreateRenderTargetView();
+}
+
 bool DirectXDevice::CreateFence()
 {
 	// フェンスの作成
@@ -468,6 +500,11 @@ bool DirectXDevice::CreateFence()
 /// </summary>
 void DirectXDevice::PreRender()
 {
+	if (m_pSwapChain == nullptr || m_pBackBuffers.empty())
+	{
+		return;
+	}
+
 	auto bbidx = m_pSwapChain->GetCurrentBackBufferIndex(); // 現在のバックバッファのインデックスを取得
 
 	// バックバッファを描画可能状態に変更
@@ -495,6 +532,11 @@ void DirectXDevice::PreRender()
 /// </summary>
 void DirectXDevice::Render()
 {
+	if (m_pSwapChain == nullptr || m_pBackBuffers.empty())
+	{
+		return;
+	}
+
 	// DirectXの更新処理をここに記述
 	// 例えば、レンダリングやリソースの更新など
 
@@ -523,6 +565,11 @@ void DirectXDevice::Render()
 /// </summary>
 void DirectXDevice::WaitForPreviousFrame()
 {
+	if (m_pCommandQueue == nullptr || m_pFence == nullptr)
+	{
+		return;
+	}
+
 	// 前のフレームが完了するまで待機
 	m_pCommandQueue->Signal(m_pFence.Get(), ++m_FenceValue);
 	if (m_pFence->GetCompletedValue() < m_FenceValue)

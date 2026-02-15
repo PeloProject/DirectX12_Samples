@@ -1,7 +1,47 @@
 ﻿#include "pch.h"
 #include "PolygonTest.h"
 #include "DirectXDevice.h"
+#include <array>
+#include <filesystem>
 
+namespace
+{
+std::filesystem::path GetModuleDirectory()
+{
+	wchar_t modulePath[MAX_PATH] = {};
+	HMODULE hModule = GetModuleHandleW(L"ApplicationDLL.dll");
+	if (hModule != nullptr && GetModuleFileNameW(hModule, modulePath, MAX_PATH) > 0)
+	{
+		return std::filesystem::path(modulePath).parent_path();
+	}
+
+	wchar_t currentDir[MAX_PATH] = {};
+	GetCurrentDirectoryW(MAX_PATH, currentDir);
+	return std::filesystem::path(currentDir);
+}
+
+std::filesystem::path ResolveShaderPath(const wchar_t* shaderFileName)
+{
+	const std::filesystem::path moduleDir = GetModuleDirectory();
+	const std::array<std::filesystem::path, 4> candidates = {
+		moduleDir / L".." / L".." / L".." / L".." / L"ApplicationDLL" / L"Shader" / shaderFileName,
+		moduleDir / L"ApplicationDLL" / L"Shader" / shaderFileName,
+		moduleDir / L"Shader" / shaderFileName,
+		std::filesystem::path(L"Shader") / shaderFileName
+	};
+
+	for (const auto& path : candidates)
+	{
+		std::error_code ec;
+		if (std::filesystem::exists(path, ec))
+		{
+			return std::filesystem::weakly_canonical(path, ec);
+		}
+	}
+
+	return candidates.back();
+}
+}
 
 //=========================================================================================
 // 
@@ -37,9 +77,12 @@ PolygonTest::PolygonTest()
 //=========================================================================================
 HRESULT PolygonTest::CompileShaders()
 {
+	const std::filesystem::path vertexShaderPath = ResolveShaderPath(L"BasicVertexShader.hlsl");
+	const std::filesystem::path pixelShaderPath = ResolveShaderPath(L"BasicPixelShader.hlsl");
+
 	ID3DBlob* errorBlob = nullptr;
 	HRESULT hr = D3DCompileFromFile(
-		L"Shader/BasicVertexShader.hlsl",
+		vertexShaderPath.c_str(),
 		nullptr,
 		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"BasicVS",
@@ -55,11 +98,12 @@ HRESULT PolygonTest::CompileShaders()
 			LOG_DEBUG("Vertex Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
 			errorBlob->Release();
 		}
-		return S_FALSE;
+		LOG_DEBUG("Vertex Shader Path: %ls", vertexShaderPath.c_str());
+		return E_FAIL;
 	}
 
 	hr = D3DCompileFromFile(
-		L"Shader/BasicPixelShader.hlsl",
+		pixelShaderPath.c_str(),
 		nullptr,
 		D3D_COMPILE_STANDARD_FILE_INCLUDE,
 		"BasicPS",
@@ -75,7 +119,8 @@ HRESULT PolygonTest::CompileShaders()
 			LOG_DEBUG("Pixcel Shader Compile Error: %s", (char*)errorBlob->GetBufferPointer());
 			errorBlob->Release();
 		}
-		return S_FALSE;
+		LOG_DEBUG("Pixel Shader Path: %ls", pixelShaderPath.c_str());
+		return E_FAIL;
 	}
 
 	return S_OK;
@@ -192,7 +237,7 @@ HRESULT PolygonTest::CreateGpuResources()
 
 	// シェーダーのコンパイル
 	HRESULT hr = CompileShaders();
-	if (!SUCCEEDED(hr)) {
+	if (FAILED(hr)) {
 		return hr;
 	}
 
@@ -388,6 +433,12 @@ void PolygonTest::ApplyTransformations()
 
 void PolygonTest::Render()
 {
+	ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+	if (commandList == nullptr)
+	{
+		return;
+	}
+
 	D3D12_VIEWPORT viewport = {};
 	viewport.Width = static_cast<FLOAT>(Application::GetWindowWidth());
 	viewport.Height = static_cast<FLOAT>(Application::GetWindowHeight());
@@ -396,15 +447,15 @@ void PolygonTest::Render()
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
 
-	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = DirectXDevice::GetCommandList();
-	m_pCommandList.Get()->SetPipelineState(m_pPipelineState.Get());
-	m_pCommandList.Get()->SetGraphicsRootSignature(m_pRootSignature.Get());
-	m_pCommandList.Get()->RSSetViewports(1, &viewport);
+	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = commandList;
+	m_pCommandList->SetPipelineState(m_pPipelineState.Get());
+	m_pCommandList->SetGraphicsRootSignature(m_pRootSignature.Get());
+	m_pCommandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height) };
-	m_pCommandList.Get()->RSSetScissorRects(1, &scissorRect);
-	m_pCommandList.Get()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_pCommandList.Get()->IASetVertexBuffers(0, 1, &m_VertexBufferView);
-	m_pCommandList.Get()->IASetIndexBuffer(&m_IndexBufferView);
+	m_pCommandList->RSSetScissorRects(1, &scissorRect);
+	m_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pCommandList->IASetVertexBuffers(0, 1, &m_VertexBufferView);
+	m_pCommandList->IASetIndexBuffer(&m_IndexBufferView);
 	//m_pCommandList.Get()->DrawInstanced(6, 1, 0, 0);
-	m_pCommandList.Get()->DrawIndexedInstanced(6, 1, 0, 0, 0);
+	m_pCommandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }
