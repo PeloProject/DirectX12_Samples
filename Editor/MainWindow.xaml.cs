@@ -89,6 +89,16 @@ namespace Editor
         [DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
         public static extern void MessageLoopIteration();
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void PieTickCallback(float deltaSeconds);
+
+        [DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
+        public static extern void SetPieTickCallback(PieTickCallback? callback);
+
+        [DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsPieRunning();
+
         // ウィンドウ操作用のP/Invoke
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
@@ -107,6 +117,9 @@ namespace Editor
         private IntPtr nativeHwnd = IntPtr.Zero;
         private System.Windows.Threading.DispatcherTimer messageLoopTimer;
         private HwndHost? hwndHost;
+        private readonly PieGameHost pieGameHost = new();
+        private NativeInterop.PieTickCallback? pieTickCallback;
+        private bool wasPieRunning = false;
 
         public MainWindow()
         {
@@ -132,6 +145,8 @@ namespace Editor
                 if (hwnd != IntPtr.Zero)
                 {
                     nativeHwnd = hwnd;
+                    pieTickCallback = OnPieTickFromNative;
+                    NativeInterop.SetPieTickCallback(pieTickCallback);
                     StatusText.Text = $"ウィンドウを作成しました (HWND: {nativeHwnd})";
                     BtnEmbed.IsEnabled = true;
                     BtnShow.IsEnabled = true;
@@ -280,11 +295,14 @@ namespace Editor
         {
             if (nativeHwnd != IntPtr.Zero)
             {
-                //NativeInterop.DestroyNativeWindow();
+                pieGameHost.Stop();
+                NativeInterop.SetPieTickCallback(null);
+                NativeInterop.DestroyNativeWindow();
                 NativeWindowPanel.Children.Clear();
                 hwndHost?.Dispose();
                 hwndHost = null;
-                
+                pieTickCallback = null;
+                wasPieRunning = false;
                 nativeHwnd = IntPtr.Zero;
 
                 StatusText.Text = "ウィンドウを破棄しました";
@@ -301,6 +319,19 @@ namespace Editor
             if (nativeHwnd != IntPtr.Zero)
             {
                 NativeInterop.MessageLoopIteration();
+
+                bool isPieRunning = NativeInterop.IsPieRunning();
+                if (isPieRunning && !wasPieRunning)
+                {
+                    pieGameHost.Start();
+                    StatusText.Text = "PIE を開始しました (C# Game Start)";
+                }
+                else if (!isPieRunning && wasPieRunning)
+                {
+                    pieGameHost.Stop();
+                    StatusText.Text = "PIE を停止しました (C# Game Stop)";
+                }
+                wasPieRunning = isPieRunning;
             }
         }
 
@@ -310,11 +341,19 @@ namespace Editor
 
             if (nativeHwnd != IntPtr.Zero)
             {
+                pieGameHost.Stop();
+                NativeInterop.SetPieTickCallback(null);
                 NativeInterop.DestroyNativeWindow();
             }
 
+            pieTickCallback = null;
             hwndHost?.Dispose();
             base.OnClosed(e);
+        }
+
+        private void OnPieTickFromNative(float deltaSeconds)
+        {
+            pieGameHost.Tick(deltaSeconds);
         }
     }
 

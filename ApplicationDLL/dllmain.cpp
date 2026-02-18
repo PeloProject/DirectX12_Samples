@@ -5,6 +5,9 @@
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
+#include <filesystem>
+#include <string>
+#include <vector>
 
 
 //BOOL APIENTRY DllMain( HMODULE hModule,
@@ -37,6 +40,15 @@ static UINT g_imguiSrvAllocated = 0;
 using PieTickCallback = void(__cdecl*)(float);
 static PieTickCallback g_pieTickCallback = nullptr;
 static bool g_isPieRunning = false;
+static HMODULE g_pieGameModule = nullptr;
+using PieGameStartFn = void(__cdecl*)();
+using PieGameTickFn = void(__cdecl*)(float);
+using PieGameStopFn = void(__cdecl*)();
+static PieGameStartFn g_pieGameStart = nullptr;
+static PieGameTickFn g_pieGameTick = nullptr;
+static PieGameStopFn g_pieGameStop = nullptr;
+static std::string g_pieGameStatus = "PIE module not loaded";
+static float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 static Microsoft::WRL::ComPtr<ID3D12Resource> g_sceneRenderTarget;
 static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_sceneRtvHeap;
 static D3D12_CPU_DESCRIPTOR_HANDLE g_sceneRtvCpuHandle = {};
@@ -45,6 +57,7 @@ static D3D12_GPU_DESCRIPTOR_HANDLE g_sceneSrvGpuHandle = {};
 static bool g_sceneSrvAllocated = false;
 static UINT g_sceneRenderWidth = 1;
 static UINT g_sceneRenderHeight = 1;
+static constexpr float kDefaultSceneClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle);
 static void ImGuiSrvDescriptorFree(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuDescHandle);
@@ -52,39 +65,40 @@ static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height);
 static void DestroySceneRenderTexture();
 static void BeginSceneRenderToTexture();
 static void EndSceneRenderToTexture();
+static bool EnsurePieGameModuleLoaded();
+static std::filesystem::path GetCurrentModuleDirectory();
+static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath);
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static bool InitializeImGui();
 static void ShutdownImGui();
 static void RenderEditorDockingUi();
+extern "C" __declspec(dllexport) void StartPie();
+extern "C" __declspec(dllexport) void StopPie();
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (msg == WM_SIZE && hwnd == g_hwnd)
+    switch (msg)
     {
-        const UINT width = LOWORD(lParam);
-        const UINT height = HIWORD(lParam);
-
-        if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
+    case WM_SIZE:
+    {
+        if (hwnd == g_hwnd)
         {
-            Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
-            g_DxDevice.Resize(width, height);
-            if (g_imguiInitialized)
+            const UINT width = LOWORD(lParam);
+            const UINT height = HIWORD(lParam);
+            if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
             {
-                CreateOrResizeSceneRenderTexture(width, height);
+                Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
+                g_DxDevice.Resize(width, height);
+                if (g_imguiInitialized)
+                {
+                    CreateOrResizeSceneRenderTexture(width, height);
+                }
             }
         }
         return 0;
     }
-
-    if (g_imguiInitialized && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
-    {
-        return 1;
-    }
-
-    switch (msg)
-    {
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
@@ -112,6 +126,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     default:
+        if (g_imguiInitialized && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
+        {
+            return 1;
+        }
         return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 }
@@ -264,10 +282,10 @@ static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height)
 
     D3D12_CLEAR_VALUE clearValue = {};
     clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    clearValue.Color[0] = 0.0f;
-    clearValue.Color[1] = 0.0f;
-    clearValue.Color[2] = 0.0f;
-    clearValue.Color[3] = 1.0f;
+    clearValue.Color[0] = kDefaultSceneClearColor[0];
+    clearValue.Color[1] = kDefaultSceneClearColor[1];
+    clearValue.Color[2] = kDefaultSceneClearColor[2];
+    clearValue.Color[3] = kDefaultSceneClearColor[3];
 
     if (FAILED(device->CreateCommittedResource(
         &heapProps,
@@ -327,7 +345,7 @@ static void BeginSceneRenderToTexture()
     commandList->ResourceBarrier(1, &barrier);
 
     commandList->OMSetRenderTargets(1, &g_sceneRtvCpuHandle, TRUE, nullptr);
-    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const float* clearColor = g_isPieRunning ? g_gameClearColor : kDefaultSceneClearColor;
     commandList->ClearRenderTargetView(g_sceneRtvCpuHandle, clearColor, 0, nullptr);
 }
 
@@ -351,6 +369,81 @@ static void EndSceneRenderToTexture()
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     commandList->ResourceBarrier(1, &barrier);
+}
+
+static std::filesystem::path GetCurrentModuleDirectory()
+{
+    wchar_t modulePath[MAX_PATH] = {};
+    HMODULE self = GetModuleHandleW(L"ApplicationDLL.dll");
+    if (self != nullptr && GetModuleFileNameW(self, modulePath, MAX_PATH) > 0)
+    {
+        return std::filesystem::path(modulePath).parent_path();
+    }
+
+    wchar_t currentDir[MAX_PATH] = {};
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    return std::filesystem::path(currentDir);
+}
+
+static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(modulePath, ec))
+    {
+        return false;
+    }
+
+    HMODULE module = LoadLibraryW(modulePath.c_str());
+    if (module == nullptr)
+    {
+        return false;
+    }
+
+    PieGameStartFn startFn = reinterpret_cast<PieGameStartFn>(GetProcAddress(module, "GameStart"));
+    PieGameTickFn tickFn = reinterpret_cast<PieGameTickFn>(GetProcAddress(module, "GameTick"));
+    PieGameStopFn stopFn = reinterpret_cast<PieGameStopFn>(GetProcAddress(module, "GameStop"));
+    if (startFn == nullptr || tickFn == nullptr || stopFn == nullptr)
+    {
+        FreeLibrary(module);
+        return false;
+    }
+
+    g_pieGameModule = module;
+    g_pieGameStart = startFn;
+    g_pieGameTick = tickFn;
+    g_pieGameStop = stopFn;
+    g_pieGameStatus = "C# game module loaded: " + modulePath.u8string();
+    return true;
+}
+
+static bool EnsurePieGameModuleLoaded()
+{
+    if (g_pieGameModule != nullptr)
+    {
+        return true;
+    }
+
+    const std::filesystem::path moduleDir = GetCurrentModuleDirectory();
+    const std::vector<std::filesystem::path> candidates = {
+        moduleDir / L"PieGameManaged.dll",
+        moduleDir / L"native" / L"PieGameManaged.dll",
+        moduleDir / L"publish" / L"PieGameManaged.dll",
+        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll",
+        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll",
+        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll",
+        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll"
+    };
+
+    for (const auto& candidate : candidates)
+    {
+        if (TryLoadPieGameModuleAtPath(candidate))
+        {
+            return true;
+        }
+    }
+
+    g_pieGameStatus = "Invalid or missing C# game module. Need NativeAOT DLL exports: GameStart/GameTick/GameStop.";
+    return false;
 }
 
 static void RenderEditorDockingUi()
@@ -379,7 +472,10 @@ static void RenderEditorDockingUi()
             ImGui::MenuItem("New Level");
             ImGui::MenuItem("Save All");
             ImGui::Separator();
-            ImGui::MenuItem("Exit");
+            if (ImGui::MenuItem("Exit") && g_hwnd != NULL)
+            {
+                PostMessage(g_hwnd, WM_CLOSE, 0, 0);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Window"))
@@ -423,8 +519,16 @@ static void RenderEditorDockingUi()
     ImGui::Text("Play In Editor");
     if (ImGui::Button(g_isPieRunning ? "Stop PIE" : "Start PIE"))
     {
-        g_isPieRunning = !g_isPieRunning;
+        if (g_isPieRunning)
+        {
+            StopPie();
+        }
+        else
+        {
+            StartPie();
+        }
     }
+    ImGui::TextWrapped("%s", g_pieGameStatus.c_str());
     ImGui::End();
 
     ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
@@ -523,7 +627,7 @@ extern "C" __declspec(dllexport) void DestroyNativeWindow()
 {
     if (g_hwnd != NULL)
     {
-        g_isPieRunning = false;
+        StopPie();
         ShutdownImGui();
         g_DxDevice.Shutdown();  // この関数を追加する
         DestroyWindow(g_hwnd);
@@ -538,17 +642,38 @@ extern "C" __declspec(dllexport) void SetPieTickCallback(PieTickCallback callbac
 
 extern "C" __declspec(dllexport) void StartPie()
 {
+    if (!EnsurePieGameModuleLoaded())
+    {
+        g_isPieRunning = false;
+        return;
+    }
+
+    g_pieGameStart();
     g_isPieRunning = true;
+    g_pieGameStatus = "PIE running (C#)";
 }
 
 extern "C" __declspec(dllexport) void StopPie()
 {
+    if (g_isPieRunning && g_pieGameStop != nullptr)
+    {
+        g_pieGameStop();
+    }
     g_isPieRunning = false;
+    g_pieGameStatus = "PIE stopped";
 }
 
 extern "C" __declspec(dllexport) BOOL IsPieRunning()
 {
     return g_isPieRunning ? TRUE : FALSE;
+}
+
+extern "C" __declspec(dllexport) void SetGameClearColor(float r, float g, float b, float a)
+{
+    g_gameClearColor[0] = r;
+    g_gameClearColor[1] = g;
+    g_gameClearColor[2] = b;
+    g_gameClearColor[3] = a;
 }
 
 
@@ -575,6 +700,10 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
     }
 
     SceneManager::GetInstance().Update(1.0f / 60.0f); // シーンの更新処理
+    if (g_isPieRunning && g_pieGameTick != nullptr)
+    {
+        g_pieGameTick(1.0f / 60.0f);
+    }
     if (g_isPieRunning && g_pieTickCallback != nullptr)
     {
         g_pieTickCallback(1.0f / 60.0f);

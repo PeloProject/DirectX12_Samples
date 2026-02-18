@@ -1,38 +1,36 @@
-# ApplicationDLL PIE API
+# PIE (ApplicationDLLHost 起動) 仕様
 
-`ApplicationDLL.dll` は C# 側から PIE を制御できるよう、以下の C API を公開しています。
+## 目的
 
-## Exports
+- 起動エディタ: `ApplicationDLLHost.exe`
+- PIE開始時: `PieGameManaged.dll` (C# NativeAOT) を同一プロセスで読み込み
+- Viewport: C#ゲームの更新結果を反映
 
-- `void SetPieTickCallback(void(__cdecl* callback)(float deltaSeconds))`
-- `void StartPie()`
-- `void StopPie()`
-- `BOOL IsPieRunning()`
+## C#ゲームモジュール要件
 
-## 想定フロー (C# 側)
+`PieGameManaged.dll` に以下エクスポートが必要です。
 
-1. `CreateNativeWindow()` / `ShowNativeWindow()` を呼ぶ。
-2. `SetPieTickCallback()` で C# の Tick デリゲートを登録する。
-3. `StartPie()` で PIE 開始。
-4. 毎フレーム `MessageLoopIteration()` を呼ぶ。
-5. `StopPie()` / `DestroyNativeWindow()` で終了。
+- `GameStart()`
+- `GameTick(float deltaSeconds)`
+- `GameStop()`
 
-## C# 宣言例
+## ApplicationDLL 側の公開API
 
-```csharp
-[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-public delegate void PieTickDelegate(float deltaSeconds);
+- `StartPie()`
+- `StopPie()`
+- `IsPieRunning()`
+- `SetGameClearColor(float r, float g, float b, float a)`  
+  C#ゲームから呼び出し可能。Viewport描画のクリアカラーに反映されます。
 
-[DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl)]
-public static extern void SetPieTickCallback(PieTickDelegate callback);
+## サンプルプロジェクト
 
-[DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl)]
-public static extern void StartPie();
+- `PieGameManaged/PieGameManaged.csproj`
+- `PieGameManaged/GameEntry.cs`
 
-[DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl)]
-public static extern void StopPie();
+上記は NativeAOT で `PieGameManaged.dll` を生成する最小サンプルです。
 
-[DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl)]
-[return: MarshalAs(UnmanagedType.Bool)]
-public static extern bool IsPieRunning();
-```
+## ビルド手順 (サンプル)
+
+1. `dotnet publish PieGameManaged/PieGameManaged.csproj -c Debug`
+2. 生成された `PieGameManaged.dll` を `ApplicationDLLHost.exe` と同じフォルダへ配置
+3. `ApplicationDLLHost` 起動後、PIE ボタンで開始/停止

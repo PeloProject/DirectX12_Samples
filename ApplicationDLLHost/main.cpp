@@ -43,6 +43,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     }
 
     destroyNativeWindow();
-    FreeLibrary(module);
+    // Process shutdown will unload the DLL. Explicit FreeLibrary here can block in teardown.
     return 0;
 }
