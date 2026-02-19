@@ -45,6 +45,8 @@ static UINT g_imguiSrvAllocated = 0;
 using PieTickCallback = void(__cdecl*)(float);
 static PieTickCallback g_pieTickCallback = nullptr;
 static bool g_isPieRunning = false;
+static bool g_pendingStartPie = false;
+static bool g_pendingStopPie = false;
 static HMODULE g_pieGameModule = nullptr;
 using PieGameStartFn = void(__cdecl*)();
 using PieGameTickFn = void(__cdecl*)(float);
@@ -54,6 +56,16 @@ static PieGameTickFn g_pieGameTick = nullptr;
 static PieGameStopFn g_pieGameStop = nullptr;
 static std::string g_pieGameStatus = "PIE module not loaded";
 static std::string g_pieGameModulePath = "";
+static std::string g_pieGameSourceModulePath = "";
+static std::filesystem::file_time_type g_pieGameSourceWriteTime = {};
+static bool g_pieGameSourceWriteTimeValid = false;
+static std::filesystem::path g_pieManagedCsprojPath = {};
+static std::filesystem::file_time_type g_pieManagedLastPublishedSourceWriteTime = {};
+static bool g_pieManagedLastPublishedSourceWriteTimeValid = false;
+static HANDLE g_pieManagedPublishProcess = nullptr;
+static uint64_t g_pieHotReloadGeneration = 0;
+static float g_pieHotReloadCheckTimer = 0.0f;
+static float g_pieManagedPublishCheckTimer = 0.0f;
 static float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 static std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
 static uint32_t g_nextGameQuadHandle = 1;
@@ -80,6 +92,14 @@ static bool EnsurePieGameModuleLoaded();
 static std::filesystem::path GetCurrentModuleDirectory();
 static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath);
 static void AddPieGameCandidatesFromRoot(std::vector<std::filesystem::path>& candidates, const std::filesystem::path& root);
+static void UnloadPieGameModule();
+static bool TryHotReloadPieGameModule();
+static bool ResolvePieManagedCsprojPath();
+static bool TryGetPieManagedSourceWriteTime(std::filesystem::file_time_type& outWriteTime);
+static bool TryStartPieManagedAutoPublish();
+static void TickPieManagedAutoPublish(float deltaTime);
+static void StartPieImmediate();
+static void StopPieImmediate();
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -442,7 +462,32 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
         return false;
     }
 
-    HMODULE module = LoadLibraryW(modulePath.c_str());
+    const std::filesystem::path hotReloadDir = std::filesystem::temp_directory_path(ec) / L"DirectX12Samples" / L"PieHotReload";
+    if (ec)
+    {
+        return false;
+    }
+
+    std::filesystem::create_directories(hotReloadDir, ec);
+    if (ec)
+    {
+        return false;
+    }
+
+    ++g_pieHotReloadGeneration;
+    const std::filesystem::path hotReloadDllPath = hotReloadDir / (L"PieGameManaged_" + std::to_wstring(g_pieHotReloadGeneration) + L".dll");
+    std::filesystem::copy_file(modulePath, hotReloadDllPath, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec)
+    {
+        return false;
+    }
+
+    const std::filesystem::path sourcePdbPath = modulePath.parent_path() / L"PieGameManaged.pdb";
+    const std::filesystem::path hotReloadPdbPath = hotReloadDir / (L"PieGameManaged_" + std::to_wstring(g_pieHotReloadGeneration) + L".pdb");
+    std::filesystem::copy_file(sourcePdbPath, hotReloadPdbPath, std::filesystem::copy_options::overwrite_existing, ec);
+    ec.clear();
+
+    HMODULE module = LoadLibraryW(hotReloadDllPath.c_str());
     if (module == nullptr)
     {
         return false;
@@ -461,7 +506,10 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     g_pieGameStart = startFn;
     g_pieGameTick = tickFn;
     g_pieGameStop = stopFn;
-    g_pieGameModulePath = modulePath.u8string();
+    g_pieGameModulePath = hotReloadDllPath.u8string();
+    g_pieGameSourceModulePath = modulePath.u8string();
+    g_pieGameSourceWriteTime = std::filesystem::last_write_time(modulePath, ec);
+    g_pieGameSourceWriteTimeValid = !ec;
     g_pieGameStatus = "C# game module loaded: " + modulePath.u8string();
     return true;
 }
@@ -493,6 +541,221 @@ static void AddPieGameCandidatesFromRoot(std::vector<std::filesystem::path>& can
                 candidates.push_back(entry.path());
             }
         }
+    }
+}
+
+static bool ResolvePieManagedCsprojPath()
+{
+    if (!g_pieManagedCsprojPath.empty())
+    {
+        return true;
+    }
+
+    const std::filesystem::path moduleDir = GetCurrentModuleDirectory();
+    const std::filesystem::path currentDir = std::filesystem::current_path();
+    std::vector<std::filesystem::path> searchRoots;
+    searchRoots.reserve(16);
+
+    for (std::filesystem::path p = currentDir; !p.empty(); p = p.parent_path())
+    {
+        searchRoots.push_back(p);
+        if (p == p.parent_path())
+        {
+            break;
+        }
+    }
+    for (std::filesystem::path p = moduleDir; !p.empty(); p = p.parent_path())
+    {
+        searchRoots.push_back(p);
+        if (p == p.parent_path())
+        {
+            break;
+        }
+    }
+
+    std::set<std::wstring> seen;
+    for (const auto& root : searchRoots)
+    {
+        const std::wstring key = root.wstring();
+        if (!seen.insert(key).second)
+        {
+            continue;
+        }
+
+        const std::filesystem::path csprojPath = root / L"PieGameManaged" / L"PieGameManaged.csproj";
+        std::error_code ec;
+        if (std::filesystem::exists(csprojPath, ec))
+        {
+            g_pieManagedCsprojPath = csprojPath;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool TryGetPieManagedSourceWriteTime(std::filesystem::file_time_type& outWriteTime)
+{
+    if (!ResolvePieManagedCsprojPath())
+    {
+        return false;
+    }
+
+    const std::filesystem::path projectDir = g_pieManagedCsprojPath.parent_path();
+    std::error_code ec;
+    if (!std::filesystem::exists(projectDir, ec))
+    {
+        return false;
+    }
+
+    bool hasAny = false;
+    std::filesystem::file_time_type latestWriteTime = {};
+    std::filesystem::recursive_directory_iterator it(projectDir, ec);
+    std::filesystem::recursive_directory_iterator end;
+    for (; it != end; it.increment(ec))
+    {
+        if (ec)
+        {
+            break;
+        }
+        const auto& entry = *it;
+        if (entry.is_directory())
+        {
+            const auto dirName = entry.path().filename().wstring();
+            if (dirName == L"bin" || dirName == L"obj")
+            {
+                it.disable_recursion_pending();
+                continue;
+            }
+            continue;
+        }
+        if (!entry.is_regular_file())
+        {
+            continue;
+        }
+
+        const auto ext = entry.path().extension().wstring();
+        const bool isSourceFile =
+            ext == L".cs" || ext == L".csproj" || ext == L".props" || ext == L".targets" || ext == L".json";
+        if (!isSourceFile)
+        {
+            continue;
+        }
+
+        const auto writeTime = entry.last_write_time(ec);
+        if (ec)
+        {
+            continue;
+        }
+
+        if (!hasAny || writeTime > latestWriteTime)
+        {
+            latestWriteTime = writeTime;
+            hasAny = true;
+        }
+    }
+
+    if (!hasAny)
+    {
+        return false;
+    }
+
+    outWriteTime = latestWriteTime;
+    return true;
+}
+
+static bool TryStartPieManagedAutoPublish()
+{
+    if (g_pieManagedPublishProcess != nullptr)
+    {
+        return false;
+    }
+    if (!ResolvePieManagedCsprojPath())
+    {
+        return false;
+    }
+
+    const std::filesystem::path projectDir = g_pieManagedCsprojPath.parent_path();
+    std::wstring commandLine = L"cmd.exe /C dotnet publish PieGameManaged.csproj -c Debug -r win-x64";
+
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+    std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
+    mutableCommand.push_back(L'\0');
+
+    if (!CreateProcessW(
+        nullptr,
+        mutableCommand.data(),
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_NO_WINDOW,
+        nullptr,
+        projectDir.c_str(),
+        &si,
+        &pi))
+    {
+        g_pieGameStatus = "PIE auto-publish failed to start";
+        return false;
+    }
+
+    CloseHandle(pi.hThread);
+    g_pieManagedPublishProcess = pi.hProcess;
+    g_pieGameStatus = "PIE auto-publish running...";
+    return true;
+}
+
+static void TickPieManagedAutoPublish(float deltaTime)
+{
+    if (!g_isPieRunning)
+    {
+        return;
+    }
+
+    if (g_pieManagedPublishProcess != nullptr)
+    {
+        const DWORD waitResult = WaitForSingleObject(g_pieManagedPublishProcess, 0);
+        if (waitResult == WAIT_OBJECT_0)
+        {
+            DWORD exitCode = 1;
+            GetExitCodeProcess(g_pieManagedPublishProcess, &exitCode);
+            CloseHandle(g_pieManagedPublishProcess);
+            g_pieManagedPublishProcess = nullptr;
+            g_pieGameStatus = (exitCode == 0) ? "PIE auto-publish completed" : "PIE auto-publish failed";
+        }
+        return;
+    }
+
+    g_pieManagedPublishCheckTimer += deltaTime;
+    if (g_pieManagedPublishCheckTimer < 1.0f)
+    {
+        return;
+    }
+    g_pieManagedPublishCheckTimer = 0.0f;
+
+    std::filesystem::file_time_type currentSourceWriteTime = {};
+    if (!TryGetPieManagedSourceWriteTime(currentSourceWriteTime))
+    {
+        return;
+    }
+
+    if (!g_pieManagedLastPublishedSourceWriteTimeValid)
+    {
+        g_pieManagedLastPublishedSourceWriteTime = currentSourceWriteTime;
+        g_pieManagedLastPublishedSourceWriteTimeValid = true;
+        return;
+    }
+
+    if (currentSourceWriteTime <= g_pieManagedLastPublishedSourceWriteTime)
+    {
+        return;
+    }
+
+    if (TryStartPieManagedAutoPublish())
+    {
+        g_pieManagedLastPublishedSourceWriteTime = currentSourceWriteTime;
+        g_pieManagedLastPublishedSourceWriteTimeValid = true;
     }
 }
 
@@ -579,6 +842,66 @@ static bool EnsurePieGameModuleLoaded()
     return false;
 }
 
+static void UnloadPieGameModule()
+{
+    if (g_pieGameModule != nullptr)
+    {
+        FreeLibrary(g_pieGameModule);
+        g_pieGameModule = nullptr;
+    }
+
+    g_pieGameStart = nullptr;
+    g_pieGameTick = nullptr;
+    g_pieGameStop = nullptr;
+    g_pieGameModulePath.clear();
+    g_pieGameSourceModulePath.clear();
+    g_pieGameSourceWriteTimeValid = false;
+}
+
+static bool TryHotReloadPieGameModule()
+{
+    if (g_pieGameModule == nullptr || g_pieGameSourceModulePath.empty() || !g_pieGameSourceWriteTimeValid)
+    {
+        return false;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path sourcePath = std::filesystem::path(g_pieGameSourceModulePath);
+    const auto currentWriteTime = std::filesystem::last_write_time(sourcePath, ec);
+    if (ec)
+    {
+        return false;
+    }
+    if (currentWriteTime == g_pieGameSourceWriteTime)
+    {
+        return false;
+    }
+
+    const bool wasRunning = g_isPieRunning;
+    if (wasRunning && g_pieGameStop != nullptr)
+    {
+        g_pieGameStop();
+    }
+    DestroyAllGameQuads();
+    g_isPieRunning = false;
+
+    UnloadPieGameModule();
+    if (!EnsurePieGameModuleLoaded())
+    {
+        g_pieGameStatus = "PIE hot reload failed: unable to load updated C# module";
+        return false;
+    }
+
+    if (wasRunning && g_pieGameStart != nullptr)
+    {
+        g_pieGameStart();
+        g_isPieRunning = true;
+    }
+
+    g_pieGameStatus = "PIE hot reloaded (C#)";
+    return true;
+}
+
 static void RenderEditorDockingUi()
 {
     ImGuiWindowFlags hostWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -662,7 +985,8 @@ static void RenderEditorDockingUi()
         }
     }
     ImGui::TextWrapped("%s", g_pieGameStatus.c_str());
-    ImGui::TextWrapped("Loaded module: %s", g_pieGameModulePath.empty() ? "(none)" : g_pieGameModulePath.c_str());
+    ImGui::TextWrapped("Module source: %s", g_pieGameSourceModulePath.empty() ? "(none)" : g_pieGameSourceModulePath.c_str());
+    ImGui::TextWrapped("Module loaded: %s", g_pieGameModulePath.empty() ? "(none)" : g_pieGameModulePath.c_str());
     ImGui::Text("Active quads: %d", static_cast<int>(g_gameQuads.size()));
     ImGui::End();
 
@@ -763,7 +1087,7 @@ extern "C" __declspec(dllexport) void DestroyNativeWindow()
 {
     if (g_hwnd != NULL)
     {
-        StopPie();
+        StopPieImmediate();
         ShutdownImGui();
         g_DxDevice.Shutdown();  // この関数を追加する
         DestroyWindow(g_hwnd);
@@ -778,6 +1102,18 @@ extern "C" __declspec(dllexport) void SetPieTickCallback(PieTickCallback callbac
 
 extern "C" __declspec(dllexport) void StartPie()
 {
+    g_pendingStopPie = false;
+    g_pendingStartPie = true;
+}
+
+extern "C" __declspec(dllexport) void StopPie()
+{
+    g_pendingStartPie = false;
+    g_pendingStopPie = true;
+}
+
+static void StartPieImmediate()
+{
     if (!EnsurePieGameModuleLoaded())
     {
         g_isPieRunning = false;
@@ -787,6 +1123,14 @@ extern "C" __declspec(dllexport) void StartPie()
     const std::string statusBeforeStart = g_pieGameStatus;
     g_pieGameStart();
     g_isPieRunning = true;
+    g_pieHotReloadCheckTimer = 0.0f;
+    g_pieManagedPublishCheckTimer = 0.0f;
+    std::filesystem::file_time_type initialSourceWriteTime = {};
+    if (TryGetPieManagedSourceWriteTime(initialSourceWriteTime))
+    {
+        g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
+        g_pieManagedLastPublishedSourceWriteTimeValid = true;
+    }
     if (g_gameQuads.empty() && g_pieGameStatus == statusBeforeStart)
     {
         g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
@@ -798,7 +1142,7 @@ extern "C" __declspec(dllexport) void StartPie()
     }
 }
 
-extern "C" __declspec(dllexport) void StopPie()
+static void StopPieImmediate()
 {
     if (g_isPieRunning && g_pieGameStop != nullptr)
     {
@@ -806,6 +1150,14 @@ extern "C" __declspec(dllexport) void StopPie()
     }
     DestroyAllGameQuads();
     g_isPieRunning = false;
+    g_pieHotReloadCheckTimer = 0.0f;
+    g_pieManagedPublishCheckTimer = 0.0f;
+    if (g_pieManagedPublishProcess != nullptr)
+    {
+        CloseHandle(g_pieManagedPublishProcess);
+        g_pieManagedPublishProcess = nullptr;
+    }
+    UnloadPieGameModule();
     g_pieGameStatus = "PIE stopped";
 }
 
@@ -887,14 +1239,37 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
         return;
     }
 
-    SceneManager::GetInstance().Update(1.0f / 60.0f); // シーンの更新処理
+    if (g_pendingStopPie)
+    {
+        g_pendingStopPie = false;
+        StopPieImmediate();
+    }
+    if (g_pendingStartPie)
+    {
+        g_pendingStartPie = false;
+        StartPieImmediate();
+    }
+
+    constexpr float kFixedDeltaTime = 1.0f / 60.0f;
+
+    SceneManager::GetInstance().Update(kFixedDeltaTime); // シーンの更新処理
+    TickPieManagedAutoPublish(kFixedDeltaTime);
+    if (g_isPieRunning)
+    {
+        g_pieHotReloadCheckTimer += kFixedDeltaTime;
+        if (g_pieHotReloadCheckTimer >= 0.5f)
+        {
+            g_pieHotReloadCheckTimer = 0.0f;
+            TryHotReloadPieGameModule();
+        }
+    }
     if (g_isPieRunning && g_pieGameTick != nullptr)
     {
-        g_pieGameTick(1.0f / 60.0f);
+        g_pieGameTick(kFixedDeltaTime);
     }
     if (g_isPieRunning && g_pieTickCallback != nullptr)
     {
-        g_pieTickCallback(1.0f / 60.0f);
+        g_pieTickCallback(kFixedDeltaTime);
     }
 
     BeginSceneRenderToTexture();

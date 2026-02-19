@@ -45,6 +45,14 @@ internal static class GameEntry
         float b = 0.14f + 0.6f * (1.0f - pulse);
         SetGameClearColor(r, g, b, 1.0f);
 
+        float centerX = 0.35f * MathF.Sin(_time * 0.9f);
+        float centerY = 0.18f * MathF.Cos(_time * 0.7f);
+        float width = 0.65f + 0.25f * pulse;
+        float height = 1.0f + 0.35f * (1.0f - pulse);
+        if (_quadHandle != 0)
+        {
+            //SetGameQuadTransform(_quadHandle, centerX, centerY, width, height);
+        }
     }
 
     [UnmanagedCallersOnly(EntryPoint = "GameStop")]

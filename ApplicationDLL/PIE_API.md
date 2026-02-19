@@ -43,3 +43,12 @@
 - `SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)`
   - Updates transform in NDC space for the specified quad instance.
   - `width`/`height` values are clamped to a minimum of `0.01f` on native side.
+
+## Hot Reload (PieGameManaged)
+- While PIE is running, `ApplicationDLL` checks the source `PieGameManaged.dll` timestamp every 0.5 seconds.
+- If updated, it unloads the old game module, loads the latest one, and restarts PIE game callbacks automatically.
+- The module is loaded from a temp copy (`%TEMP%/DirectX12Samples/PieHotReload`) to avoid file-locking the original output.
+- Auto NativeAOT publish:
+  - While PIE is running, source changes under `PieGameManaged` (`.cs`, `.csproj`, `.props`, `.targets`, `.json`) are monitored.
+  - On change, `dotnet publish PieGameManaged.csproj -c Debug -r win-x64` runs automatically.
+  - After publish completes, the existing hot reload path loads the updated native module automatically.
