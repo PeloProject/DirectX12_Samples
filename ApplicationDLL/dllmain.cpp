@@ -5,8 +5,13 @@
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 
@@ -48,7 +53,10 @@ static PieGameStartFn g_pieGameStart = nullptr;
 static PieGameTickFn g_pieGameTick = nullptr;
 static PieGameStopFn g_pieGameStop = nullptr;
 static std::string g_pieGameStatus = "PIE module not loaded";
+static std::string g_pieGameModulePath = "";
 static float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+static std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
+static uint32_t g_nextGameQuadHandle = 1;
 static Microsoft::WRL::ComPtr<ID3D12Resource> g_sceneRenderTarget;
 static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_sceneRtvHeap;
 static D3D12_CPU_DESCRIPTOR_HANDLE g_sceneRtvCpuHandle = {};
@@ -65,9 +73,13 @@ static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height);
 static void DestroySceneRenderTexture();
 static void BeginSceneRenderToTexture();
 static void EndSceneRenderToTexture();
+static void ConfigureD3D12DebugFilters();
+static void RenderGameQuads();
+static void DestroyAllGameQuads();
 static bool EnsurePieGameModuleLoaded();
 static std::filesystem::path GetCurrentModuleDirectory();
 static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath);
+static void AddPieGameCandidatesFromRoot(std::vector<std::filesystem::path>& candidates, const std::filesystem::path& root);
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -76,6 +88,9 @@ static void ShutdownImGui();
 static void RenderEditorDockingUi();
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
+extern "C" __declspec(dllexport) uint32_t CreateGameQuad();
+extern "C" __declspec(dllexport) void DestroyGameQuad(uint32_t handle);
+extern "C" __declspec(dllexport) void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -280,19 +295,12 @@ static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height)
     D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
-    D3D12_CLEAR_VALUE clearValue = {};
-    clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    clearValue.Color[0] = kDefaultSceneClearColor[0];
-    clearValue.Color[1] = kDefaultSceneClearColor[1];
-    clearValue.Color[2] = kDefaultSceneClearColor[2];
-    clearValue.Color[3] = kDefaultSceneClearColor[3];
-
     if (FAILED(device->CreateCommittedResource(
         &heapProps,
         D3D12_HEAP_FLAG_NONE,
         &resourceDesc,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-        &clearValue,
+        nullptr,
         IID_PPV_ARGS(&g_sceneRenderTarget))))
     {
         return false;
@@ -371,6 +379,47 @@ static void EndSceneRenderToTexture()
     commandList->ResourceBarrier(1, &barrier);
 }
 
+static void ConfigureD3D12DebugFilters()
+{
+    ID3D12Device* device = DirectXDevice::GetDevice();
+    if (device == nullptr)
+    {
+        return;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue;
+    if (FAILED(device->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+    {
+        return;
+    }
+
+    D3D12_MESSAGE_ID denyIds[] = {
+        D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE
+    };
+
+    D3D12_INFO_QUEUE_FILTER filter = {};
+    filter.DenyList.NumIDs = _countof(denyIds);
+    filter.DenyList.pIDList = denyIds;
+    infoQueue->AddStorageFilterEntries(&filter);
+}
+
+static void RenderGameQuads()
+{
+    for (auto& quadEntry : g_gameQuads)
+    {
+        if (quadEntry.second != nullptr)
+        {
+            quadEntry.second->Render();
+        }
+    }
+}
+
+static void DestroyAllGameQuads()
+{
+    g_gameQuads.clear();
+    g_nextGameQuadHandle = 1;
+}
+
 static std::filesystem::path GetCurrentModuleDirectory()
 {
     wchar_t modulePath[MAX_PATH] = {};
@@ -412,8 +461,39 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     g_pieGameStart = startFn;
     g_pieGameTick = tickFn;
     g_pieGameStop = stopFn;
+    g_pieGameModulePath = modulePath.u8string();
     g_pieGameStatus = "C# game module loaded: " + modulePath.u8string();
     return true;
+}
+
+static void AddPieGameCandidatesFromRoot(std::vector<std::filesystem::path>& candidates, const std::filesystem::path& root)
+{
+    const std::filesystem::path pieBinDir = root / L"PieGameManaged" / L"bin";
+    std::error_code ec;
+    if (!std::filesystem::exists(pieBinDir, ec))
+    {
+        return;
+    }
+
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(pieBinDir, ec))
+    {
+        if (ec)
+        {
+            break;
+        }
+        if (!entry.is_regular_file())
+        {
+            continue;
+        }
+        if (entry.path().filename() == L"PieGameManaged.dll")
+        {
+            const auto parentName = entry.path().parent_path().filename().wstring();
+            if (parentName == L"native" || parentName == L"publish")
+            {
+                candidates.push_back(entry.path());
+            }
+        }
+    }
 }
 
 static bool EnsurePieGameModuleLoaded()
@@ -424,17 +504,70 @@ static bool EnsurePieGameModuleLoaded()
     }
 
     const std::filesystem::path moduleDir = GetCurrentModuleDirectory();
-    const std::vector<std::filesystem::path> candidates = {
-        moduleDir / L"PieGameManaged.dll",
-        moduleDir / L"native" / L"PieGameManaged.dll",
-        moduleDir / L"publish" / L"PieGameManaged.dll",
-        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll",
-        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll",
-        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll",
-        moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll"
-    };
+    const std::filesystem::path currentDir = std::filesystem::current_path();
 
+    std::vector<std::filesystem::path> candidates;
+    candidates.reserve(64);
+
+    for (std::filesystem::path p = currentDir; !p.empty(); p = p.parent_path())
+    {
+        AddPieGameCandidatesFromRoot(candidates, p);
+        if (p == p.parent_path())
+        {
+            break;
+        }
+    }
+    for (std::filesystem::path p = moduleDir; !p.empty(); p = p.parent_path())
+    {
+        AddPieGameCandidatesFromRoot(candidates, p);
+        if (p == p.parent_path())
+        {
+            break;
+        }
+    }
+
+    candidates.push_back(moduleDir / L"native" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L"publish" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll");
+
+    std::set<std::wstring> seen;
+    std::vector<std::filesystem::path> uniqueCandidates;
+    uniqueCandidates.reserve(candidates.size());
     for (const auto& candidate : candidates)
+    {
+        const auto key = candidate.wstring();
+        if (seen.insert(key).second)
+        {
+            uniqueCandidates.push_back(candidate);
+        }
+    }
+
+    std::sort(uniqueCandidates.begin(), uniqueCandidates.end(),
+        [](const std::filesystem::path& a, const std::filesystem::path& b)
+        {
+            std::error_code ecA;
+            std::error_code ecB;
+            const auto timeA = std::filesystem::last_write_time(a, ecA);
+            const auto timeB = std::filesystem::last_write_time(b, ecB);
+            if (ecA && ecB)
+            {
+                return a.wstring() < b.wstring();
+            }
+            if (ecA)
+            {
+                return false;
+            }
+            if (ecB)
+            {
+                return true;
+            }
+            return timeA > timeB;
+        });
+
+    for (const auto& candidate : uniqueCandidates)
     {
         if (TryLoadPieGameModuleAtPath(candidate))
         {
@@ -529,6 +662,8 @@ static void RenderEditorDockingUi()
         }
     }
     ImGui::TextWrapped("%s", g_pieGameStatus.c_str());
+    ImGui::TextWrapped("Loaded module: %s", g_pieGameModulePath.empty() ? "(none)" : g_pieGameModulePath.c_str());
+    ImGui::Text("Active quads: %d", static_cast<int>(g_gameQuads.size()));
     ImGui::End();
 
     ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
@@ -595,6 +730,7 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
         }
 
 		g_DxDevice.Initialize(g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight());
+        ConfigureD3D12DebugFilters();
         g_imguiInitialized = InitializeImGui();
        
 		SceneManager::GetInstance().ChangeScene(0);
@@ -648,9 +784,18 @@ extern "C" __declspec(dllexport) void StartPie()
         return;
     }
 
+    const std::string statusBeforeStart = g_pieGameStatus;
     g_pieGameStart();
     g_isPieRunning = true;
-    g_pieGameStatus = "PIE running (C#)";
+    if (g_gameQuads.empty() && g_pieGameStatus == statusBeforeStart)
+    {
+        g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
+        return;
+    }
+    if (g_pieGameStatus == statusBeforeStart)
+    {
+        g_pieGameStatus = "PIE running (C#)";
+    }
 }
 
 extern "C" __declspec(dllexport) void StopPie()
@@ -659,6 +804,7 @@ extern "C" __declspec(dllexport) void StopPie()
     {
         g_pieGameStop();
     }
+    DestroyAllGameQuads();
     g_isPieRunning = false;
     g_pieGameStatus = "PIE stopped";
 }
@@ -674,6 +820,48 @@ extern "C" __declspec(dllexport) void SetGameClearColor(float r, float g, float 
     g_gameClearColor[1] = g;
     g_gameClearColor[2] = b;
     g_gameClearColor[3] = a;
+}
+
+extern "C" __declspec(dllexport) uint32_t CreateGameQuad()
+{
+    try
+    {
+        const uint32_t handle = g_nextGameQuadHandle++;
+        g_gameQuads[handle] = std::make_unique<PolygonTest>();
+        g_pieGameStatus = "Game quad created. handle=" + std::to_string(handle);
+        return handle;
+    }
+    catch (const std::exception& ex)
+    {
+        g_pieGameStatus = std::string("CreateGameQuad failed: ") + ex.what();
+        return 0;
+    }
+    catch (...)
+    {
+        g_pieGameStatus = "CreateGameQuad failed: unknown error";
+        return 0;
+    }
+}
+
+extern "C" __declspec(dllexport) void DestroyGameQuad(uint32_t handle)
+{
+    if (handle == 0)
+    {
+        return;
+    }
+
+    g_gameQuads.erase(handle);
+}
+
+extern "C" __declspec(dllexport) void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)
+{
+    const auto it = g_gameQuads.find(handle);
+    if (it == g_gameQuads.end() || it->second == nullptr)
+    {
+        return;
+    }
+
+    it->second->SetTransform(centerX, centerY, width, height);
 }
 
 
@@ -711,6 +899,7 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
 
     BeginSceneRenderToTexture();
 	SceneManager::GetInstance().Render();   // シーンのレンダリング処理
+    RenderGameQuads();
     EndSceneRenderToTexture();
 
     g_DxDevice.PreRender();                 // DirectXのレンダー前更新処理

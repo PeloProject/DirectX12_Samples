@@ -33,6 +33,7 @@ public:
 	~PolygonTest() {}
 
 	void Render();
+	void SetTransform(float centerX, float centerY, float width, float height);
 private:
 
 	void CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
@@ -48,14 +49,26 @@ private:
 	/// グラフィックスパイプラインステートを作成します。
 	/// GPUに描画方法を指示する為の設定情報をまとめたものになります。
 	/// </summary>
-	void CreateGraphicsPipelineState();
+	HRESULT CreateGraphicsPipelineState();
 
 	/// <summary>
 	/// シェーダーのコンパイル
 	/// </summary>
 	HRESULT CompileShaders();
+	void ApplyQuadTransform();
+	void UploadVertexBufferData();
 
+	struct QuadTransform
+	{
+		float centerX = 0.0f;
+		float centerY = 0.0f;
+		float width = 0.8f;
+		float height = 1.4f;
+	};
+
+	QuadTransform m_quadTransform = {};
 	Vertex m_Vertices[4];
+	bool m_isVertexDirty = true;
 
 	ComPtr<ID3D12PipelineState> m_pPipelineState;
 

@@ -34,3 +34,12 @@
 1. `dotnet publish PieGameManaged/PieGameManaged.csproj -c Debug`
 2. 生成された `PieGameManaged.dll` を `ApplicationDLLHost.exe` と同じフォルダへ配置
 3. `ApplicationDLLHost` 起動後、PIE ボタンで開始/停止
+
+## Added API: Quad transform (for PolygonTest)
+- `CreateGameQuad() -> uint32_t`
+  - Creates a `PolygonTest` instance and returns its handle. Returns `0` on failure.
+- `DestroyGameQuad(uint32_t handle)`
+  - Destroys the `PolygonTest` instance for the handle.
+- `SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)`
+  - Updates transform in NDC space for the specified quad instance.
+  - `width`/`height` values are clamped to a minimum of `0.01f` on native side.

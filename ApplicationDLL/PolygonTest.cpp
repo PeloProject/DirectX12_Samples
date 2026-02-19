@@ -2,6 +2,7 @@
 #include "PolygonTest.h"
 #include "DirectXDevice.h"
 #include <array>
+#include <algorithm>
 #include <filesystem>
 
 namespace
@@ -23,11 +24,17 @@ std::filesystem::path GetModuleDirectory()
 std::filesystem::path ResolveShaderPath(const wchar_t* shaderFileName)
 {
 	const std::filesystem::path moduleDir = GetModuleDirectory();
+	const std::filesystem::path currentDir = std::filesystem::current_path();
 	const std::array<std::filesystem::path, 4> candidates = {
 		moduleDir / L".." / L".." / L".." / L".." / L"ApplicationDLL" / L"Shader" / shaderFileName,
 		moduleDir / L"ApplicationDLL" / L"Shader" / shaderFileName,
 		moduleDir / L"Shader" / shaderFileName,
 		std::filesystem::path(L"Shader") / shaderFileName
+	};
+	const std::array<std::filesystem::path, 3> extraCandidates = {
+		moduleDir / L".." / L"ApplicationDLL" / L"Shader" / shaderFileName,
+		currentDir / L"ApplicationDLL" / L"Shader" / shaderFileName,
+		currentDir / L"Shader" / shaderFileName
 	};
 
 	for (const auto& path : candidates)
@@ -39,7 +46,16 @@ std::filesystem::path ResolveShaderPath(const wchar_t* shaderFileName)
 		}
 	}
 
-	return candidates.back();
+	for (const auto& path : extraCandidates)
+	{
+		std::error_code ec;
+		if (std::filesystem::exists(path, ec))
+		{
+			return std::filesystem::weakly_canonical(path, ec);
+		}
+	}
+
+	return extraCandidates.back();
 }
 }
 
@@ -50,10 +66,7 @@ std::filesystem::path ResolveShaderPath(const wchar_t* shaderFileName)
 //=========================================================================================
 PolygonTest::PolygonTest()
 {
-	m_Vertices[0] = { { -0.4f, -0.7f, 0.0f }, { 0.0f, 1.0f } };
-	m_Vertices[1] = { { -0.4f,  0.7f, 0.0f }, { 0.0f, 0.0f } };
-	m_Vertices[2] = { {  0.4f, -0.7f, 0.0f }, { 1.0f, 1.0f } };
-	m_Vertices[3] = { {  0.4f,  0.7f, 0.0f }, { 1.0f, 0.0f } };
+	ApplyQuadTransform();
 
 	m_TextureData.resize(256 * 256);
 	for (auto& tex : m_TextureData)
@@ -67,6 +80,46 @@ PolygonTest::PolygonTest()
 	if (CreateGpuResources() != S_OK)
 	{ 
 		throw std::runtime_error("CreateGpuResources is failed.");
+	}
+}
+
+void PolygonTest::SetTransform(float centerX, float centerY, float width, float height)
+{
+	m_quadTransform.centerX = centerX;
+	m_quadTransform.centerY = centerY;
+	m_quadTransform.width = (std::max)(width, 0.01f);
+	m_quadTransform.height = (std::max)(height, 0.01f);
+	m_isVertexDirty = true;
+}
+
+void PolygonTest::ApplyQuadTransform()
+{
+	const float halfWidth = m_quadTransform.width * 0.5f;
+	const float halfHeight = m_quadTransform.height * 0.5f;
+	const float left = m_quadTransform.centerX - halfWidth;
+	const float right = m_quadTransform.centerX + halfWidth;
+	const float bottom = m_quadTransform.centerY - halfHeight;
+	const float top = m_quadTransform.centerY + halfHeight;
+
+	m_Vertices[0] = { { left, bottom, 0.0f }, { 0.0f, 1.0f } };
+	m_Vertices[1] = { { left, top, 0.0f }, { 0.0f, 0.0f } };
+	m_Vertices[2] = { { right, bottom, 0.0f }, { 1.0f, 1.0f } };
+	m_Vertices[3] = { { right, top, 0.0f }, { 1.0f, 0.0f } };
+}
+
+void PolygonTest::UploadVertexBufferData()
+{
+	if (m_pVertexBuffer == nullptr)
+	{
+		return;
+	}
+
+	Vertex* vertexMap = nullptr;
+	if (SUCCEEDED(m_pVertexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&vertexMap))))
+	{
+		memcpy(vertexMap, m_Vertices, sizeof(m_Vertices));
+		D3D12_RANGE writtenRange = { 0, sizeof(m_Vertices) };
+		m_pVertexBuffer->Unmap(0, &writtenRange);
 	}
 }
 
@@ -143,6 +196,7 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 		IID_PPV_ARGS(&m_pVertexBuffer)
 	);
 	if (!SUCCEEDED(hr)) {
+		LOG_DEBUG("CreateVertexBuffer: CreateCommittedResource failed. hr=0x%08X", static_cast<unsigned int>(hr));
 		return;
 	}
 
@@ -153,6 +207,10 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 		memcpy(vertexMap, m_Vertices, sizeof(m_Vertices));
 		D3D12_RANGE writtenRange = { 0, sizeof(m_Vertices) }; // 書き込み範囲
 		m_pVertexBuffer->Unmap(0, &writtenRange);
+	}
+	else
+	{
+		LOG_DEBUG("CreateVertexBuffer: Map failed. hr=0x%08X", static_cast<unsigned int>(hr));
 	}
 
 	// 頂点バッファビューの設定
@@ -178,7 +236,7 @@ void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, cons
 	);
 
 	if (!SUCCEEDED(hr)) {
-		LOG_DEBUG("Index Buffer Create Error");
+		LOG_DEBUG("CreateIndexBuffer: CreateCommittedResource failed. hr=0x%08X", static_cast<unsigned int>(hr));
 		return;
 	}
 
@@ -195,8 +253,9 @@ void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, cons
 
 	// インデックスデータの転送
 	unsigned short* indexMap = nullptr;
-	m_pIndexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&indexMap));
+	hr = m_pIndexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&indexMap));
 	if (!SUCCEEDED(hr)) {
+		LOG_DEBUG("CreateIndexBuffer: Map failed. hr=0x%08X", static_cast<unsigned int>(hr));
 		return;
 	}
 
@@ -234,6 +293,10 @@ HRESULT PolygonTest::CreateGpuResources()
 
 	CreateVertexBuffer(heapProps, resourceDesc);
 	CreateIndexBuffer(heapProps, resourceDesc);
+	if (m_pVertexBuffer == nullptr || m_pIndexBuffer == nullptr)
+	{
+		return E_FAIL;
+	}
 
 	// シェーダーのコンパイル
 	HRESULT hr = CompileShaders();
@@ -272,10 +335,18 @@ HRESULT PolygonTest::CreateGpuResources()
 		return hr;
 	}
 
-	CreateTextureBuffer();
+	hr = CreateTextureBuffer();
+	if (FAILED(hr))
+	{
+		return hr;
+	}
 
 	// グラフィックスパイプラインステートの設定
-	CreateGraphicsPipelineState();
+	hr = CreateGraphicsPipelineState();
+	if (FAILED(hr))
+	{
+		return hr;
+	}
 
 	return hr;
 }
@@ -284,7 +355,7 @@ HRESULT PolygonTest::CreateGpuResources()
 /// <summary>
 /// グラフィックスパイプラインステートを作成します。
 /// </summary>
-void PolygonTest::CreateGraphicsPipelineState()
+HRESULT PolygonTest::CreateGraphicsPipelineState()
 {
 	D3D12_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 		{ // 座標乗法
@@ -318,10 +389,17 @@ void PolygonTest::CreateGraphicsPipelineState()
 	gpipelineDesc.PS.BytecodeLength = m_pPixelShaderBlob->GetBufferSize();
 	gpipelineDesc.PS.pShaderBytecode = m_pPixelShaderBlob->GetBufferPointer();
 	gpipelineDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-	gpipelineDesc.RasterizerState.MultisampleEnable = false;
-	gpipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;	// 背面カリングしない
 	gpipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	gpipelineDesc.RasterizerState.DepthClipEnable = true;			// 深度クリップを有効にする
+	gpipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	gpipelineDesc.RasterizerState.FrontCounterClockwise = FALSE;
+	gpipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+	gpipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+	gpipelineDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	gpipelineDesc.RasterizerState.DepthClipEnable = TRUE;
+	gpipelineDesc.RasterizerState.MultisampleEnable = false;
+	gpipelineDesc.RasterizerState.AntialiasedLineEnable = FALSE;
+	gpipelineDesc.RasterizerState.ForcedSampleCount = 0;
+	gpipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
 
 	// ブレンドステートの設定
@@ -331,8 +409,27 @@ void PolygonTest::CreateGraphicsPipelineState()
 	D3D12_RENDER_TARGET_BLEND_DESC renderTargetBlendDesc = {};
 	renderTargetBlendDesc.BlendEnable = false;
 	renderTargetBlendDesc.LogicOpEnable = false;
+	renderTargetBlendDesc.SrcBlend = D3D12_BLEND_ONE;
+	renderTargetBlendDesc.DestBlend = D3D12_BLEND_ZERO;
+	renderTargetBlendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+	renderTargetBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+	renderTargetBlendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+	renderTargetBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	renderTargetBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP;
 	renderTargetBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 	gpipelineDesc.BlendState.RenderTarget[0] = renderTargetBlendDesc;
+
+	gpipelineDesc.DepthStencilState.DepthEnable = FALSE;
+	gpipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	gpipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	gpipelineDesc.DepthStencilState.StencilEnable = FALSE;
+	gpipelineDesc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	gpipelineDesc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+	gpipelineDesc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+	gpipelineDesc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+	gpipelineDesc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+	gpipelineDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	gpipelineDesc.DepthStencilState.BackFace = gpipelineDesc.DepthStencilState.FrontFace;
 
 	// 入力レイアウトの設定
 	gpipelineDesc.InputLayout.pInputElementDescs = inputLayoutDesc;		// 入力レイアウトの先頭アドレス
@@ -350,8 +447,11 @@ void PolygonTest::CreateGraphicsPipelineState()
 
 	HRESULT hr = DirectXDevice::GetDevice()->CreateGraphicsPipelineState(&gpipelineDesc, IID_PPV_ARGS(&m_pPipelineState));
 	if (!SUCCEEDED(hr)) {
-		return;
+		LOG_DEBUG("CreateGraphicsPipelineState failed. hr=0x%08X", static_cast<unsigned int>(hr));
+		return hr;
 	}
+
+	return S_OK;
 }
 
 /// <summary>
@@ -433,6 +533,13 @@ void PolygonTest::ApplyTransformations()
 
 void PolygonTest::Render()
 {
+	if (m_isVertexDirty)
+	{
+		ApplyQuadTransform();
+		UploadVertexBufferData();
+		m_isVertexDirty = false;
+	}
+
 	ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
 	if (commandList == nullptr)
 	{
