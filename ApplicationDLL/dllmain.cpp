@@ -45,6 +45,7 @@ static UINT g_imguiSrvAllocated = 0;
 using PieTickCallback = void(__cdecl*)(float);
 static PieTickCallback g_pieTickCallback = nullptr;
 static bool g_isPieRunning = false;
+static bool g_isStandaloneMode = false;
 static bool g_pendingStartPie = false;
 static bool g_pendingStopPie = false;
 static HMODULE g_pieGameModule = nullptr;
@@ -116,8 +117,10 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 static bool InitializeImGui();
 static void ShutdownImGui();
 static void RenderEditorDockingUi();
+static void RenderStandaloneViewportUi();
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
+extern "C" __declspec(dllexport) void SetStandaloneMode(BOOL enabled);
 extern "C" __declspec(dllexport) uint32_t CreateGameQuad();
 extern "C" __declspec(dllexport) void DestroyGameQuad(uint32_t handle);
 extern "C" __declspec(dllexport) void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
@@ -1309,6 +1312,36 @@ static void RenderEditorDockingUi()
     ImGui::End();
 }
 
+static void RenderStandaloneViewportUi()
+{
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->Pos);
+    ImGui::SetNextWindowSize(viewport->Size);
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNav;
+    ImGui::Begin("StandaloneViewport", nullptr, flags);
+    ImGui::PopStyleVar();
+
+    if (g_sceneRenderTarget != nullptr)
+    {
+        ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
+        ImGui::Image(sceneTextureId, ImGui::GetContentRegionAvail());
+    }
+    else
+    {
+        ImGui::Text("Scene render target is not ready.");
+    }
+
+    ImGui::End();
+}
+
 /// <summary>
 /// ウィンドウの作成
 /// </summary>
@@ -1337,7 +1370,7 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
 
     g_hwnd = CreateWindow(
         className,
-        _T("Native Window"),
+        g_isStandaloneMode ? _T("PieGameManaged Player") : _T("Native Window"),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
         windowRect.right - windowRect.left,
@@ -1412,6 +1445,15 @@ extern "C" __declspec(dllexport) void StopPie()
 {
     g_pendingStartPie = false;
     g_pendingStopPie = true;
+}
+
+extern "C" __declspec(dllexport) void SetStandaloneMode(BOOL enabled)
+{
+    g_isStandaloneMode = (enabled == TRUE);
+    if (g_hwnd != NULL)
+    {
+        SetWindowText(g_hwnd, g_isStandaloneMode ? _T("PieGameManaged Player") : _T("Native Window"));
+    }
 }
 
 static void StartPieImmediate()
@@ -1588,7 +1630,14 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
-        RenderEditorDockingUi();
+        if (g_isStandaloneMode)
+        {
+            RenderStandaloneViewportUi();
+        }
+        else
+        {
+            RenderEditorDockingUi();
+        }
         ImGui::Render();
 
         ID3D12DescriptorHeap* descriptorHeaps[] = { g_imguiSrvHeap.Get() };
