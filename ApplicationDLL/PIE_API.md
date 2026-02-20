@@ -50,5 +50,5 @@
 - The module is loaded from a temp copy (`%TEMP%/DirectX12Samples/PieHotReload`) to avoid file-locking the original output.
 - Auto NativeAOT publish:
   - While PIE is running, source changes under `PieGameManaged` (`.cs`, `.csproj`, `.props`, `.targets`, `.json`) are monitored.
-  - On change, `dotnet publish PieGameManaged.csproj -c Debug -r win-x64` runs automatically.
-  - After publish completes, the existing hot reload path loads the updated native module automatically.
+  - On change, `dotnet publish PieGameManaged.csproj -c Debug -r win-x64` runs automatically in an isolated temp workspace to avoid file-lock conflicts with Visual Studio.
+  - After publish completes, the hot reload path loads the updated native module from that workspace.

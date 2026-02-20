@@ -57,12 +57,18 @@ static PieGameStopFn g_pieGameStop = nullptr;
 static std::string g_pieGameStatus = "PIE module not loaded";
 static std::string g_pieGameModulePath = "";
 static std::string g_pieGameSourceModulePath = "";
+static std::string g_pieGameLastLoadError = "";
 static std::filesystem::file_time_type g_pieGameSourceWriteTime = {};
 static bool g_pieGameSourceWriteTimeValid = false;
 static std::filesystem::path g_pieManagedCsprojPath = {};
+static std::filesystem::path g_pieManagedHotReloadPublishedDllPath = {};
 static std::filesystem::file_time_type g_pieManagedLastPublishedSourceWriteTime = {};
 static bool g_pieManagedLastPublishedSourceWriteTimeValid = false;
+static std::filesystem::file_time_type g_pieManagedPendingPublishSourceWriteTime = {};
+static bool g_pieManagedPendingPublishSourceWriteTimeValid = false;
 static HANDLE g_pieManagedPublishProcess = nullptr;
+static std::string g_pieManagedLastPublishLogPath = "";
+static uint64_t g_pieManagedAutoPublishGeneration = 0;
 static uint64_t g_pieHotReloadGeneration = 0;
 static float g_pieHotReloadCheckTimer = 0.0f;
 static float g_pieManagedPublishCheckTimer = 0.0f;
@@ -94,12 +100,16 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath);
 static void AddPieGameCandidatesFromRoot(std::vector<std::filesystem::path>& candidates, const std::filesystem::path& root);
 static void UnloadPieGameModule();
 static bool TryHotReloadPieGameModule();
+static bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus);
+static bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath, const char* successStatus, const char* failureStatus);
 static bool ResolvePieManagedCsprojPath();
 static bool TryGetPieManagedSourceWriteTime(std::filesystem::file_time_type& outWriteTime);
+static bool PreparePieManagedAutoPublishWorkspace(std::filesystem::path& outWorkspaceDir, std::string& outErrorMessage);
 static bool TryStartPieManagedAutoPublish();
 static void TickPieManagedAutoPublish(float deltaTime);
 static void StartPieImmediate();
 static void StopPieImmediate();
+static std::vector<std::filesystem::path> BuildPieManagedReloadCandidates();
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -459,18 +469,21 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     std::error_code ec;
     if (!std::filesystem::exists(modulePath, ec))
     {
+        g_pieGameLastLoadError = "Module does not exist: " + modulePath.u8string();
         return false;
     }
 
     const std::filesystem::path hotReloadDir = std::filesystem::temp_directory_path(ec) / L"DirectX12Samples" / L"PieHotReload";
     if (ec)
     {
+        g_pieGameLastLoadError = "temp_directory_path failed";
         return false;
     }
 
     std::filesystem::create_directories(hotReloadDir, ec);
     if (ec)
     {
+        g_pieGameLastLoadError = "create_directories failed: " + hotReloadDir.u8string();
         return false;
     }
 
@@ -479,6 +492,7 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     std::filesystem::copy_file(modulePath, hotReloadDllPath, std::filesystem::copy_options::overwrite_existing, ec);
     if (ec)
     {
+        g_pieGameLastLoadError = "copy_file failed: " + modulePath.u8string() + " -> " + hotReloadDllPath.u8string();
         return false;
     }
 
@@ -490,6 +504,7 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     HMODULE module = LoadLibraryW(hotReloadDllPath.c_str());
     if (module == nullptr)
     {
+        g_pieGameLastLoadError = "LoadLibrary failed. path=" + hotReloadDllPath.u8string() + " gle=" + std::to_string(GetLastError());
         return false;
     }
 
@@ -498,6 +513,11 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     PieGameStopFn stopFn = reinterpret_cast<PieGameStopFn>(GetProcAddress(module, "GameStop"));
     if (startFn == nullptr || tickFn == nullptr || stopFn == nullptr)
     {
+        std::string missing = "Missing export:";
+        if (startFn == nullptr) missing += " GameStart";
+        if (tickFn == nullptr) missing += " GameTick";
+        if (stopFn == nullptr) missing += " GameStop";
+        g_pieGameLastLoadError = missing + " from " + hotReloadDllPath.u8string();
         FreeLibrary(module);
         return false;
     }
@@ -510,6 +530,7 @@ static bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     g_pieGameSourceModulePath = modulePath.u8string();
     g_pieGameSourceWriteTime = std::filesystem::last_write_time(modulePath, ec);
     g_pieGameSourceWriteTimeValid = !ec;
+    g_pieGameLastLoadError.clear();
     g_pieGameStatus = "C# game module loaded: " + modulePath.u8string();
     return true;
 }
@@ -664,6 +685,91 @@ static bool TryGetPieManagedSourceWriteTime(std::filesystem::file_time_type& out
     return true;
 }
 
+static bool PreparePieManagedAutoPublishWorkspace(std::filesystem::path& outWorkspaceDir, std::string& outErrorMessage)
+{
+    if (!ResolvePieManagedCsprojPath())
+    {
+        outErrorMessage = "csproj path not found";
+        return false;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path tempRoot = std::filesystem::temp_directory_path(ec);
+    if (ec)
+    {
+        outErrorMessage = "temp_directory_path failed";
+        return false;
+    }
+
+    const std::filesystem::path workspaceRoot = tempRoot / L"DirectX12Samples" / L"PieAutoPublishWorkspace";
+    std::filesystem::create_directories(workspaceRoot, ec);
+    if (ec)
+    {
+        outErrorMessage = "create workspace root failed";
+        return false;
+    }
+
+    const std::filesystem::path sourceDir = g_pieManagedCsprojPath.parent_path();
+    outWorkspaceDir = workspaceRoot / (L"ws_" + std::to_wstring(++g_pieManagedAutoPublishGeneration));
+    std::filesystem::create_directories(outWorkspaceDir, ec);
+    if (ec)
+    {
+        outErrorMessage = "create workspace dir failed";
+        return false;
+    }
+
+    std::filesystem::recursive_directory_iterator it(sourceDir, ec);
+    std::filesystem::recursive_directory_iterator end;
+    for (; it != end; it.increment(ec))
+    {
+        if (ec)
+        {
+            outErrorMessage = "workspace copy iteration failed";
+            return false;
+        }
+
+        const auto& entry = *it;
+        const auto filename = entry.path().filename().wstring();
+        if (entry.is_directory())
+        {
+            if (filename == L"bin" || filename == L"obj" || filename == L".vs")
+            {
+                it.disable_recursion_pending();
+            }
+            continue;
+        }
+
+        if (!entry.is_regular_file())
+        {
+            continue;
+        }
+
+        std::filesystem::path relativePath = std::filesystem::relative(entry.path(), sourceDir, ec);
+        if (ec)
+        {
+            outErrorMessage = "relative path resolve failed";
+            return false;
+        }
+
+        const std::filesystem::path destination = outWorkspaceDir / relativePath;
+        std::filesystem::create_directories(destination.parent_path(), ec);
+        if (ec)
+        {
+            outErrorMessage = "create destination dir failed";
+            return false;
+        }
+
+        std::filesystem::copy_file(entry.path(), destination, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec)
+        {
+            outErrorMessage = "copy file failed: " + entry.path().u8string();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static bool TryStartPieManagedAutoPublish()
 {
     if (g_pieManagedPublishProcess != nullptr)
@@ -675,8 +781,36 @@ static bool TryStartPieManagedAutoPublish()
         return false;
     }
 
-    const std::filesystem::path projectDir = g_pieManagedCsprojPath.parent_path();
-    std::wstring commandLine = L"cmd.exe /C dotnet publish PieGameManaged.csproj -c Debug -r win-x64";
+    std::filesystem::path workspaceDir = {};
+    std::string workspaceError = {};
+    if (!PreparePieManagedAutoPublishWorkspace(workspaceDir, workspaceError))
+    {
+        g_pieGameStatus = "PIE auto-publish workspace failed: " + workspaceError;
+        return false;
+    }
+
+    const std::filesystem::path projectDir = workspaceDir;
+    g_pieManagedHotReloadPublishedDllPath = projectDir / L"out" / L"native" / L"PieGameManaged.dll";
+    std::error_code ec;
+    const std::filesystem::path logDir = std::filesystem::temp_directory_path(ec) / L"DirectX12Samples" / L"PieHotReload";
+    if (ec)
+    {
+        g_pieGameStatus = "PIE auto-publish failed to resolve log directory";
+        return false;
+    }
+    std::filesystem::create_directories(logDir, ec);
+    if (ec)
+    {
+        g_pieGameStatus = "PIE auto-publish failed to create log directory";
+        return false;
+    }
+
+    const std::filesystem::path logPath = logDir / L"pie_autopublish.log";
+    g_pieManagedLastPublishLogPath = logPath.u8string();
+    std::wstring commandLine =
+        L"cmd.exe /C dotnet publish PieGameManaged.csproj -c Debug -r win-x64 --nologo /t:Rebuild -o out\\native > \"" +
+        logPath.wstring() +
+        L"\" 2>&1";
 
     STARTUPINFOW si = {};
     si.cb = sizeof(si);
@@ -722,7 +856,37 @@ static void TickPieManagedAutoPublish(float deltaTime)
             GetExitCodeProcess(g_pieManagedPublishProcess, &exitCode);
             CloseHandle(g_pieManagedPublishProcess);
             g_pieManagedPublishProcess = nullptr;
-            g_pieGameStatus = (exitCode == 0) ? "PIE auto-publish completed" : "PIE auto-publish failed";
+            if (exitCode == 0)
+            {
+                if (g_pieManagedPendingPublishSourceWriteTimeValid)
+                {
+                    g_pieManagedLastPublishedSourceWriteTime = g_pieManagedPendingPublishSourceWriteTime;
+                    g_pieManagedLastPublishedSourceWriteTimeValid = true;
+                }
+                bool reloaded = false;
+                const auto candidates = BuildPieManagedReloadCandidates();
+                for (const auto& candidate : candidates)
+                {
+                    if (ReloadPieGameModuleFromPath(candidate, "PIE auto-publish completed + reloaded", "PIE auto-publish completed, but reload failed"))
+                    {
+                        reloaded = true;
+                        break;
+                    }
+                }
+                if (!reloaded)
+                {
+                    g_pieGameStatus = "PIE auto-publish completed, but no newer reload candidate was found";
+                }
+            }
+            else
+            {
+                g_pieGameStatus = "PIE auto-publish failed (exit code=" + std::to_string(exitCode) + ")";
+                if (!g_pieManagedLastPublishLogPath.empty())
+                {
+                    g_pieGameStatus += " log=" + g_pieManagedLastPublishLogPath;
+                }
+            }
+            g_pieManagedPendingPublishSourceWriteTimeValid = false;
         }
         return;
     }
@@ -754,9 +918,88 @@ static void TickPieManagedAutoPublish(float deltaTime)
 
     if (TryStartPieManagedAutoPublish())
     {
-        g_pieManagedLastPublishedSourceWriteTime = currentSourceWriteTime;
-        g_pieManagedLastPublishedSourceWriteTimeValid = true;
+        g_pieManagedPendingPublishSourceWriteTime = currentSourceWriteTime;
+        g_pieManagedPendingPublishSourceWriteTimeValid = true;
     }
+}
+
+static std::vector<std::filesystem::path> BuildPieManagedReloadCandidates()
+{
+    std::vector<std::filesystem::path> candidates;
+    if (!g_pieManagedHotReloadPublishedDllPath.empty())
+    {
+        candidates.push_back(g_pieManagedHotReloadPublishedDllPath);
+    }
+
+    if (ResolvePieManagedCsprojPath())
+    {
+        const auto projectDir = g_pieManagedCsprojPath.parent_path();
+        candidates.push_back(projectDir / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll");
+        candidates.push_back(projectDir / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll");
+        candidates.push_back(projectDir / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll");
+        candidates.push_back(projectDir / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"publish" / L"PieGameManaged.dll");
+    }
+
+    std::set<std::wstring> seen;
+    std::vector<std::filesystem::path> uniqueCandidates;
+    uniqueCandidates.reserve(candidates.size());
+    for (const auto& candidate : candidates)
+    {
+        std::error_code ecExists;
+        if (!std::filesystem::exists(candidate, ecExists))
+        {
+            continue;
+        }
+        if (ecExists)
+        {
+            continue;
+        }
+
+        if (g_pieGameSourceWriteTimeValid)
+        {
+            std::error_code ecTime;
+            const auto candidateTime = std::filesystem::last_write_time(candidate, ecTime);
+            if (ecTime)
+            {
+                continue;
+            }
+            // Only accept candidates that are newer than the currently loaded source module.
+            if (candidateTime <= g_pieGameSourceWriteTime)
+            {
+                continue;
+            }
+        }
+
+        const auto key = candidate.wstring();
+        if (seen.insert(key).second)
+        {
+            uniqueCandidates.push_back(candidate);
+        }
+    }
+
+    std::sort(uniqueCandidates.begin(), uniqueCandidates.end(),
+        [](const std::filesystem::path& a, const std::filesystem::path& b)
+        {
+            std::error_code ecA;
+            std::error_code ecB;
+            const auto timeA = std::filesystem::last_write_time(a, ecA);
+            const auto timeB = std::filesystem::last_write_time(b, ecB);
+            if (ecA && ecB)
+            {
+                return a.wstring() < b.wstring();
+            }
+            if (ecA)
+            {
+                return false;
+            }
+            if (ecB)
+            {
+                return true;
+            }
+            return timeA > timeB;
+        });
+
+    return uniqueCandidates;
 }
 
 static bool EnsurePieGameModuleLoaded()
@@ -856,6 +1099,7 @@ static void UnloadPieGameModule()
     g_pieGameModulePath.clear();
     g_pieGameSourceModulePath.clear();
     g_pieGameSourceWriteTimeValid = false;
+    g_pieGameLastLoadError.clear();
 }
 
 static bool TryHotReloadPieGameModule()
@@ -877,6 +1121,11 @@ static bool TryHotReloadPieGameModule()
         return false;
     }
 
+    return ReloadPieGameModuleNow("PIE hot reloaded (C#)", "PIE hot reload failed: unable to load updated C# module");
+}
+
+static bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus)
+{
     const bool wasRunning = g_isPieRunning;
     if (wasRunning && g_pieGameStop != nullptr)
     {
@@ -888,7 +1137,7 @@ static bool TryHotReloadPieGameModule()
     UnloadPieGameModule();
     if (!EnsurePieGameModuleLoaded())
     {
-        g_pieGameStatus = "PIE hot reload failed: unable to load updated C# module";
+        g_pieGameStatus = failureStatus;
         return false;
     }
 
@@ -898,7 +1147,48 @@ static bool TryHotReloadPieGameModule()
         g_isPieRunning = true;
     }
 
-    g_pieGameStatus = "PIE hot reloaded (C#)";
+    g_pieGameStatus = successStatus;
+    return true;
+}
+
+static bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath, const char* successStatus, const char* failureStatus)
+{
+    const bool wasRunning = g_isPieRunning;
+    HMODULE oldModule = g_pieGameModule;
+    PieGameStopFn oldStop = g_pieGameStop;
+
+    if (!TryLoadPieGameModuleAtPath(modulePath))
+    {
+        g_pieGameStatus = std::string(failureStatus) + " path=" + modulePath.u8string();
+        if (!g_pieGameLastLoadError.empty())
+        {
+            g_pieGameStatus += " detail=" + g_pieGameLastLoadError;
+        }
+        return false;
+    }
+
+    if (wasRunning && oldStop != nullptr)
+    {
+        oldStop();
+    }
+    DestroyAllGameQuads();
+
+    if (oldModule != nullptr)
+    {
+        FreeLibrary(oldModule);
+    }
+
+    if (wasRunning && g_pieGameStart != nullptr)
+    {
+        g_pieGameStart();
+        g_isPieRunning = true;
+    }
+    else
+    {
+        g_isPieRunning = wasRunning;
+    }
+
+    g_pieGameStatus = successStatus;
     return true;
 }
 
@@ -985,8 +1275,20 @@ static void RenderEditorDockingUi()
         }
     }
     ImGui::TextWrapped("%s", g_pieGameStatus.c_str());
-    ImGui::TextWrapped("Module source: %s", g_pieGameSourceModulePath.empty() ? "(none)" : g_pieGameSourceModulePath.c_str());
+    const std::string lastLoadErrorText = g_pieGameLastLoadError.empty() ? "(none)" : g_pieGameLastLoadError;
+    const std::string moduleSourceText = g_pieGameSourceModulePath.empty()
+        ? (g_pieManagedHotReloadPublishedDllPath.empty() ? "(none)" : g_pieManagedHotReloadPublishedDllPath.u8string())
+        : g_pieGameSourceModulePath;
+    ImGui::Text("Last load error (selectable):");
+    static char lastLoadErrorBuffer[2048] = {};
+    strncpy_s(lastLoadErrorBuffer, sizeof(lastLoadErrorBuffer), lastLoadErrorText.c_str(), _TRUNCATE);
+    ImGui::InputTextMultiline("##LastLoadErrorSelectable", lastLoadErrorBuffer, sizeof(lastLoadErrorBuffer), ImVec2(600.0f, 48.0f), ImGuiInputTextFlags_ReadOnly);
+    ImGui::Text("Module source (selectable):");
+    static char moduleSourceBuffer[2048] = {};
+    strncpy_s(moduleSourceBuffer, sizeof(moduleSourceBuffer), moduleSourceText.c_str(), _TRUNCATE);
+    ImGui::InputTextMultiline("##ModuleSourceSelectable", moduleSourceBuffer, sizeof(moduleSourceBuffer), ImVec2(600.0f, 48.0f), ImGuiInputTextFlags_ReadOnly);
     ImGui::TextWrapped("Module loaded: %s", g_pieGameModulePath.empty() ? "(none)" : g_pieGameModulePath.c_str());
+    ImGui::TextWrapped("Publish log: %s", g_pieManagedLastPublishLogPath.empty() ? "(none)" : g_pieManagedLastPublishLogPath.c_str());
     ImGui::Text("Active quads: %d", static_cast<int>(g_gameQuads.size()));
     ImGui::End();
 
@@ -1125,6 +1427,7 @@ static void StartPieImmediate()
     g_isPieRunning = true;
     g_pieHotReloadCheckTimer = 0.0f;
     g_pieManagedPublishCheckTimer = 0.0f;
+    g_pieManagedPendingPublishSourceWriteTimeValid = false;
     std::filesystem::file_time_type initialSourceWriteTime = {};
     if (TryGetPieManagedSourceWriteTime(initialSourceWriteTime))
     {
@@ -1152,6 +1455,7 @@ static void StopPieImmediate()
     g_isPieRunning = false;
     g_pieHotReloadCheckTimer = 0.0f;
     g_pieManagedPublishCheckTimer = 0.0f;
+    g_pieManagedPendingPublishSourceWriteTimeValid = false;
     if (g_pieManagedPublishProcess != nullptr)
     {
         CloseHandle(g_pieManagedPublishProcess);
