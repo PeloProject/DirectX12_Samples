@@ -1,10 +1,8 @@
-﻿// dllmain.cpp : DLL アプリケーションのエントリ ポイントを定義します。
+// dllmain.cpp : DLL アプリケーションのエントリ ポイントを定義します。
 #include "pch.h"
 #include "Source/DirectXDevice.h"
+#include "Source/EditorUi.h"
 #include "SceneManager.h"
-#include "ThirdParty/imgui/imgui.h"
-#include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
-#include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -38,11 +36,6 @@
 static HWND g_hwnd = NULL;
 static DirectXDevice g_DxDevice;
 static bool g_imguiInitialized = false;
-static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_imguiSrvHeap;
-static constexpr UINT kFrameCount = 2;
-static UINT g_imguiSrvDescriptorSize = 0;
-static UINT g_imguiSrvCapacity = 64;
-static UINT g_imguiSrvAllocated = 0;
 using PieTickCallback = void(__cdecl*)(float);
 static PieTickCallback g_pieTickCallback = nullptr;
 static bool g_isPieRunning = false;
@@ -77,32 +70,7 @@ static float g_pieManagedPublishCheckTimer = 0.0f;
 static float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 static std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
 static uint32_t g_nextGameQuadHandle = 1;
-static Microsoft::WRL::ComPtr<ID3D12Resource> g_sceneRenderTarget;
-static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_sceneRtvHeap;
-static D3D12_CPU_DESCRIPTOR_HANDLE g_sceneRtvCpuHandle = {};
-static D3D12_CPU_DESCRIPTOR_HANDLE g_sceneSrvCpuHandle = {};
-static D3D12_GPU_DESCRIPTOR_HANDLE g_sceneSrvGpuHandle = {};
-static bool g_sceneSrvAllocated = false;
-static UINT g_sceneRenderWidth = 1;
-static UINT g_sceneRenderHeight = 1;
-static UINT g_sceneRequestedRenderWidth = 1;
-static UINT g_sceneRequestedRenderHeight = 1;
 static constexpr float kDefaultSceneClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-static float g_sceneViewZoom = 1.0f;
-static ImVec2 g_sceneViewPan = ImVec2(0.0f, 0.0f);
-static float g_sceneViewZoom3D = 1.0f;
-static ImVec2 g_sceneViewPan3D = ImVec2(0.0f, 0.0f);
-static float g_sceneViewOrbitYawDeg = 45.0f;
-static float g_sceneViewOrbitPitchDeg = 35.0f;
-static bool g_sceneViewUse3DGrid = false;
-static constexpr float kSceneGridBaseSpacing = 32.0f;
-
-static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle);
-static void ImGuiSrvDescriptorFree(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuDescHandle);
-static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height);
-static void DestroySceneRenderTexture();
-static void BeginSceneRenderToTexture();
-static void EndSceneRenderToTexture();
 static void ConfigureD3D12DebugFilters();
 static void RenderGameQuads();
 static void DestroyAllGameQuads();
@@ -122,14 +90,6 @@ static void TickPieManagedAutoPublish(float deltaTime);
 static void StartPieImmediate();
 static void StopPieImmediate();
 static std::vector<std::filesystem::path> BuildPieManagedReloadCandidates();
-static void DrawSceneViewGrid(ImDrawList* drawList, const ImVec2& min, const ImVec2& max);
-
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-static bool InitializeImGui();
-static void ShutdownImGui();
-static void RenderEditorDockingUi();
-static void RenderStandaloneViewportUi();
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
 extern "C" __declspec(dllexport) void SetStandaloneMode(BOOL enabled);
@@ -150,12 +110,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
             {
                 Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
-                g_sceneRequestedRenderWidth = width;
-                g_sceneRequestedRenderHeight = height;
+                EditorUi::RequestSceneRenderSize(width, height);
                 g_DxDevice.Resize(width, height);
                 if (g_imguiInitialized)
                 {
-                    CreateOrResizeSceneRenderTexture(width, height);
+                    EditorUi::EnsureSceneRenderSize();
                 }
             }
         }
@@ -165,7 +124,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
-        ShutdownImGui();
+        EditorUi::Shutdown();
+        g_imguiInitialized = false;
         g_DxDevice.Shutdown();
         g_hwnd = NULL;
         return 0;
@@ -188,7 +148,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     default:
-        if (g_imguiInitialized && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
+        if (g_imguiInitialized && EditorUi::HandleWndProc(hwnd, msg, wParam, lParam))
         {
             return 1;
         }
@@ -198,232 +158,38 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 static bool InitializeImGui()
 {
-    D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-    srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    srvHeapDesc.NumDescriptors = g_imguiSrvCapacity;
-    srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-    ID3D12Device* device = DirectXDevice::GetDevice();
-    if (device == nullptr)
-    {
-        return false;
-    }
-
-    if (FAILED(device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&g_imguiSrvHeap))))
-    {
-        return false;
-    }
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-    ImGui::StyleColorsDark();
-    ImGui_ImplWin32_Init(g_hwnd);
-    g_imguiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    g_imguiSrvAllocated = 0;
-
-    ID3D12CommandQueue* commandQueue = g_DxDevice.GetCommandQueue();
-    if (commandQueue == nullptr)
-    {
-        ImGui_ImplWin32_Shutdown();
-        ImGui::DestroyContext();
-        g_imguiSrvHeap.Reset();
-        return false;
-    }
-
-    ImGui_ImplDX12_InitInfo initInfo;
-    initInfo.Device = device;
-    initInfo.CommandQueue = commandQueue;
-    initInfo.NumFramesInFlight = kFrameCount;
-    initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-    initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
-    initInfo.SrvDescriptorHeap = g_imguiSrvHeap.Get();
-    initInfo.SrvDescriptorAllocFn = ImGuiSrvDescriptorAlloc;
-    initInfo.SrvDescriptorFreeFn = ImGuiSrvDescriptorFree;
-
-    if (!ImGui_ImplDX12_Init(&initInfo))
-    {
-        ImGui_ImplWin32_Shutdown();
-        ImGui::DestroyContext();
-        g_imguiSrvHeap.Reset();
-        return false;
-    }
-
-    CreateOrResizeSceneRenderTexture(static_cast<UINT>(Application::GetWindowWidth()), static_cast<UINT>(Application::GetWindowHeight()));
-
-    return true;
+    return EditorUi::Initialize(
+        g_hwnd,
+        g_DxDevice.GetCommandQueue(),
+        static_cast<UINT>(Application::GetWindowWidth()),
+        static_cast<UINT>(Application::GetWindowHeight()));
 }
 
 static void ShutdownImGui()
 {
-    if (!g_imguiInitialized)
-    {
-        return;
-    }
-
-    ImGui_ImplDX12_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
-    DestroySceneRenderTexture();
-    g_imguiSrvHeap.Reset();
-    g_imguiSrvAllocated = 0;
+    EditorUi::Shutdown();
     g_imguiInitialized = false;
-}
-
-static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle)
-{
-    IM_ASSERT(g_imguiSrvAllocated < g_imguiSrvCapacity);
-    const UINT descriptorIndex = g_imguiSrvAllocated++;
-    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = g_imguiSrvHeap->GetCPUDescriptorHandleForHeapStart();
-    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = g_imguiSrvHeap->GetGPUDescriptorHandleForHeapStart();
-    cpuHandle.ptr += static_cast<SIZE_T>(descriptorIndex) * g_imguiSrvDescriptorSize;
-    gpuHandle.ptr += static_cast<UINT64>(descriptorIndex) * g_imguiSrvDescriptorSize;
-    *outCpuDescHandle = cpuHandle;
-    *outGpuDescHandle = gpuHandle;
-}
-
-static void ImGuiSrvDescriptorFree(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE)
-{
-    // Minimal allocator: descriptors are reused on next context init.
 }
 
 static bool CreateOrResizeSceneRenderTexture(UINT width, UINT height)
 {
-    if (width == 0 || height == 0)
-    {
-        return false;
-    }
-
-    ID3D12Device* device = DirectXDevice::GetDevice();
-    if (device == nullptr || g_imguiSrvHeap == nullptr)
-    {
-        return false;
-    }
-
-    if (g_sceneRenderTarget != nullptr && g_sceneRenderWidth == width && g_sceneRenderHeight == height)
-    {
-        return true;
-    }
-
-    g_sceneRenderTarget.Reset();
-    g_sceneRtvHeap.Reset();
-
-    if (!g_sceneSrvAllocated)
-    {
-        ImGuiSrvDescriptorAlloc(nullptr, &g_sceneSrvCpuHandle, &g_sceneSrvGpuHandle);
-        g_sceneSrvAllocated = true;
-    }
-
-    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    rtvHeapDesc.NumDescriptors = 1;
-    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    if (FAILED(device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&g_sceneRtvHeap))))
-    {
-        return false;
-    }
-
-    g_sceneRtvCpuHandle = g_sceneRtvHeap->GetCPUDescriptorHandleForHeapStart();
-
-    D3D12_RESOURCE_DESC resourceDesc = {};
-    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    resourceDesc.Width = width;
-    resourceDesc.Height = height;
-    resourceDesc.DepthOrArraySize = 1;
-    resourceDesc.MipLevels = 1;
-    resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    resourceDesc.SampleDesc.Count = 1;
-    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-    D3D12_HEAP_PROPERTIES heapProps = {};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    if (FAILED(device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &resourceDesc,
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-        nullptr,
-        IID_PPV_ARGS(&g_sceneRenderTarget))))
-    {
-        return false;
-    }
-
-    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-    rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    device->CreateRenderTargetView(g_sceneRenderTarget.Get(), &rtvDesc, g_sceneRtvCpuHandle);
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
-    device->CreateShaderResourceView(g_sceneRenderTarget.Get(), &srvDesc, g_sceneSrvCpuHandle);
-
-    g_sceneRenderWidth = width;
-    g_sceneRenderHeight = height;
-    return true;
+    EditorUi::RequestSceneRenderSize(width, height);
+    return EditorUi::EnsureSceneRenderSize();
 }
 
 static void DestroySceneRenderTexture()
 {
-    g_sceneRenderTarget.Reset();
-    g_sceneRtvHeap.Reset();
-    g_sceneRenderWidth = 1;
-    g_sceneRenderHeight = 1;
+    EditorUi::RequestSceneRenderSize(1, 1);
 }
 
 static void BeginSceneRenderToTexture()
 {
-    if (g_sceneRenderTarget == nullptr)
-    {
-        return;
-    }
-
-    ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
-    if (commandList == nullptr)
-    {
-        return;
-    }
-
-    D3D12_RESOURCE_BARRIER barrier = {};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = g_sceneRenderTarget.Get();
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    commandList->ResourceBarrier(1, &barrier);
-
-    commandList->OMSetRenderTargets(1, &g_sceneRtvCpuHandle, TRUE, nullptr);
-    const float* clearColor = g_isPieRunning ? g_gameClearColor : kDefaultSceneClearColor;
-    commandList->ClearRenderTargetView(g_sceneRtvCpuHandle, clearColor, 0, nullptr);
+    EditorUi::BeginSceneRenderToTexture(g_isPieRunning, g_gameClearColor, kDefaultSceneClearColor);
 }
 
 static void EndSceneRenderToTexture()
 {
-    if (g_sceneRenderTarget == nullptr)
-    {
-        return;
-    }
-
-    ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
-    if (commandList == nullptr)
-    {
-        return;
-    }
-
-    D3D12_RESOURCE_BARRIER barrier = {};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = g_sceneRenderTarget.Get();
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    commandList->ResourceBarrier(1, &barrier);
+    EditorUi::EndSceneRenderToTexture();
 }
 
 static void ConfigureD3D12DebugFilters()
@@ -1209,448 +975,6 @@ static bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath,
     return true;
 }
 
-static void RenderEditorDockingUi()
-{
-    ImGuiWindowFlags hostWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->Pos);
-    ImGui::SetNextWindowSize(viewport->Size);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    hostWindowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize;
-    hostWindowFlags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("EditorDockSpaceHost", nullptr, hostWindowFlags);
-    ImGui::PopStyleVar(3);
-
-    ImGuiID dockspaceId = ImGui::GetID("EditorDockSpace");
-    ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-    if (ImGui::BeginMenuBar())
-    {
-        if (ImGui::BeginMenu("File"))
-        {
-            ImGui::MenuItem("New Level");
-            ImGui::MenuItem("Save All");
-            ImGui::Separator();
-            if (ImGui::MenuItem("Exit") && g_hwnd != NULL)
-            {
-                PostMessage(g_hwnd, WM_CLOSE, 0, 0);
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Window"))
-        {
-            ImGui::MenuItem("World Outliner");
-            ImGui::MenuItem("Details");
-            ImGui::MenuItem("Content Browser");
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-    }
-
-    ImGui::End();
-
-    ImGui::Begin("World Outliner");
-    ImGui::Text("DemoActor");
-    ImGui::BulletText("DirectionalLight");
-    ImGui::BulletText("MainCamera");
-    ImGui::BulletText("SM_Cube_01");
-    ImGui::End();
-
-    ImGui::Begin("Details");
-    ImGui::Text("Transform");
-    static float location[3] = { 0.0f, 0.0f, 0.0f };
-    static float rotation[3] = { 0.0f, 0.0f, 0.0f };
-    static float scale[3] = { 1.0f, 1.0f, 1.0f };
-    ImGui::DragFloat3("Location", location, 0.1f);
-    ImGui::DragFloat3("Rotation", rotation, 0.5f);
-    ImGui::DragFloat3("Scale", scale, 0.01f);
-    ImGui::End();
-
-    ImGui::Begin("Content Browser");
-    ImGui::Text("Assets");
-    ImGui::Separator();
-    ImGui::BulletText("Materials/M_Default");
-    ImGui::BulletText("Meshes/SM_Cube");
-    ImGui::BulletText("Textures/T_Checker");
-    ImGui::End();
-
-    ImGui::Begin("PIE Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-    ImGui::Text("Play In Editor");
-    if (ImGui::Button(g_isPieRunning ? "Stop PIE" : "Start PIE"))
-    {
-        if (g_isPieRunning)
-        {
-            StopPie();
-        }
-        else
-        {
-            StartPie();
-        }
-    }
-    ImGui::TextWrapped("%s", g_pieGameStatus.c_str());
-    const std::string lastLoadErrorText = g_pieGameLastLoadError.empty() ? "(none)" : g_pieGameLastLoadError;
-    const std::string moduleSourceText = g_pieGameSourceModulePath.empty()
-        ? (g_pieManagedHotReloadPublishedDllPath.empty() ? "(none)" : g_pieManagedHotReloadPublishedDllPath.u8string())
-        : g_pieGameSourceModulePath;
-    ImGui::Text("Last load error (selectable):");
-    static char lastLoadErrorBuffer[2048] = {};
-    strncpy_s(lastLoadErrorBuffer, sizeof(lastLoadErrorBuffer), lastLoadErrorText.c_str(), _TRUNCATE);
-    ImGui::InputTextMultiline("##LastLoadErrorSelectable", lastLoadErrorBuffer, sizeof(lastLoadErrorBuffer), ImVec2(600.0f, 48.0f), ImGuiInputTextFlags_ReadOnly);
-    ImGui::Text("Module source (selectable):");
-    static char moduleSourceBuffer[2048] = {};
-    strncpy_s(moduleSourceBuffer, sizeof(moduleSourceBuffer), moduleSourceText.c_str(), _TRUNCATE);
-    ImGui::InputTextMultiline("##ModuleSourceSelectable", moduleSourceBuffer, sizeof(moduleSourceBuffer), ImVec2(600.0f, 48.0f), ImGuiInputTextFlags_ReadOnly);
-    ImGui::TextWrapped("Module loaded: %s", g_pieGameModulePath.empty() ? "(none)" : g_pieGameModulePath.c_str());
-    ImGui::TextWrapped("Publish log: %s", g_pieManagedLastPublishLogPath.empty() ? "(none)" : g_pieManagedLastPublishLogPath.c_str());
-    ImGui::Text("Active quads: %d", static_cast<int>(g_gameQuads.size()));
-    ImGui::End();
-
-    ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::Begin("Viewport", nullptr, viewportWindowFlags);
-    if (ImGui::BeginTabBar("##ViewportTabs"))
-    {
-        if (ImGui::BeginTabItem("Scene"))
-        {
-            if (ImGui::Button(g_sceneViewUse3DGrid ? "Switch to 2D Grid" : "Switch to 3D Grid"))
-            {
-                g_sceneViewUse3DGrid = !g_sceneViewUse3DGrid;
-            }
-            ImGui::SameLine();
-            ImGui::TextUnformatted(g_sceneViewUse3DGrid ? "Grid: 3D" : "Grid: 2D");
-
-            ImVec2 availableSize = ImGui::GetContentRegionAvail();
-            if (availableSize.x > 1.0f && availableSize.y > 1.0f)
-            {
-                g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
-                g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
-
-                ImVec2 canvasMin = ImGui::GetCursorScreenPos();
-                ImVec2 canvasMax = ImVec2(canvasMin.x + availableSize.x, canvasMin.y + availableSize.y);
-
-                ImGui::InvisibleButton("##SceneCanvas", availableSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-                const bool isHovered = ImGui::IsItemHovered();
-
-                if (isHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
-                {
-                    const ImVec2 delta = ImGui::GetIO().MouseDelta;
-                    if (g_sceneViewUse3DGrid)
-                    {
-                        const float panScale3D = 0.02f / (std::max)(0.2f, g_sceneViewZoom3D);
-                        const float yawRad = g_sceneViewOrbitYawDeg * 3.14159265f / 180.0f;
-                        const float forwardX = -cosf(yawRad);
-                        const float forwardZ = -sinf(yawRad);
-                        const float rightX = forwardZ;
-                        const float rightZ = -forwardX;
-                        g_sceneViewPan3D.x += (-delta.x * rightX + delta.y * forwardX) * panScale3D;
-                        g_sceneViewPan3D.y += (-delta.x * rightZ + delta.y * forwardZ) * panScale3D;
-                    }
-                    else
-                    {
-                        g_sceneViewPan.x += delta.x;
-                        g_sceneViewPan.y += delta.y;
-                    }
-                }
-
-                if (isHovered && g_sceneViewUse3DGrid && ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f))
-                {
-                    const ImVec2 delta = ImGui::GetIO().MouseDelta;
-                    const float orbitSensitivity = 0.25f;
-                    g_sceneViewOrbitYawDeg -= delta.x * orbitSensitivity;
-                    g_sceneViewOrbitPitchDeg = std::clamp(g_sceneViewOrbitPitchDeg - delta.y * orbitSensitivity, 5.0f, 85.0f);
-                }
-
-                if (isHovered)
-                {
-                    const float mouseWheel = ImGui::GetIO().MouseWheel;
-                    if (mouseWheel != 0.0f)
-                    {
-                        if (g_sceneViewUse3DGrid)
-                        {
-                            g_sceneViewZoom3D = std::clamp(g_sceneViewZoom3D * (1.0f + mouseWheel * 0.1f), 0.2f, 4.0f);
-                        }
-                        else
-                        {
-                            const float previousZoom = g_sceneViewZoom;
-                            g_sceneViewZoom = std::clamp(g_sceneViewZoom * (1.0f + mouseWheel * 0.1f), 0.2f, 4.0f);
-
-                            const ImVec2 viewCenter = ImVec2((canvasMin.x + canvasMax.x) * 0.5f, (canvasMin.y + canvasMax.y) * 0.5f);
-                            const ImVec2 mousePosition = ImGui::GetIO().MousePos;
-                            const ImVec2 originBefore = ImVec2(viewCenter.x + g_sceneViewPan.x, viewCenter.y + g_sceneViewPan.y);
-                            const ImVec2 worldFromMouse = ImVec2(
-                                (mousePosition.x - originBefore.x) / previousZoom,
-                                (mousePosition.y - originBefore.y) / previousZoom);
-                            const ImVec2 originAfter = ImVec2(
-                                mousePosition.x - worldFromMouse.x * g_sceneViewZoom,
-                                mousePosition.y - worldFromMouse.y * g_sceneViewZoom);
-                            g_sceneViewPan.x = originAfter.x - viewCenter.x;
-                            g_sceneViewPan.y = originAfter.y - viewCenter.y;
-                        }
-                    }
-                }
-
-                ImDrawList* drawList = ImGui::GetWindowDrawList();
-                drawList->PushClipRect(canvasMin, canvasMax, true);
-                if (g_sceneRenderTarget != nullptr)
-                {
-                    ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-                    drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
-                }
-                else
-                {
-                    drawList->AddRectFilled(canvasMin, canvasMax, IM_COL32(12, 12, 14, 255));
-                }
-                DrawSceneViewGrid(drawList, canvasMin, canvasMax);
-                const char* hintText = g_sceneViewUse3DGrid
-                    ? "Scene View  Grid: 3D  RMB: Orbit  MMB: Pan  Wheel: Zoom"
-                    : "Scene View  Grid: 2D  MMB: Pan  Wheel: Zoom";
-                drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 10.0f), IM_COL32(210, 210, 210, 255), hintText);
-                drawList->PopClipRect();
-            }
-            else
-            {
-                ImGui::Text("Scene render target is not ready.");
-            }
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Game"))
-        {
-            ImVec2 availableSize = ImGui::GetContentRegionAvail();
-            if (availableSize.x > 1.0f && availableSize.y > 1.0f)
-            {
-                g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
-                g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
-
-                ImVec2 canvasMin = ImGui::GetCursorScreenPos();
-                ImVec2 canvasMax = ImVec2(canvasMin.x + availableSize.x, canvasMin.y + availableSize.y);
-                ImGui::InvisibleButton("##GameCanvas", availableSize, ImGuiButtonFlags_None);
-
-                ImDrawList* drawList = ImGui::GetWindowDrawList();
-                drawList->PushClipRect(canvasMin, canvasMax, true);
-                if (g_sceneRenderTarget != nullptr)
-                {
-                    ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-                    drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
-                }
-                else
-                {
-                    drawList->AddRectFilled(canvasMin, canvasMax, IM_COL32(12, 12, 14, 255));
-                    drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 10.0f), IM_COL32(210, 210, 210, 255), "Game render target is not ready.");
-                }
-                drawList->PopClipRect();
-            }
-            else
-            {
-                ImGui::Text("Game render target is not ready.");
-            }
-            ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
-    }
-    ImGui::End();
-}
-
-static void RenderStandaloneViewportUi()
-{
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->Pos);
-    ImGui::SetNextWindowSize(viewport->Size);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNav;
-    ImGui::Begin("StandaloneViewport", nullptr, flags);
-    ImGui::PopStyleVar();
-
-    if (g_sceneRenderTarget != nullptr)
-    {
-        ImVec2 availableSize = ImGui::GetContentRegionAvail();
-        if (availableSize.x > 1.0f && availableSize.y > 1.0f)
-        {
-            g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
-            g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
-        }
-        ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-        ImGui::Image(sceneTextureId, ImGui::GetContentRegionAvail());
-    }
-    else
-    {
-        ImGui::Text("Scene render target is not ready.");
-    }
-
-    ImGui::End();
-}
-
-static void DrawSceneViewGrid(ImDrawList* drawList, const ImVec2& min, const ImVec2& max)
-{
-    const float width = max.x - min.x;
-    const float height = max.y - min.y;
-    if (width <= 1.0f || height <= 1.0f)
-    {
-        return;
-    }
-
-    const ImU32 minorColor = IM_COL32(74, 74, 78, 128);
-    const ImU32 majorColor = IM_COL32(112, 112, 118, 168);
-    const ImU32 axisXColor = IM_COL32(210, 90, 90, 210);
-    const ImU32 axisYColor = IM_COL32(90, 190, 210, 210);
-
-    if (!g_sceneViewUse3DGrid)
-    {
-        const ImVec2 center = ImVec2(min.x + width * 0.5f, min.y + height * 0.5f);
-        const ImVec2 origin = ImVec2(center.x + g_sceneViewPan.x, center.y + g_sceneViewPan.y);
-        const float spacing = std::clamp(kSceneGridBaseSpacing * g_sceneViewZoom, 8.0f, 256.0f);
-        const int majorStep = 5;
-
-        auto calcStart = [](float rangeMin, float originCoord, float step) -> float
-        {
-            float start = rangeMin + fmodf(originCoord - rangeMin, step);
-            if (start > rangeMin)
-            {
-                start -= step;
-            }
-            return start;
-        };
-
-        const float startX = calcStart(min.x, origin.x, spacing);
-        for (float x = startX; x <= max.x; x += spacing)
-        {
-            const int lineIndex = static_cast<int>(roundf((x - origin.x) / spacing));
-            const bool isMajor = (lineIndex % majorStep) == 0;
-            drawList->AddLine(ImVec2(x, min.y), ImVec2(x, max.y), isMajor ? majorColor : minorColor);
-        }
-
-        const float startY = calcStart(min.y, origin.y, spacing);
-        for (float y = startY; y <= max.y; y += spacing)
-        {
-            const int lineIndex = static_cast<int>(roundf((y - origin.y) / spacing));
-            const bool isMajor = (lineIndex % majorStep) == 0;
-            drawList->AddLine(ImVec2(min.x, y), ImVec2(max.x, y), isMajor ? majorColor : minorColor);
-        }
-
-        if (origin.x >= min.x && origin.x <= max.x)
-        {
-            drawList->AddLine(ImVec2(origin.x, min.y), ImVec2(origin.x, max.y), axisYColor, 2.0f);
-        }
-        if (origin.y >= min.y && origin.y <= max.y)
-        {
-            drawList->AddLine(ImVec2(min.x, origin.y), ImVec2(max.x, origin.y), axisXColor, 2.0f);
-        }
-        return;
-    }
-
-    struct Vec3
-    {
-        float x;
-        float y;
-        float z;
-    };
-
-    auto sub = [](const Vec3& a, const Vec3& b) -> Vec3 { return Vec3{ a.x - b.x, a.y - b.y, a.z - b.z }; };
-    auto dot = [](const Vec3& a, const Vec3& b) -> float { return a.x * b.x + a.y * b.y + a.z * b.z; };
-    auto cross = [](const Vec3& a, const Vec3& b) -> Vec3
-    {
-        return Vec3{
-            a.y * b.z - a.z * b.y,
-            a.z * b.x - a.x * b.z,
-            a.x * b.y - a.y * b.x
-        };
-    };
-    auto normalize = [](const Vec3& v) -> Vec3
-    {
-        const float len = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
-        if (len <= 0.0001f)
-        {
-            return Vec3{ 0.0f, 0.0f, 0.0f };
-        }
-        return Vec3{ v.x / len, v.y / len, v.z / len };
-    };
-
-    const ImVec2 center = ImVec2(min.x + width * 0.5f, min.y + height * 0.5f);
-    const float fovYRad = 60.0f * 3.14159265f / 180.0f;
-    const float focal = (height * 0.5f) / tanf(fovYRad * 0.5f);
-    const float yawRad = g_sceneViewOrbitYawDeg * 3.14159265f / 180.0f;
-    const float pitchRad = g_sceneViewOrbitPitchDeg * 3.14159265f / 180.0f;
-    const float distance = 28.0f / (std::max)(0.2f, g_sceneViewZoom3D);
-    const float planeScale = 0.5f;
-
-    const Vec3 target = Vec3{ g_sceneViewPan3D.x, 0.0f, g_sceneViewPan3D.y };
-    const Vec3 camera = Vec3{
-        target.x + distance * cosf(pitchRad) * cosf(yawRad),
-        target.y + distance * sinf(pitchRad),
-        target.z + distance * cosf(pitchRad) * sinf(yawRad)
-    };
-
-    const Vec3 forward = normalize(sub(target, camera));
-    const Vec3 worldUp = Vec3{ 0.0f, 1.0f, 0.0f };
-    const Vec3 right = normalize(cross(worldUp, forward));
-    const Vec3 up = cross(forward, right);
-
-    auto project = [&](const Vec3& p, ImVec2& out) -> bool
-    {
-        const Vec3 rel = sub(p, camera);
-        const float viewX = dot(rel, right);
-        const float viewY = dot(rel, up);
-        const float viewZ = dot(rel, forward);
-        if (viewZ <= 0.05f)
-        {
-            return false;
-        }
-        out.x = center.x + (viewX * focal / viewZ);
-        out.y = center.y - (viewY * focal / viewZ);
-        return true;
-    };
-
-    const int halfLineCount = 40;
-    const int majorStep = 5;
-    for (int i = -halfLineCount; i <= halfLineCount; ++i)
-    {
-        const float s = static_cast<float>(i) * planeScale;
-        const bool isMajor = (i % majorStep) == 0;
-        const ImU32 lineColor = isMajor ? majorColor : minorColor;
-
-        ImVec2 a;
-        ImVec2 b;
-        if (project(Vec3{ -halfLineCount * planeScale, 0.0f, s }, a) &&
-            project(Vec3{ halfLineCount * planeScale, 0.0f, s }, b))
-        {
-            drawList->AddLine(a, b, lineColor);
-        }
-
-        if (project(Vec3{ s, 0.0f, -halfLineCount * planeScale }, a) &&
-            project(Vec3{ s, 0.0f, halfLineCount * planeScale }, b))
-        {
-            drawList->AddLine(a, b, lineColor);
-        }
-    }
-
-    ImVec2 xAxisA;
-    ImVec2 xAxisB;
-    if (project(Vec3{ -halfLineCount * planeScale, 0.0f, 0.0f }, xAxisA) &&
-        project(Vec3{ halfLineCount * planeScale, 0.0f, 0.0f }, xAxisB))
-    {
-        drawList->AddLine(xAxisA, xAxisB, axisXColor, 2.0f);
-    }
-
-    ImVec2 zAxisA;
-    ImVec2 zAxisB;
-    if (project(Vec3{ 0.0f, 0.0f, -halfLineCount * planeScale }, zAxisA) &&
-        project(Vec3{ 0.0f, 0.0f, halfLineCount * planeScale }, zAxisB))
-    {
-        drawList->AddLine(zAxisA, zAxisB, axisYColor, 2.0f);
-    }
-}
-
 /// <summary>
 /// ウィンドウの作成
 /// </summary>
@@ -1695,8 +1019,9 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
         if (GetClientRect(g_hwnd, &clientRect))
         {
             Application::SetWindowSize(clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
-            g_sceneRequestedRenderWidth = static_cast<UINT>((std::max)(1L, clientRect.right - clientRect.left));
-            g_sceneRequestedRenderHeight = static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top));
+            EditorUi::RequestSceneRenderSize(
+                static_cast<UINT>((std::max)(1L, clientRect.right - clientRect.left)),
+                static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top)));
         }
 
 		g_DxDevice.Initialize(g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight());
@@ -1929,9 +1254,9 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
         g_pieTickCallback(kFixedDeltaTime);
     }
 
-    if (g_imguiInitialized && g_sceneRequestedRenderWidth > 0 && g_sceneRequestedRenderHeight > 0)
+    if (g_imguiInitialized)
     {
-        CreateOrResizeSceneRenderTexture(g_sceneRequestedRenderWidth, g_sceneRequestedRenderHeight);
+        EditorUi::EnsureSceneRenderSize();
     }
 
     BeginSceneRenderToTexture();
@@ -1943,22 +1268,23 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
 
     if (g_imguiInitialized)
     {
-        ImGui_ImplDX12_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
-        if (g_isStandaloneMode)
-        {
-            RenderStandaloneViewportUi();
-        }
-        else
-        {
-            RenderEditorDockingUi();
-        }
-        ImGui::Render();
+        const std::string moduleSourceText = g_pieGameSourceModulePath.empty()
+            ? (g_pieManagedHotReloadPublishedDllPath.empty() ? "(none)" : g_pieManagedHotReloadPublishedDllPath.u8string())
+            : g_pieGameSourceModulePath;
+        EditorUiRuntimeState uiState = {};
+        uiState.isPieRunning = g_isPieRunning;
+        uiState.pieGameStatus = g_pieGameStatus.c_str();
+        uiState.pieGameLastLoadError = g_pieGameLastLoadError.c_str();
+        uiState.moduleSourceText = moduleSourceText.c_str();
+        uiState.pieGameModulePath = g_pieGameModulePath.c_str();
+        uiState.pieManagedLastPublishLogPath = g_pieManagedLastPublishLogPath.c_str();
+        uiState.activeQuadCount = static_cast<int>(g_gameQuads.size());
 
-        ID3D12DescriptorHeap* descriptorHeaps[] = { g_imguiSrvHeap.Get() };
-        DirectXDevice::GetCommandList()->SetDescriptorHeaps(1, descriptorHeaps);
-        ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), DirectXDevice::GetCommandList());
+        EditorUiCallbacks uiCallbacks = {};
+        uiCallbacks.startPie = &StartPie;
+        uiCallbacks.stopPie = &StopPie;
+
+        EditorUi::RenderFrame(g_isStandaloneMode, uiState, uiCallbacks);
     }
 
     g_DxDevice.Render();                    // DirectXの更新処理

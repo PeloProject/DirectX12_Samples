@@ -166,6 +166,7 @@
     <ClInclude Include="PolygonTest.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Source\DirectXDevice.h" />
+    <ClInclude Include="Source\EditorUi.h" />
     <ClInclude Include="Source\GraphicsDevice.h" />
     <ClInclude Include="Source\Math\MathUtil.h" />
     <ClInclude Include="Source\Scene\SceneBase.h" />
@@ -183,6 +184,7 @@
     </ClCompile>
     <ClCompile Include="PolygonTest.cpp" />
     <ClCompile Include="Source\DirectXDevice.cpp" />
+    <ClCompile Include="Source\EditorUi.cpp" />
     <ClCompile Include="Source\GraphicsDevice.cpp" />
     <ClCompile Include="Source\Math\MathUtil.cpp" />
     <ClCompile Include="Source\Scene\SceneBase.cpp" />
