@@ -6,6 +6,7 @@
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -84,7 +85,17 @@ static D3D12_GPU_DESCRIPTOR_HANDLE g_sceneSrvGpuHandle = {};
 static bool g_sceneSrvAllocated = false;
 static UINT g_sceneRenderWidth = 1;
 static UINT g_sceneRenderHeight = 1;
+static UINT g_sceneRequestedRenderWidth = 1;
+static UINT g_sceneRequestedRenderHeight = 1;
 static constexpr float kDefaultSceneClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+static float g_sceneViewZoom = 1.0f;
+static ImVec2 g_sceneViewPan = ImVec2(0.0f, 0.0f);
+static float g_sceneViewZoom3D = 1.0f;
+static ImVec2 g_sceneViewPan3D = ImVec2(0.0f, 0.0f);
+static float g_sceneViewOrbitYawDeg = 45.0f;
+static float g_sceneViewOrbitPitchDeg = 35.0f;
+static bool g_sceneViewUse3DGrid = false;
+static constexpr float kSceneGridBaseSpacing = 32.0f;
 
 static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle);
 static void ImGuiSrvDescriptorFree(ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE gpuDescHandle);
@@ -111,6 +122,7 @@ static void TickPieManagedAutoPublish(float deltaTime);
 static void StartPieImmediate();
 static void StopPieImmediate();
 static std::vector<std::filesystem::path> BuildPieManagedReloadCandidates();
+static void DrawSceneViewGrid(ImDrawList* drawList, const ImVec2& min, const ImVec2& max);
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -138,6 +150,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
             {
                 Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
+                g_sceneRequestedRenderWidth = width;
+                g_sceneRequestedRenderHeight = height;
                 g_DxDevice.Resize(width, height);
                 if (g_imguiInitialized)
                 {
@@ -1295,19 +1309,148 @@ static void RenderEditorDockingUi()
     ImGui::Text("Active quads: %d", static_cast<int>(g_gameQuads.size()));
     ImGui::End();
 
-    ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
     ImGui::Begin("Viewport", nullptr, viewportWindowFlags);
-    ImGui::PopStyleColor();
-    ImVec2 availableSize = ImGui::GetContentRegionAvail();
-    if (availableSize.x > 1.0f && availableSize.y > 1.0f && g_sceneRenderTarget != nullptr)
+    if (ImGui::BeginTabBar("##ViewportTabs"))
     {
-        ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-        ImGui::Image(sceneTextureId, availableSize);
-    }
-    else
-    {
-        ImGui::Text("Scene render target is not ready.");
+        if (ImGui::BeginTabItem("Scene"))
+        {
+            if (ImGui::Button(g_sceneViewUse3DGrid ? "Switch to 2D Grid" : "Switch to 3D Grid"))
+            {
+                g_sceneViewUse3DGrid = !g_sceneViewUse3DGrid;
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(g_sceneViewUse3DGrid ? "Grid: 3D" : "Grid: 2D");
+
+            ImVec2 availableSize = ImGui::GetContentRegionAvail();
+            if (availableSize.x > 1.0f && availableSize.y > 1.0f)
+            {
+                g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
+                g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
+
+                ImVec2 canvasMin = ImGui::GetCursorScreenPos();
+                ImVec2 canvasMax = ImVec2(canvasMin.x + availableSize.x, canvasMin.y + availableSize.y);
+
+                ImGui::InvisibleButton("##SceneCanvas", availableSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+                const bool isHovered = ImGui::IsItemHovered();
+
+                if (isHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
+                {
+                    const ImVec2 delta = ImGui::GetIO().MouseDelta;
+                    if (g_sceneViewUse3DGrid)
+                    {
+                        const float panScale3D = 0.02f / (std::max)(0.2f, g_sceneViewZoom3D);
+                        const float yawRad = g_sceneViewOrbitYawDeg * 3.14159265f / 180.0f;
+                        const float forwardX = -cosf(yawRad);
+                        const float forwardZ = -sinf(yawRad);
+                        const float rightX = forwardZ;
+                        const float rightZ = -forwardX;
+                        g_sceneViewPan3D.x += (-delta.x * rightX + delta.y * forwardX) * panScale3D;
+                        g_sceneViewPan3D.y += (-delta.x * rightZ + delta.y * forwardZ) * panScale3D;
+                    }
+                    else
+                    {
+                        g_sceneViewPan.x += delta.x;
+                        g_sceneViewPan.y += delta.y;
+                    }
+                }
+
+                if (isHovered && g_sceneViewUse3DGrid && ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f))
+                {
+                    const ImVec2 delta = ImGui::GetIO().MouseDelta;
+                    const float orbitSensitivity = 0.25f;
+                    g_sceneViewOrbitYawDeg -= delta.x * orbitSensitivity;
+                    g_sceneViewOrbitPitchDeg = std::clamp(g_sceneViewOrbitPitchDeg - delta.y * orbitSensitivity, 5.0f, 85.0f);
+                }
+
+                if (isHovered)
+                {
+                    const float mouseWheel = ImGui::GetIO().MouseWheel;
+                    if (mouseWheel != 0.0f)
+                    {
+                        if (g_sceneViewUse3DGrid)
+                        {
+                            g_sceneViewZoom3D = std::clamp(g_sceneViewZoom3D * (1.0f + mouseWheel * 0.1f), 0.2f, 4.0f);
+                        }
+                        else
+                        {
+                            const float previousZoom = g_sceneViewZoom;
+                            g_sceneViewZoom = std::clamp(g_sceneViewZoom * (1.0f + mouseWheel * 0.1f), 0.2f, 4.0f);
+
+                            const ImVec2 viewCenter = ImVec2((canvasMin.x + canvasMax.x) * 0.5f, (canvasMin.y + canvasMax.y) * 0.5f);
+                            const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+                            const ImVec2 originBefore = ImVec2(viewCenter.x + g_sceneViewPan.x, viewCenter.y + g_sceneViewPan.y);
+                            const ImVec2 worldFromMouse = ImVec2(
+                                (mousePosition.x - originBefore.x) / previousZoom,
+                                (mousePosition.y - originBefore.y) / previousZoom);
+                            const ImVec2 originAfter = ImVec2(
+                                mousePosition.x - worldFromMouse.x * g_sceneViewZoom,
+                                mousePosition.y - worldFromMouse.y * g_sceneViewZoom);
+                            g_sceneViewPan.x = originAfter.x - viewCenter.x;
+                            g_sceneViewPan.y = originAfter.y - viewCenter.y;
+                        }
+                    }
+                }
+
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                drawList->PushClipRect(canvasMin, canvasMax, true);
+                if (g_sceneRenderTarget != nullptr)
+                {
+                    ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
+                    drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
+                }
+                else
+                {
+                    drawList->AddRectFilled(canvasMin, canvasMax, IM_COL32(12, 12, 14, 255));
+                }
+                DrawSceneViewGrid(drawList, canvasMin, canvasMax);
+                const char* hintText = g_sceneViewUse3DGrid
+                    ? "Scene View  Grid: 3D  RMB: Orbit  MMB: Pan  Wheel: Zoom"
+                    : "Scene View  Grid: 2D  MMB: Pan  Wheel: Zoom";
+                drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 10.0f), IM_COL32(210, 210, 210, 255), hintText);
+                drawList->PopClipRect();
+            }
+            else
+            {
+                ImGui::Text("Scene render target is not ready.");
+            }
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Game"))
+        {
+            ImVec2 availableSize = ImGui::GetContentRegionAvail();
+            if (availableSize.x > 1.0f && availableSize.y > 1.0f)
+            {
+                g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
+                g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
+
+                ImVec2 canvasMin = ImGui::GetCursorScreenPos();
+                ImVec2 canvasMax = ImVec2(canvasMin.x + availableSize.x, canvasMin.y + availableSize.y);
+                ImGui::InvisibleButton("##GameCanvas", availableSize, ImGuiButtonFlags_None);
+
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                drawList->PushClipRect(canvasMin, canvasMax, true);
+                if (g_sceneRenderTarget != nullptr)
+                {
+                    ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
+                    drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
+                }
+                else
+                {
+                    drawList->AddRectFilled(canvasMin, canvasMax, IM_COL32(12, 12, 14, 255));
+                    drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 10.0f), IM_COL32(210, 210, 210, 255), "Game render target is not ready.");
+                }
+                drawList->PopClipRect();
+            }
+            else
+            {
+                ImGui::Text("Game render target is not ready.");
+            }
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
     }
     ImGui::End();
 }
@@ -1331,6 +1474,12 @@ static void RenderStandaloneViewportUi()
 
     if (g_sceneRenderTarget != nullptr)
     {
+        ImVec2 availableSize = ImGui::GetContentRegionAvail();
+        if (availableSize.x > 1.0f && availableSize.y > 1.0f)
+        {
+            g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
+            g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
+        }
         ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
         ImGui::Image(sceneTextureId, ImGui::GetContentRegionAvail());
     }
@@ -1340,6 +1489,166 @@ static void RenderStandaloneViewportUi()
     }
 
     ImGui::End();
+}
+
+static void DrawSceneViewGrid(ImDrawList* drawList, const ImVec2& min, const ImVec2& max)
+{
+    const float width = max.x - min.x;
+    const float height = max.y - min.y;
+    if (width <= 1.0f || height <= 1.0f)
+    {
+        return;
+    }
+
+    const ImU32 minorColor = IM_COL32(74, 74, 78, 128);
+    const ImU32 majorColor = IM_COL32(112, 112, 118, 168);
+    const ImU32 axisXColor = IM_COL32(210, 90, 90, 210);
+    const ImU32 axisYColor = IM_COL32(90, 190, 210, 210);
+
+    if (!g_sceneViewUse3DGrid)
+    {
+        const ImVec2 center = ImVec2(min.x + width * 0.5f, min.y + height * 0.5f);
+        const ImVec2 origin = ImVec2(center.x + g_sceneViewPan.x, center.y + g_sceneViewPan.y);
+        const float spacing = std::clamp(kSceneGridBaseSpacing * g_sceneViewZoom, 8.0f, 256.0f);
+        const int majorStep = 5;
+
+        auto calcStart = [](float rangeMin, float originCoord, float step) -> float
+        {
+            float start = rangeMin + fmodf(originCoord - rangeMin, step);
+            if (start > rangeMin)
+            {
+                start -= step;
+            }
+            return start;
+        };
+
+        const float startX = calcStart(min.x, origin.x, spacing);
+        for (float x = startX; x <= max.x; x += spacing)
+        {
+            const int lineIndex = static_cast<int>(roundf((x - origin.x) / spacing));
+            const bool isMajor = (lineIndex % majorStep) == 0;
+            drawList->AddLine(ImVec2(x, min.y), ImVec2(x, max.y), isMajor ? majorColor : minorColor);
+        }
+
+        const float startY = calcStart(min.y, origin.y, spacing);
+        for (float y = startY; y <= max.y; y += spacing)
+        {
+            const int lineIndex = static_cast<int>(roundf((y - origin.y) / spacing));
+            const bool isMajor = (lineIndex % majorStep) == 0;
+            drawList->AddLine(ImVec2(min.x, y), ImVec2(max.x, y), isMajor ? majorColor : minorColor);
+        }
+
+        if (origin.x >= min.x && origin.x <= max.x)
+        {
+            drawList->AddLine(ImVec2(origin.x, min.y), ImVec2(origin.x, max.y), axisYColor, 2.0f);
+        }
+        if (origin.y >= min.y && origin.y <= max.y)
+        {
+            drawList->AddLine(ImVec2(min.x, origin.y), ImVec2(max.x, origin.y), axisXColor, 2.0f);
+        }
+        return;
+    }
+
+    struct Vec3
+    {
+        float x;
+        float y;
+        float z;
+    };
+
+    auto sub = [](const Vec3& a, const Vec3& b) -> Vec3 { return Vec3{ a.x - b.x, a.y - b.y, a.z - b.z }; };
+    auto dot = [](const Vec3& a, const Vec3& b) -> float { return a.x * b.x + a.y * b.y + a.z * b.z; };
+    auto cross = [](const Vec3& a, const Vec3& b) -> Vec3
+    {
+        return Vec3{
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x
+        };
+    };
+    auto normalize = [](const Vec3& v) -> Vec3
+    {
+        const float len = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (len <= 0.0001f)
+        {
+            return Vec3{ 0.0f, 0.0f, 0.0f };
+        }
+        return Vec3{ v.x / len, v.y / len, v.z / len };
+    };
+
+    const ImVec2 center = ImVec2(min.x + width * 0.5f, min.y + height * 0.5f);
+    const float fovYRad = 60.0f * 3.14159265f / 180.0f;
+    const float focal = (height * 0.5f) / tanf(fovYRad * 0.5f);
+    const float yawRad = g_sceneViewOrbitYawDeg * 3.14159265f / 180.0f;
+    const float pitchRad = g_sceneViewOrbitPitchDeg * 3.14159265f / 180.0f;
+    const float distance = 28.0f / (std::max)(0.2f, g_sceneViewZoom3D);
+    const float planeScale = 0.5f;
+
+    const Vec3 target = Vec3{ g_sceneViewPan3D.x, 0.0f, g_sceneViewPan3D.y };
+    const Vec3 camera = Vec3{
+        target.x + distance * cosf(pitchRad) * cosf(yawRad),
+        target.y + distance * sinf(pitchRad),
+        target.z + distance * cosf(pitchRad) * sinf(yawRad)
+    };
+
+    const Vec3 forward = normalize(sub(target, camera));
+    const Vec3 worldUp = Vec3{ 0.0f, 1.0f, 0.0f };
+    const Vec3 right = normalize(cross(worldUp, forward));
+    const Vec3 up = cross(forward, right);
+
+    auto project = [&](const Vec3& p, ImVec2& out) -> bool
+    {
+        const Vec3 rel = sub(p, camera);
+        const float viewX = dot(rel, right);
+        const float viewY = dot(rel, up);
+        const float viewZ = dot(rel, forward);
+        if (viewZ <= 0.05f)
+        {
+            return false;
+        }
+        out.x = center.x + (viewX * focal / viewZ);
+        out.y = center.y - (viewY * focal / viewZ);
+        return true;
+    };
+
+    const int halfLineCount = 40;
+    const int majorStep = 5;
+    for (int i = -halfLineCount; i <= halfLineCount; ++i)
+    {
+        const float s = static_cast<float>(i) * planeScale;
+        const bool isMajor = (i % majorStep) == 0;
+        const ImU32 lineColor = isMajor ? majorColor : minorColor;
+
+        ImVec2 a;
+        ImVec2 b;
+        if (project(Vec3{ -halfLineCount * planeScale, 0.0f, s }, a) &&
+            project(Vec3{ halfLineCount * planeScale, 0.0f, s }, b))
+        {
+            drawList->AddLine(a, b, lineColor);
+        }
+
+        if (project(Vec3{ s, 0.0f, -halfLineCount * planeScale }, a) &&
+            project(Vec3{ s, 0.0f, halfLineCount * planeScale }, b))
+        {
+            drawList->AddLine(a, b, lineColor);
+        }
+    }
+
+    ImVec2 xAxisA;
+    ImVec2 xAxisB;
+    if (project(Vec3{ -halfLineCount * planeScale, 0.0f, 0.0f }, xAxisA) &&
+        project(Vec3{ halfLineCount * planeScale, 0.0f, 0.0f }, xAxisB))
+    {
+        drawList->AddLine(xAxisA, xAxisB, axisXColor, 2.0f);
+    }
+
+    ImVec2 zAxisA;
+    ImVec2 zAxisB;
+    if (project(Vec3{ 0.0f, 0.0f, -halfLineCount * planeScale }, zAxisA) &&
+        project(Vec3{ 0.0f, 0.0f, halfLineCount * planeScale }, zAxisB))
+    {
+        drawList->AddLine(zAxisA, zAxisB, axisYColor, 2.0f);
+    }
 }
 
 /// <summary>
@@ -1386,6 +1695,8 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
         if (GetClientRect(g_hwnd, &clientRect))
         {
             Application::SetWindowSize(clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
+            g_sceneRequestedRenderWidth = static_cast<UINT>((std::max)(1L, clientRect.right - clientRect.left));
+            g_sceneRequestedRenderHeight = static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top));
         }
 
 		g_DxDevice.Initialize(g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight());
@@ -1616,6 +1927,11 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
     if (g_isPieRunning && g_pieTickCallback != nullptr)
     {
         g_pieTickCallback(kFixedDeltaTime);
+    }
+
+    if (g_imguiInitialized && g_sceneRequestedRenderWidth > 0 && g_sceneRequestedRenderHeight > 0)
+    {
+        CreateOrResizeSceneRenderTexture(g_sceneRequestedRenderWidth, g_sceneRequestedRenderHeight);
     }
 
     BeginSceneRenderToTexture();
