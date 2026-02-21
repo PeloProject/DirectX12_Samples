@@ -1,0 +1,86 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ApplicationDLLHost (x64 Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/ApplicationDLLHost.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows",
+      "environment": [
+        {
+          "name": "DX12_DEBUG_LAYER",
+          "value": "0"
+        },
+        {
+          "name": "DX12_GPU_VALIDATION",
+          "value": "0"
+        },
+        {
+          "name": "_NT_SYMBOL_PATH",
+          "value": ""
+        },
+        {
+          "name": "_NT_ALT_SYMBOL_PATH",
+          "value": ""
+        }
+      ],
+      "console": "internalConsole",
+      "preLaunchTask": "build:ApplicationDLLHost Debug x64",
+      "symbolSearchPath": "",
+      "justMyCode": true,
+      "logging": {
+        "moduleLoad": false,
+        "programOutput": true,
+        "trace": false,
+        "engineLogging": false
+      }
+    },
+    {
+      "name": "Debug ApplicationDLLHost (No Build)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/ApplicationDLLHost.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows",
+      "environment": [
+        {
+          "name": "DX12_DEBUG_LAYER",
+          "value": "0"
+        },
+        {
+          "name": "DX12_GPU_VALIDATION",
+          "value": "0"
+        },
+        {
+          "name": "_NT_SYMBOL_PATH",
+          "value": ""
+        },
+        {
+          "name": "_NT_ALT_SYMBOL_PATH",
+          "value": ""
+        }
+      ],
+      "console": "internalConsole",
+      "symbolSearchPath": "",
+      "justMyCode": true,
+      "logging": {
+        "moduleLoad": false,
+        "programOutput": true,
+        "trace": false,
+        "engineLogging": false
+      }
+    },
+    {
+      "name": "Attach ApplicationDLLHost",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true,
+      "symbolSearchPath": ""
+    }
+  ]
+}

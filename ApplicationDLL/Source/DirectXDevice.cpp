@@ -1,6 +1,7 @@
 ﻿// dllmain.cpp : DLL アプリケーションのエントリ ポイントを定義します。
 #include "pch.h"
 #include <Windows.h>
+#include <cstring>
 #include "DirectXDevice.h"
 #ifdef _DEBUG
 //#define GRAPHICS_DEBUG_MODE
@@ -16,6 +17,41 @@ ComPtr<ID3D12GraphicsCommandList> DirectXDevice::m_pCommandList;
 // @brief デバッグレイヤーを有効化する関数
 void DirectXDevice::EnableDebugLayer()
 {
+	const bool enableDebugLayer = []() -> bool
+	{
+		// Default ON in debug builds. Set DX12_DEBUG_LAYER=0 to disable.
+		char* value = nullptr;
+		size_t len = 0;
+		const errno_t err = _dupenv_s(&value, &len, "DX12_DEBUG_LAYER");
+		const bool enabled = !(err == 0 && value != nullptr && strcmp(value, "0") == 0);
+		if (value != nullptr)
+		{
+			free(value);
+		}
+		return enabled;
+	}();
+
+	if (!enableDebugLayer)
+	{
+		return;
+	}
+
+	const bool enableGpuValidation = []() -> bool
+	{
+		// Default OFF: GPU-based validation is extremely slow.
+		// Enable only when explicitly requested:
+		//   set DX12_GPU_VALIDATION=1
+		char* value = nullptr;
+		size_t len = 0;
+		const errno_t err = _dupenv_s(&value, &len, "DX12_GPU_VALIDATION");
+		const bool enabled = (err == 0 && value != nullptr && strcmp(value, "1") == 0);
+		if (value != nullptr)
+		{
+			free(value);
+		}
+		return enabled;
+	}();
+
 	ComPtr<ID3D12Debug> debugController;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 		debugController->EnableDebugLayer();
@@ -23,14 +59,14 @@ void DirectXDevice::EnableDebugLayer()
 		// より詳細なデバッグ情報
 		ComPtr<ID3D12Debug1> debugController1;
 		if (SUCCEEDED(debugController.As(&debugController1))) {
-			debugController1->SetEnableGPUBasedValidation(TRUE);
-			debugController1->SetEnableSynchronizedCommandQueueValidation(TRUE);
+			debugController1->SetEnableGPUBasedValidation(enableGpuValidation ? TRUE : FALSE);
+			debugController1->SetEnableSynchronizedCommandQueueValidation(enableGpuValidation ? TRUE : FALSE);
 		}
 
 		// 情報メッセージも表示
 		ComPtr<ID3D12Debug3> debugController3;
 		if (SUCCEEDED(debugController.As(&debugController3))) {
-			debugController3->SetEnableGPUBasedValidation(TRUE);
+			debugController3->SetEnableGPUBasedValidation(enableGpuValidation ? TRUE : FALSE);
 		}
 	}
 

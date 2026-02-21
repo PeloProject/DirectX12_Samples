@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:ApplicationDLLHost Debug x64",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".vscode/build.ps1",
+        "-Solution",
+        "DirectX12_Samples.sln",
+        "-Configuration",
+        "Debug",
+        "-Platform",
+        "x64",
+        "-Target",
+        "ApplicationDLLHost"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "build:Solution Debug x64",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".vscode/build.ps1",
+        "-Solution",
+        "DirectX12_Samples.sln",
+        "-Configuration",
+        "Debug",
+        "-Platform",
+        "x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    }
+  ]
+}
