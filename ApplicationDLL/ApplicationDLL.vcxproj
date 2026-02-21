@@ -160,9 +160,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AppRuntime.h" />
+    <ClInclude Include="FrameLoop.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="PieAutoPublish.h" />
+    <ClInclude Include="PieLoader.h" />
     <ClInclude Include="PolygonTest.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Source\DirectXDevice.h" />
@@ -172,16 +176,21 @@
     <ClInclude Include="Source\Scene\SceneBase.h" />
     <ClInclude Include="Source\Scene\SceneGame.h" />
     <ClInclude Include="Source\Scene\SceneManager.h" />
+    <ClInclude Include="WinHandleRAII.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AppRuntime.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="FrameLoop.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="PieAutoPublish.cpp" />
+    <ClCompile Include="PieLoader.cpp" />
     <ClCompile Include="PolygonTest.cpp" />
     <ClCompile Include="Source\DirectXDevice.cpp" />
     <ClCompile Include="Source\EditorUi.cpp" />
@@ -196,6 +205,7 @@
     <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui_tables.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="WindowHost.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shader\BasicPixelShader.hlsl">
