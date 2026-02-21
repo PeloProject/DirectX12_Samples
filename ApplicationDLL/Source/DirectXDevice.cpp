@@ -534,7 +534,7 @@ bool DirectXDevice::CreateFence()
 /// <summary>
 /// DirectXのレンダリング前処理
 /// </summary>
-void DirectXDevice::PreRender()
+void DirectXDevice::PreRender(const float clearColor[4])
 {
 	if (m_pSwapChain == nullptr || m_pBackBuffers.empty())
 	{
@@ -558,8 +558,9 @@ void DirectXDevice::PreRender()
 	m_pCommandList->OMSetRenderTargets(1, &rtvH, true, nullptr); // レンダーターゲットを設定
 
 	// 画面をクリア
-	const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 黒色でクリア
-	m_pCommandList->ClearRenderTargetView(rtvH, clearColor, 0, nullptr);
+    const float defaultClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const float* finalClearColor = (clearColor != nullptr) ? clearColor : defaultClearColor;
+    m_pCommandList->ClearRenderTargetView(rtvH, finalClearColor, 0, nullptr);
 
 }
 

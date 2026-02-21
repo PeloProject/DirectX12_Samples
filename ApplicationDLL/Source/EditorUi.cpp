@@ -5,6 +5,7 @@
 
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
+#include "ThirdParty/imgui/backends/imgui_impl_opengl2.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 
 #include <algorithm>
@@ -17,6 +18,7 @@ namespace
 {
     static bool g_initialized = false;
     static HWND g_hwnd = nullptr;
+    static RendererBackend g_rendererBackend = RendererBackend::DirectX12;
 
     static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_imguiSrvHeap;
     static constexpr UINT kFrameCount = 2;
@@ -598,22 +600,9 @@ namespace
 
 namespace EditorUi
 {
-    bool Initialize(HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight)
+    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight)
     {
-        ID3D12Device* device = DirectXDevice::GetDevice();
-        if (device == nullptr || commandQueue == nullptr)
-        {
-            return false;
-        }
-
-        D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-        srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        srvHeapDesc.NumDescriptors = g_imguiSrvCapacity;
-        srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        if (FAILED(device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&g_imguiSrvHeap))))
-        {
-            return false;
-        }
+        g_rendererBackend = backend;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -623,31 +612,66 @@ namespace EditorUi
 
         ImGui::StyleColorsDark();
         ImGui_ImplWin32_Init(hwnd);
-        g_imguiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        g_imguiSrvAllocated = 0;
 
-        ImGui_ImplDX12_InitInfo initInfo = {};
-        initInfo.Device = device;
-        initInfo.CommandQueue = commandQueue;
-        initInfo.NumFramesInFlight = kFrameCount;
-        initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-        initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
-        initInfo.SrvDescriptorHeap = g_imguiSrvHeap.Get();
-        initInfo.SrvDescriptorAllocFn = ImGuiSrvDescriptorAlloc;
-        initInfo.SrvDescriptorFreeFn = ImGuiSrvDescriptorFree;
-
-        if (!ImGui_ImplDX12_Init(&initInfo))
+        if (backend == RendererBackend::DirectX12)
         {
-            ImGui_ImplWin32_Shutdown();
-            ImGui::DestroyContext();
-            g_imguiSrvHeap.Reset();
-            return false;
+            ID3D12Device* device = DirectXDevice::GetDevice();
+            if (device == nullptr || commandQueue == nullptr)
+            {
+                ImGui_ImplWin32_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+            srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            srvHeapDesc.NumDescriptors = g_imguiSrvCapacity;
+            srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+            if (FAILED(device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&g_imguiSrvHeap))))
+            {
+                ImGui_ImplWin32_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            g_imguiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            g_imguiSrvAllocated = 0;
+
+            ImGui_ImplDX12_InitInfo initInfo = {};
+            initInfo.Device = device;
+            initInfo.CommandQueue = commandQueue;
+            initInfo.NumFramesInFlight = kFrameCount;
+            initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+            initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
+            initInfo.SrvDescriptorHeap = g_imguiSrvHeap.Get();
+            initInfo.SrvDescriptorAllocFn = ImGuiSrvDescriptorAlloc;
+            initInfo.SrvDescriptorFreeFn = ImGuiSrvDescriptorFree;
+
+            if (!ImGui_ImplDX12_Init(&initInfo))
+            {
+                ImGui_ImplWin32_Shutdown();
+                ImGui::DestroyContext();
+                g_imguiSrvHeap.Reset();
+                return false;
+            }
+        }
+        else
+        {
+            if (!ImGui_ImplOpenGL2_Init())
+            {
+                ImGui_ImplWin32_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
         }
 
         g_hwnd = hwnd;
         g_sceneRequestedRenderWidth = initialWidth;
         g_sceneRequestedRenderHeight = initialHeight;
-        CreateOrResizeSceneRenderTexture(initialWidth, initialHeight);
+        if (backend == RendererBackend::DirectX12)
+        {
+            CreateOrResizeSceneRenderTexture(initialWidth, initialHeight);
+        }
         g_initialized = true;
         return true;
     }
@@ -659,7 +683,14 @@ namespace EditorUi
             return;
         }
 
-        ImGui_ImplDX12_Shutdown();
+        if (g_rendererBackend == RendererBackend::DirectX12)
+        {
+            ImGui_ImplDX12_Shutdown();
+        }
+        else
+        {
+            ImGui_ImplOpenGL2_Shutdown();
+        }
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
         DestroySceneRenderTexture();
@@ -694,12 +725,16 @@ namespace EditorUi
         {
             return false;
         }
+        if (g_rendererBackend != RendererBackend::DirectX12)
+        {
+            return true;
+        }
         return CreateOrResizeSceneRenderTexture(g_sceneRequestedRenderWidth, g_sceneRequestedRenderHeight);
     }
 
     void BeginSceneRenderToTexture(bool isPieRunning, const float* gameClearColor, const float* defaultClearColor)
     {
-        if (g_sceneRenderTarget == nullptr)
+        if (g_rendererBackend != RendererBackend::DirectX12 || g_sceneRenderTarget == nullptr)
         {
             return;
         }
@@ -725,7 +760,7 @@ namespace EditorUi
 
     void EndSceneRenderToTexture()
     {
-        if (g_sceneRenderTarget == nullptr)
+        if (g_rendererBackend != RendererBackend::DirectX12 || g_sceneRenderTarget == nullptr)
         {
             return;
         }
@@ -752,7 +787,14 @@ namespace EditorUi
             return;
         }
 
-        ImGui_ImplDX12_NewFrame();
+        if (g_rendererBackend == RendererBackend::DirectX12)
+        {
+            ImGui_ImplDX12_NewFrame();
+        }
+        else
+        {
+            ImGui_ImplOpenGL2_NewFrame();
+        }
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
@@ -766,14 +808,21 @@ namespace EditorUi
         }
 
         ImGui::Render();
-        ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
-        if (commandList == nullptr)
+        if (g_rendererBackend == RendererBackend::DirectX12)
         {
-            return;
-        }
+            ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+            if (commandList == nullptr)
+            {
+                return;
+            }
 
-        ID3D12DescriptorHeap* descriptorHeaps[] = { g_imguiSrvHeap.Get() };
-        commandList->SetDescriptorHeaps(1, descriptorHeaps);
-        ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+            ID3D12DescriptorHeap* descriptorHeaps[] = { g_imguiSrvHeap.Get() };
+            commandList->SetDescriptorHeaps(1, descriptorHeaps);
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+        }
+        else
+        {
+            ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+        }
     }
 }

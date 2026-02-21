@@ -52,3 +52,19 @@
   - While PIE is running, source changes under `PieGameManaged` (`.cs`, `.csproj`, `.props`, `.targets`, `.json`) are monitored.
   - On change, `dotnet publish PieGameManaged.csproj -c Debug -r win-x64` runs automatically in an isolated temp workspace to avoid file-lock conflicts with Visual Studio.
   - After publish completes, the hot reload path loads the updated native module from that workspace.
+
+## Renderer Backend API
+- `SetRendererBackend(uint32_t backend) -> BOOL`
+  - Selects renderer backend before `CreateNativeWindow`.
+  - `0`: DirectX12, `1`: Vulkan, `2`: OpenGL.
+  - Returns `FALSE` if called after window creation.
+- `GetRendererBackend() -> uint32_t`
+  - Returns current backend id (`0/1/2`).
+- Environment override:
+  - `APP_RENDERER_BACKEND=dx12|vulkan|opengl` can override backend on window creation.
+
+Note:
+- DirectX12: native renderer path + PIE + Editor UI.
+- OpenGL: renderer path + PIE + Editor UI.
+- Vulkan: renderer selection path + PIE + Editor UI are available. By default it runs through OpenGL fallback path for compatibility.
+- Optional native Vulkan trial: set `APP_VULKAN_NATIVE=1` (requires Vulkan SDK/runtime compatibility).

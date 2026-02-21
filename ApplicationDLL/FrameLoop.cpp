@@ -9,6 +9,7 @@
 
 #include "SceneManager.h"
 #include "Source/EditorUi.h"
+#include "Source/RendererBackend.h"
 
 #include <string>
 #include <tchar.h>
@@ -42,6 +43,7 @@ void RenderGameQuads()
 void DestroyAllGameQuads()
 {
     RuntimeStateRef().g_gameQuads.clear();
+    RuntimeStateRef().g_dummyGameQuads.clear();
     RuntimeStateRef().g_nextGameQuadHandle = 1;
 }
 
@@ -94,7 +96,8 @@ void StartPieImmediate()
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTimeValid = true;
     }
-    if (RuntimeStateRef().g_gameQuads.empty() && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
+    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size() + RuntimeStateRef().g_dummyGameQuads.size();
+    if (totalQuadCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
     {
         RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
         return;
@@ -145,7 +148,14 @@ uint32_t AppRuntime::CreateGameQuad()
     try
     {
         const uint32_t handle = RuntimeStateRef().g_nextGameQuadHandle++;
-        RuntimeStateRef().g_gameQuads[handle] = std::make_unique<PolygonTest>();
+        if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        {
+            RuntimeStateRef().g_gameQuads[handle] = std::make_unique<PolygonTest>();
+        }
+        else
+        {
+            RuntimeStateRef().g_dummyGameQuads.insert(handle);
+        }
         RuntimeStateRef().g_pieGameStatus = "Game quad created. handle=" + std::to_string(handle);
         return handle;
     }
@@ -169,10 +179,16 @@ void AppRuntime::DestroyGameQuad(uint32_t handle)
     }
 
     RuntimeStateRef().g_gameQuads.erase(handle);
+    RuntimeStateRef().g_dummyGameQuads.erase(handle);
 }
 
 void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)
 {
+    if (RuntimeStateRef().g_dummyGameQuads.find(handle) != RuntimeStateRef().g_dummyGameQuads.end())
+    {
+        return;
+    }
+
     const auto it = RuntimeStateRef().g_gameQuads.find(handle);
     if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr)
     {
@@ -217,15 +233,28 @@ void AppRuntime::MessageLoopIteration()
 
     if (RuntimeStateRef().g_imguiInitialized)
     {
-        EditorUi::EnsureSceneRenderSize();
+        if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        {
+            EditorUi::EnsureSceneRenderSize();
+        }
     }
 
-    BeginSceneRenderToTexture();
-    SceneManager::GetInstance().Render();
-    RenderGameQuads();
-    EndSceneRenderToTexture();
+    if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+    {
+        BeginSceneRenderToTexture();
+        SceneManager::GetInstance().Render();
+        RenderGameQuads();
+        EndSceneRenderToTexture();
 
-    RuntimeStateRef().g_DxDevice.PreRender();
+        if (RuntimeStateRef().g_renderDevice != nullptr)
+        {
+            RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
+        }
+    }
+    else if (RuntimeStateRef().g_renderDevice != nullptr)
+    {
+        RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
+    }
 
     if (RuntimeStateRef().g_imguiInitialized)
     {
@@ -240,7 +269,7 @@ void AppRuntime::MessageLoopIteration()
         uiState.moduleSourceText = moduleSourceText.c_str();
         uiState.pieGameModulePath = RuntimeStateRef().g_pieGameModulePath.c_str();
         uiState.pieManagedLastPublishLogPath = RuntimeStateRef().g_pieManagedLastPublishLogPath.c_str();
-        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_gameQuads.size());
+        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_gameQuads.size() + RuntimeStateRef().g_dummyGameQuads.size());
 
         EditorUiCallbacks uiCallbacks = {};
         uiCallbacks.startPie = &StartPie;
@@ -249,7 +278,38 @@ void AppRuntime::MessageLoopIteration()
         EditorUi::RenderFrame(RuntimeStateRef().g_isStandaloneMode, uiState, uiCallbacks);
     }
 
-    RuntimeStateRef().g_DxDevice.Render();
+    if (RuntimeStateRef().g_renderDevice != nullptr)
+    {
+        RuntimeStateRef().g_renderDevice->Render();
+    }
+}
+
+BOOL AppRuntime::SetRendererBackend(uint32_t backend)
+{
+    if (RuntimeStateRef().g_rendererBackendLocked || RuntimeStateRef().g_hwnd != NULL)
+    {
+        return FALSE;
+    }
+
+    switch (backend)
+    {
+    case static_cast<uint32_t>(RendererBackend::DirectX12):
+        RuntimeStateRef().g_rendererBackend = RendererBackend::DirectX12;
+        return TRUE;
+    case static_cast<uint32_t>(RendererBackend::Vulkan):
+        RuntimeStateRef().g_rendererBackend = RendererBackend::Vulkan;
+        return TRUE;
+    case static_cast<uint32_t>(RendererBackend::OpenGL):
+        RuntimeStateRef().g_rendererBackend = RendererBackend::OpenGL;
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+uint32_t AppRuntime::GetRendererBackend() const
+{
+    return static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
 }
 
 void AppRuntime::UpdatePie()

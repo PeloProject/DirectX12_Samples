@@ -172,10 +172,16 @@
     <ClInclude Include="Source\DirectXDevice.h" />
     <ClInclude Include="Source\EditorUi.h" />
     <ClInclude Include="Source\GraphicsDevice.h" />
+    <ClInclude Include="Source\IRenderDevice.h" />
+    <ClInclude Include="Source\Dx12RenderDevice.h" />
     <ClInclude Include="Source\Math\MathUtil.h" />
+    <ClInclude Include="Source\OpenGLRenderDevice.h" />
+    <ClInclude Include="Source\RenderDeviceFactory.h" />
+    <ClInclude Include="Source\RendererBackend.h" />
     <ClInclude Include="Source\Scene\SceneBase.h" />
     <ClInclude Include="Source\Scene\SceneGame.h" />
     <ClInclude Include="Source\Scene\SceneManager.h" />
+    <ClInclude Include="Source\VulkanRenderDevice.h" />
     <ClInclude Include="WinHandleRAII.h" />
   </ItemGroup>
   <ItemGroup>
@@ -193,13 +199,19 @@
     <ClCompile Include="PieLoader.cpp" />
     <ClCompile Include="PolygonTest.cpp" />
     <ClCompile Include="Source\DirectXDevice.cpp" />
+    <ClCompile Include="Source\Dx12RenderDevice.cpp" />
     <ClCompile Include="Source\EditorUi.cpp" />
     <ClCompile Include="Source\GraphicsDevice.cpp" />
     <ClCompile Include="Source\Math\MathUtil.cpp" />
+    <ClCompile Include="Source\OpenGLRenderDevice.cpp" />
+    <ClCompile Include="Source\RenderDeviceFactory.cpp" />
+    <ClCompile Include="Source\RendererBackend.cpp" />
     <ClCompile Include="Source\Scene\SceneBase.cpp" />
     <ClCompile Include="Source\Scene\SceneGame.cpp" />
     <ClCompile Include="Source\Scene\SceneManager.cpp" />
+    <ClCompile Include="Source\VulkanRenderDevice.cpp" />
     <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_opengl2.cpp" />
     <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp" />

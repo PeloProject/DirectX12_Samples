@@ -86,3 +86,13 @@ extern "C" __declspec(dllexport) void MessageLoopIteration()
 {
     Runtime().MessageLoopIteration();
 }
+
+extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend)
+{
+    return Runtime().SetRendererBackend(backend);
+}
+
+extern "C" __declspec(dllexport) uint32_t GetRendererBackend()
+{
+    return Runtime().GetRendererBackend();
+}

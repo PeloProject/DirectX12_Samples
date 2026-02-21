@@ -4,7 +4,10 @@
 #include "FrameLoop.h"
 
 #include "SceneManager.h"
+#include "Source/DirectXDevice.h"
 #include "Source/EditorUi.h"
+#include "Source/RenderDeviceFactory.h"
+#include "Source/RendererBackend.h"
 
 #include <algorithm>
 #include <tchar.h>
@@ -14,8 +17,9 @@ namespace
     bool InitializeImGui()
     {
         return EditorUi::Initialize(
+            RuntimeStateRef().g_rendererBackend,
             RuntimeStateRef().g_hwnd,
-            RuntimeStateRef().g_DxDevice.GetCommandQueue(),
+            RuntimeStateRef().g_renderDevice != nullptr ? RuntimeStateRef().g_renderDevice->GetDx12CommandQueue() : nullptr,
             static_cast<UINT>(Application::GetWindowWidth()),
             static_cast<UINT>(Application::GetWindowHeight()));
     }
@@ -83,8 +87,16 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     case WM_DESTROY:
         EditorUi::Shutdown();
         RuntimeStateRef().g_imguiInitialized = false;
-        RuntimeStateRef().g_DxDevice.Shutdown();
+        if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        {
+            if (RuntimeStateRef().g_renderDevice != nullptr)
+            {
+                RuntimeStateRef().g_renderDevice->Shutdown();
+            }
+        }
+        RuntimeStateRef().g_renderDevice.reset();
         RuntimeStateRef().g_hwnd = NULL;
+        RuntimeStateRef().g_rendererBackendLocked = false;
         return 0;
     default:
         if (RuntimeStateRef().g_imguiInitialized && EditorUi::HandleWndProc(hwnd, msg, wParam, lParam))
@@ -116,6 +128,9 @@ HWND AppRuntime::CreateNativeWindow()
 
     RegisterClass(&wc);
 
+    RuntimeStateRef().g_rendererBackend = ResolveRendererBackendFromEnvironment(RuntimeStateRef().g_rendererBackend);
+    RuntimeStateRef().g_rendererBackendLocked = true;
+
     RECT windowRect = { 0, 0, Application::GetWindowWidth(), Application::GetWindowHeight() };
     AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
@@ -141,9 +156,30 @@ HWND AppRuntime::CreateNativeWindow()
                 static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top)));
         }
 
-        RuntimeStateRef().g_DxDevice.Initialize(RuntimeStateRef().g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight());
-        ConfigureD3D12DebugFilters();
-        RuntimeStateRef().g_imguiInitialized = InitializeImGui();
+        RuntimeStateRef().g_renderDevice = CreateRenderDevice(RuntimeStateRef().g_rendererBackend);
+        if (RuntimeStateRef().g_renderDevice == nullptr)
+        {
+            RuntimeStateRef().g_imguiInitialized = false;
+            RuntimeStateRef().g_pieGameStatus = "Failed to create render device";
+        }
+        else if (!RuntimeStateRef().g_renderDevice->Initialize(RuntimeStateRef().g_hwnd, Application::GetWindowWidth(), Application::GetWindowHeight()))
+        {
+            RuntimeStateRef().g_imguiInitialized = false;
+            RuntimeStateRef().g_pieGameStatus = "Render device initialization failed";
+            RuntimeStateRef().g_renderDevice.reset();
+        }
+        else if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        {
+            ConfigureD3D12DebugFilters();
+            RuntimeStateRef().g_imguiInitialized = InitializeImGui();
+        }
+        else
+        {
+            RuntimeStateRef().g_imguiInitialized = InitializeImGui();
+            RuntimeStateRef().g_pieGameStatus =
+                std::string("Renderer backend selected: ") + RendererBackendToString(RuntimeStateRef().g_rendererBackend) +
+                " (scene texture path is DX12-only)";
+        }
 
         SceneManager::GetInstance().ChangeScene(0);
     }
@@ -189,9 +225,14 @@ void AppRuntime::DestroyNativeWindow()
 
     StopPieImmediate();
     ShutdownImGui();
-    RuntimeStateRef().g_DxDevice.Shutdown();
+    if (RuntimeStateRef().g_renderDevice != nullptr)
+    {
+        RuntimeStateRef().g_renderDevice->Shutdown();
+    }
+    RuntimeStateRef().g_renderDevice.reset();
     DestroyWindow(RuntimeStateRef().g_hwnd);
     RuntimeStateRef().g_hwnd = NULL;
+    RuntimeStateRef().g_rendererBackendLocked = false;
 }
 
 ///=====================================================================
@@ -209,7 +250,10 @@ void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     {
         Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
         EditorUi::RequestSceneRenderSize(width, height);
-        RuntimeStateRef().g_DxDevice.Resize(width, height);
+        if (RuntimeStateRef().g_renderDevice != nullptr)
+        {
+            RuntimeStateRef().g_renderDevice->Resize(width, height);
+        }
         if (RuntimeStateRef().g_imguiInitialized)
         {
             EditorUi::EnsureSceneRenderSize();

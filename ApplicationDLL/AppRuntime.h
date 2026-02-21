@@ -1,6 +1,8 @@
 ﻿#pragma once
 
-#include "Source/DirectXDevice.h"
+#include "Source/IRenderDevice.h"
+#include "Source/RendererBackend.h"
+
 #include <PolygonTest.h>
 #include <Windows.h>
 #include <cstdint>
@@ -8,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 using PieTickCallback = void(__cdecl*)(float);
 using PieGameStartFn = void(__cdecl*)();
@@ -17,7 +20,7 @@ using PieGameStopFn = void(__cdecl*)();
 struct RuntimeState
 {
     HWND g_hwnd = NULL;
-    DirectXDevice g_DxDevice;
+    std::unique_ptr<IRenderDevice> g_renderDevice;
     bool g_imguiInitialized = false;
     PieTickCallback g_pieTickCallback = nullptr;
     bool g_isPieRunning = false;
@@ -48,7 +51,10 @@ struct RuntimeState
     float g_pieManagedPublishCheckTimer = 0.0f;
     float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
+    std::unordered_set<uint32_t> g_dummyGameQuads;
     uint32_t g_nextGameQuadHandle = 1;
+    RendererBackend g_rendererBackend = RendererBackend::Vulkan;
+    bool g_rendererBackendLocked = false;
 };
 
 class AppRuntime
@@ -72,13 +78,11 @@ public:
     uint32_t CreateGameQuad();
     void DestroyGameQuad(uint32_t handle);
     void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
-    #pragma region フレームループ関連
-    void MessageLoopIteration();
-    #pragma endregion
+    BOOL SetRendererBackend(uint32_t backend);
+    uint32_t GetRendererBackend() const;
 
-    #pragma region PIE関連
+    void MessageLoopIteration();
     void UpdatePie();
-    #pragma endregion
     LRESULT HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     RuntimeState& MutableState();
@@ -94,3 +98,5 @@ RuntimeState& RuntimeStateRef();
 
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
+extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend);
+extern "C" __declspec(dllexport) uint32_t GetRendererBackend();

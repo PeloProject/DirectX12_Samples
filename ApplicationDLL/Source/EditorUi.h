@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Windows.h>
+#include "RendererBackend.h"
 
 struct ID3D12CommandQueue;
 
@@ -23,7 +24,7 @@ struct EditorUiCallbacks
 
 namespace EditorUi
 {
-    bool Initialize(HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight);
+    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight);
     void Shutdown();
     bool IsInitialized();
     bool HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

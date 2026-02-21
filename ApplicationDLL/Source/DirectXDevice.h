@@ -48,7 +48,7 @@ public:
 	bool CreateFence();
 
 	void Render();
-	void PreRender();
+    void PreRender(const float clearColor[4] = nullptr);
 	bool Resize(UINT width, UINT height);
 
 	void WaitForPreviousFrame();
