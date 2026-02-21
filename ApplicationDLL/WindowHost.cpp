@@ -51,34 +51,32 @@ namespace
     }
 }
 
+///=====================================================================
+/// @brief ウィンドウプロシージャ
+/// @param hwnd ウィンドウへのハンドル
+/// @param msg  メッセージコード
+/// @param wParam メッセージに関する追加パラメータ
+/// @param lParam メッセージに関する追加パラメータ
+/// @return 
+///=====================================================================
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     return Runtime().HandleWndProc(hwnd, msg, wParam, lParam);
 }
 
+///=====================================================================
+/// @brief ウィンドウプロシージャの操作
+/// @param hwnd ウィンドウへのハンドル
+/// @param msg  メッセージコード
+/// @param wParam メッセージに関する追加パラメータ
+/// @param lParam メッセージに関する追加パラメータ
+/// @return 
+///=====================================================================
 LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)
     {
-    case WM_SIZE:
-    {
-        if (hwnd == RuntimeStateRef().g_hwnd)
-        {
-            const UINT width = LOWORD(lParam);
-            const UINT height = HIWORD(lParam);
-            if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
-            {
-                Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
-                EditorUi::RequestSceneRenderSize(width, height);
-                RuntimeStateRef().g_DxDevice.Resize(width, height);
-                if (RuntimeStateRef().g_imguiInitialized)
-                {
-                    EditorUi::EnsureSceneRenderSize();
-                }
-            }
-        }
-        return 0;
-    }
+    case WM_SIZE: ChangeWindowSize(hwnd, msg, wParam, lParam); return 0;
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
@@ -88,21 +86,6 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         RuntimeStateRef().g_DxDevice.Shutdown();
         RuntimeStateRef().g_hwnd = NULL;
         return 0;
-    case WM_PAINT:
-    {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-
-        RECT rect;
-        GetClientRect(hwnd, &rect);
-
-        FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW + 1));
-        const TCHAR* text = _T("Hello from C++!");
-        DrawText(hdc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
     default:
         if (RuntimeStateRef().g_imguiInitialized && EditorUi::HandleWndProc(hwnd, msg, wParam, lParam))
         {
@@ -112,6 +95,10 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 }
 
+///=====================================================================
+/// @brief ウィンドウの生成
+/// @return ウィンドウハンドル
+///=====================================================================
 HWND AppRuntime::CreateNativeWindow()
 {
     SetConsoleOutputCP(CP_UTF8);
@@ -164,31 +151,69 @@ HWND AppRuntime::CreateNativeWindow()
     return RuntimeStateRef().g_hwnd;
 }
 
+///=====================================================================
+/// @brief ウィンドウの表示
+///=====================================================================
 void AppRuntime::ShowNativeWindow()
 {
-    if (RuntimeStateRef().g_hwnd != NULL)
+    if (RuntimeStateRef().g_hwnd == NULL)
     {
-        ShowWindow(RuntimeStateRef().g_hwnd, SW_SHOW);
-        UpdateWindow(RuntimeStateRef().g_hwnd);
+        return;
     }
+    ShowWindow(RuntimeStateRef().g_hwnd, SW_SHOW);
+    UpdateWindow(RuntimeStateRef().g_hwnd);
+    
 }
 
+///=====================================================================
+/// @brief ウィンドウの非表示
+///=====================================================================
 void AppRuntime::HideNativeWindow()
 {
-    if (RuntimeStateRef().g_hwnd != NULL)
+    if (RuntimeStateRef().g_hwnd == NULL)
     {
-        ShowWindow(RuntimeStateRef().g_hwnd, SW_HIDE);
+        return;
     }
+    ShowWindow(RuntimeStateRef().g_hwnd, SW_HIDE);
 }
 
+///=====================================================================
+/// @brief ウィンドウの削除
+///=====================================================================
 void AppRuntime::DestroyNativeWindow()
 {
-    if (RuntimeStateRef().g_hwnd != NULL)
+    if (RuntimeStateRef().g_hwnd == NULL)
     {
-        StopPieImmediate();
-        ShutdownImGui();
-        RuntimeStateRef().g_DxDevice.Shutdown();
-        DestroyWindow(RuntimeStateRef().g_hwnd);
-        RuntimeStateRef().g_hwnd = NULL;
+        return;
     }
+
+    StopPieImmediate();
+    ShutdownImGui();
+    RuntimeStateRef().g_DxDevice.Shutdown();
+    DestroyWindow(RuntimeStateRef().g_hwnd);
+    RuntimeStateRef().g_hwnd = NULL;
+}
+
+///=====================================================================
+/// @brief ウィンドウのサイズの変更
+///=====================================================================
+void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (hwnd != RuntimeStateRef().g_hwnd)
+    {
+        return;
+    }
+    const UINT width = LOWORD(lParam);
+    const UINT height = HIWORD(lParam);
+    if (wParam != SIZE_MINIMIZED && width > 0 && height > 0)
+    {
+        Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
+        EditorUi::RequestSceneRenderSize(width, height);
+        RuntimeStateRef().g_DxDevice.Resize(width, height);
+        if (RuntimeStateRef().g_imguiInitialized)
+        {
+            EditorUi::EnsureSceneRenderSize();
+        }
+    }
+
 }

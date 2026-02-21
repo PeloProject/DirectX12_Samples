@@ -60,6 +60,9 @@ public:
     void ShowNativeWindow();
     void HideNativeWindow();
     void DestroyNativeWindow();
+
+    void ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
     void SetPieTickCallback(PieTickCallback callback);
     void RequestStartPie();
     void RequestStopPie();
