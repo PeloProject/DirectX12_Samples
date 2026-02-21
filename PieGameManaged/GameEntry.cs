@@ -18,6 +18,9 @@ internal static class GameEntry
     [DllImport("ApplicationDLL.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern void SetGameQuadTransform(uint handle, float centerX, float centerY, float width, float height);
 
+    /// <summary>
+    /// 初期化
+    /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "GameStart")]
     public static void GameStart()
     {

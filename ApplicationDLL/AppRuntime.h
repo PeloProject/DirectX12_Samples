@@ -72,7 +72,13 @@ public:
     uint32_t CreateGameQuad();
     void DestroyGameQuad(uint32_t handle);
     void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
+    #pragma region フレームループ関連
     void MessageLoopIteration();
+    #pragma endregion
+
+    #pragma region PIE関連
+    void UpdatePie();
+    #pragma endregion
     LRESULT HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     RuntimeState& MutableState();

@@ -71,6 +71,9 @@ void AppRuntime::SetStandaloneMode(BOOL enabled)
     }
 }
 
+///====================================================
+/// @brief PIE開始
+///====================================================
 void StartPieImmediate()
 {
     if (!EnsurePieGameModuleLoaded())
@@ -102,6 +105,9 @@ void StartPieImmediate()
     }
 }
 
+///====================================================
+/// @brief PIE停止
+///====================================================
 void StopPieImmediate()
 {
     if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameStop != nullptr)
@@ -176,6 +182,9 @@ void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float cent
     it->second->SetTransform(centerX, centerY, width, height);
 }
 
+///==========================================================
+/// @brief メッセージループ
+///==========================================================
 void AppRuntime::MessageLoopIteration()
 {
     if (RuntimeStateRef().g_hwnd == NULL)
@@ -190,24 +199,9 @@ void AppRuntime::MessageLoopIteration()
         DispatchMessage(&msg);
     }
 
-    if (RuntimeStateRef().g_hwnd == NULL)
-    {
-        return;
-    }
-
-    if (RuntimeStateRef().g_pendingStopPie)
-    {
-        RuntimeStateRef().g_pendingStopPie = false;
-        StopPieImmediate();
-    }
-    if (RuntimeStateRef().g_pendingStartPie)
-    {
-        RuntimeStateRef().g_pendingStartPie = false;
-        StartPieImmediate();
-    }
+    UpdatePie();
 
     constexpr float kFixedDeltaTime = 1.0f / 60.0f;
-
     SceneManager::GetInstance().Update(kFixedDeltaTime);
     TickPieManagedAutoPublish(kFixedDeltaTime);
 
@@ -219,14 +213,6 @@ void AppRuntime::MessageLoopIteration()
             RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
             TryHotReloadPieGameModule();
         }
-    }
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameTick != nullptr)
-    {
-        RuntimeStateRef().g_pieGameTick(kFixedDeltaTime);
-    }
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieTickCallback != nullptr)
-    {
-        RuntimeStateRef().g_pieTickCallback(kFixedDeltaTime);
     }
 
     if (RuntimeStateRef().g_imguiInitialized)
@@ -264,4 +250,31 @@ void AppRuntime::MessageLoopIteration()
     }
 
     RuntimeStateRef().g_DxDevice.Render();
+}
+
+void AppRuntime::UpdatePie()
+{
+    // PIE停止
+    if (RuntimeStateRef().g_pendingStopPie)
+    {
+        RuntimeStateRef().g_pendingStopPie = false;
+        StopPieImmediate();
+    }
+
+    // PIE開始
+    if (RuntimeStateRef().g_pendingStartPie)
+    {
+        RuntimeStateRef().g_pendingStartPie = false;
+        StartPieImmediate();
+    }
+
+    constexpr float kFixedDeltaTime = 1.0f / 60.0f;
+    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameTick != nullptr)
+    {
+        RuntimeStateRef().g_pieGameTick(kFixedDeltaTime);
+    }
+    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieTickCallback != nullptr)
+    {
+        RuntimeStateRef().g_pieTickCallback(kFixedDeltaTime);
+    }
 }

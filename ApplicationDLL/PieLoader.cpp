@@ -57,6 +57,7 @@ namespace
             return false;
         }
 
+        // C# のゲームのメイン関数の登録
         PieGameStartFn startFn = reinterpret_cast<PieGameStartFn>(GetProcAddress(module.Get(), "GameStart"));
         PieGameTickFn tickFn = reinterpret_cast<PieGameTickFn>(GetProcAddress(module.Get(), "GameTick"));
         PieGameStopFn stopFn = reinterpret_cast<PieGameStopFn>(GetProcAddress(module.Get(), "GameStop"));
