@@ -2,9 +2,14 @@
 #include "EditorUi.h"
 
 #include "DirectXDevice.h"
+#include "IRenderDevice.h"
+#include "VulkanRenderDevice.h"
 
 #include "ThirdParty/imgui/imgui.h"
 #include "ThirdParty/imgui/backends/imgui_impl_dx12.h"
+#if APPLICATIONDLL_HAS_VULKAN
+#include "ThirdParty/imgui/backends/imgui_impl_vulkan.h"
+#endif
 #include "ThirdParty/imgui/backends/imgui_impl_opengl2.h"
 #include "ThirdParty/imgui/backends/imgui_impl_win32.h"
 
@@ -18,7 +23,8 @@ namespace
 {
     static bool g_initialized = false;
     static HWND g_hwnd = nullptr;
-    static RendererBackend g_rendererBackend = RendererBackend::DirectX12;
+    static RendererBackend g_rendererBackend = RendererBackend::OpenGL;
+    static bool g_imguiVulkanInitialized = false;
 
     static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> g_imguiSrvHeap;
     static constexpr UINT kFrameCount = 2;
@@ -317,6 +323,13 @@ namespace
         }
     }
 
+    ///========================================================================
+    /// <summary>
+	/// ドッキングスペースを使用したエディタUIの描画
+    /// </summary>
+    /// <param name="state"></param>
+    /// <param name="callbacks"></param>
+    ///========================================================================
     static void RenderEditorDockingUi(const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
     {
         ImGuiWindowFlags hostWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -391,6 +404,7 @@ namespace
         ImGui::Text("Play In Editor");
         if (ImGui::Button(state.isPieRunning ? "Stop PIE" : "Start PIE"))
         {
+            LOG_DEBUG("PIE button clicked: running=%d", state.isPieRunning ? 1 : 0);
             if (state.isPieRunning)
             {
                 if (callbacks.stopPie != nullptr)
@@ -415,6 +429,7 @@ namespace
         if (isDx12) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
         if (ImGui::Button("DirectX12"))
         {
+            LOG_DEBUG("Renderer button clicked: DirectX12");
             g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::DirectX12);
             g_rendererSwitchQueued = true;
             g_rendererSwitchDelayFrames = 1;
@@ -424,6 +439,7 @@ namespace
         if (isVulkan) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
         if (ImGui::Button("Vulkan"))
         {
+            LOG_DEBUG("Renderer button clicked: Vulkan");
             g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::Vulkan);
             g_rendererSwitchQueued = true;
             g_rendererSwitchDelayFrames = 1;
@@ -433,9 +449,11 @@ namespace
         if (isOpenGL) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
         if (ImGui::Button("OpenGL"))
         {
+            LOG_DEBUG("Renderer button clicked: OpenGL");
             g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::OpenGL);
             g_rendererSwitchQueued = true;
             g_rendererSwitchDelayFrames = 1;
+
         }
         if (isOpenGL) { ImGui::PopStyleColor(); }
 
@@ -654,60 +672,89 @@ namespace
 
 namespace EditorUi
 {
-    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight)
+    bool InitializeOpenGL(HWND hwnd, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight);
+
+    bool InitializeDirectX12(HWND hwnd, ID3D12CommandQueue* commandQueue, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight)
     {
-        g_rendererBackend = backend;
-
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-        ImGui::StyleColorsDark();
-        ImGui_ImplWin32_Init(hwnd);
-
-        if (backend == RendererBackend::DirectX12)
+        ID3D12Device* device = DirectXDevice::GetDevice();
+        if (device == nullptr || commandQueue == nullptr)
         {
-            ID3D12Device* device = DirectXDevice::GetDevice();
-            if (device == nullptr || commandQueue == nullptr)
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+        srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        srvHeapDesc.NumDescriptors = g_imguiSrvCapacity;
+        srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        if (FAILED(device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&g_imguiSrvHeap))))
+        {
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        g_imguiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        g_imguiSrvAllocated = 0;
+
+        ImGui_ImplDX12_InitInfo initInfo = {};
+        initInfo.Device = device;
+        initInfo.CommandQueue = commandQueue;
+        initInfo.NumFramesInFlight = kFrameCount;
+        initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        initInfo.SrvDescriptorHeap = g_imguiSrvHeap.Get();
+        initInfo.SrvDescriptorAllocFn = ImGuiSrvDescriptorAlloc;
+        initInfo.SrvDescriptorFreeFn = ImGuiSrvDescriptorFree;
+
+        if (!ImGui_ImplDX12_Init(&initInfo))
+        {
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+            g_imguiSrvHeap.Reset();
+            return false;
+        }
+		return true;
+	}
+
+    bool InitializeVulkan(HWND hwnd, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight)
+    {
+        IM_UNUSED(hwnd);
+        IM_UNUSED(initialWidth);
+        IM_UNUSED(initialHeight);
+#if APPLICATIONDLL_HAS_VULKAN
+        VulkanRenderDevice* vulkanDevice = dynamic_cast<VulkanRenderDevice*>(renderDevice);
+        if (vulkanDevice != nullptr && vulkanDevice->IsUsingNativeVulkan())
+        {
+            ImGui_ImplVulkan_InitInfo initInfo = {};
+            initInfo.ApiVersion = VK_API_VERSION_1_0;
+            initInfo.Instance = vulkanDevice->GetVkInstance();
+            initInfo.PhysicalDevice = vulkanDevice->GetVkPhysicalDevice();
+            initInfo.Device = vulkanDevice->GetVkDevice();
+            initInfo.QueueFamily = vulkanDevice->GetVkGraphicsQueueFamilyIndex();
+            initInfo.Queue = vulkanDevice->GetVkGraphicsQueue();
+            initInfo.DescriptorPool = vulkanDevice->GetVkImGuiDescriptorPool();
+            initInfo.RenderPass = vulkanDevice->GetVkRenderPass();
+            initInfo.MinImageCount = 2;
+            initInfo.ImageCount = (std::max)(2u, vulkanDevice->GetVkSwapchainImageCount());
+            initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+            if (!ImGui_ImplVulkan_Init(&initInfo))
             {
                 ImGui_ImplWin32_Shutdown();
                 ImGui::DestroyContext();
                 return false;
             }
 
-            D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-            srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-            srvHeapDesc.NumDescriptors = g_imguiSrvCapacity;
-            srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-            if (FAILED(device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&g_imguiSrvHeap))))
+            if (!ImGui_ImplVulkan_CreateFontsTexture())
             {
+                ImGui_ImplVulkan_Shutdown();
                 ImGui_ImplWin32_Shutdown();
                 ImGui::DestroyContext();
                 return false;
             }
-
-            g_imguiSrvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            g_imguiSrvAllocated = 0;
-
-            ImGui_ImplDX12_InitInfo initInfo = {};
-            initInfo.Device = device;
-            initInfo.CommandQueue = commandQueue;
-            initInfo.NumFramesInFlight = kFrameCount;
-            initInfo.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-            initInfo.DSVFormat = DXGI_FORMAT_UNKNOWN;
-            initInfo.SrvDescriptorHeap = g_imguiSrvHeap.Get();
-            initInfo.SrvDescriptorAllocFn = ImGuiSrvDescriptorAlloc;
-            initInfo.SrvDescriptorFreeFn = ImGuiSrvDescriptorFree;
-
-            if (!ImGui_ImplDX12_Init(&initInfo))
-            {
-                ImGui_ImplWin32_Shutdown();
-                ImGui::DestroyContext();
-                g_imguiSrvHeap.Reset();
-                return false;
-            }
+            g_imguiVulkanInitialized = true;
         }
         else
         {
@@ -718,6 +765,67 @@ namespace EditorUi
                 return false;
             }
         }
+        return true;
+#else
+		return InitializeOpenGL(hwnd, renderDevice, initialWidth, initialHeight);
+#endif
+    }
+
+    bool InitializeOpenGL(HWND hwnd, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight)
+    {
+        IM_UNUSED(hwnd);
+        IM_UNUSED(renderDevice);
+        IM_UNUSED(initialWidth);
+        IM_UNUSED(initialHeight);
+        if (!ImGui_ImplOpenGL2_Init())
+        {
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+            return false;
+        }
+        return true;
+	}
+
+    //========================================
+    // Editor UI public API
+	//========================================
+    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight)
+    {
+        Shutdown();
+        g_rendererBackend = backend;
+        g_imguiVulkanInitialized = false;
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+        ImGui::StyleColorsDark();
+        ImGui_ImplWin32_Init(hwnd);
+
+		bool backendInitResult = false;
+        switch (backend)
+        {
+            case RendererBackend::DirectX12:
+				backendInitResult = InitializeDirectX12(hwnd, commandQueue, renderDevice, initialWidth, initialHeight);
+				break;
+            case RendererBackend::Vulkan:
+				backendInitResult = InitializeVulkan(hwnd, renderDevice, initialWidth, initialHeight);
+                break;
+            case RendererBackend::OpenGL:
+				backendInitResult = InitializeOpenGL(hwnd, renderDevice, initialWidth, initialHeight);
+                break;
+            default:
+                ImGui_ImplWin32_Shutdown();
+                ImGui::DestroyContext();
+				return false;
+        }
+		if (!backendInitResult)
+		{
+			return false;
+		}
+        
 
         g_hwnd = hwnd;
         g_sceneRequestedRenderWidth = initialWidth;
@@ -730,6 +838,11 @@ namespace EditorUi
         return true;
     }
 
+    ///=======================================
+    /// <summary>
+	/// エディタUIをシャットダウンします。
+    /// </summary>
+    ///=======================================
     void Shutdown()
     {
         if (!g_initialized)
@@ -740,6 +853,22 @@ namespace EditorUi
         if (g_rendererBackend == RendererBackend::DirectX12)
         {
             ImGui_ImplDX12_Shutdown();
+        }
+        else if (g_rendererBackend == RendererBackend::Vulkan)
+        {
+#if APPLICATIONDLL_HAS_VULKAN
+            if (g_imguiVulkanInitialized)
+            {
+                ImGui_ImplVulkan_Shutdown();
+            }
+            else
+            {
+                ImGui_ImplOpenGL2_Shutdown();
+            }
+#else
+            ImGui_ImplOpenGL2_Shutdown();
+#endif
+            g_imguiVulkanInitialized = false;
         }
         else
         {
@@ -766,17 +895,41 @@ namespace EditorUi
             return false;
         }
 
-        const bool handled = ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
+        (void)ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
+        ImGuiIO& io = ImGui::GetIO();
+        const bool isMouseMessage =
+            msg == WM_MOUSEMOVE ||
+            msg == WM_NCMOUSEMOVE ||
+            msg == WM_MOUSELEAVE ||
+            msg == WM_NCMOUSELEAVE ||
+            msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK ||
+            msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP || msg == WM_RBUTTONDBLCLK ||
+            msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP || msg == WM_MBUTTONDBLCLK ||
+            msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK ||
+            msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL;
+        const bool isKeyboardMessage =
+            msg == WM_KEYDOWN || msg == WM_KEYUP ||
+            msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP ||
+            msg == WM_CHAR;
+
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP)
         {
-            ImGuiIO& io = ImGui::GetIO();
             LOG_DEBUG("EditorUi::HandleWndProc msg=%u handled=%d io.MouseDown[0]=%d io.WantCaptureMouse=%d",
                 msg,
-                handled ? 1 : 0,
+                isMouseMessage && io.WantCaptureMouse ? 1 : 0,
                 io.MouseDown[0] ? 1 : 0,
                 io.WantCaptureMouse ? 1 : 0);
         }
-        return handled;
+
+        if (isMouseMessage)
+        {
+            return io.WantCaptureMouse;
+        }
+        if (isKeyboardMessage)
+        {
+            return io.WantCaptureKeyboard;
+        }
+        return false;
     }
 
     bool WantsMouseCapture()
@@ -886,7 +1039,7 @@ namespace EditorUi
         commandList->ResourceBarrier(1, &barrier);
     }
 
-    void RenderFrame(bool isStandaloneMode, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
+    void RenderFrame(bool isStandaloneMode, IRenderDevice* renderDevice, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
     {
         if (!g_initialized)
         {
@@ -897,29 +1050,26 @@ namespace EditorUi
         {
             ImGui_ImplDX12_NewFrame();
         }
+        else if (g_rendererBackend == RendererBackend::Vulkan)
+        {
+#if APPLICATIONDLL_HAS_VULKAN
+            if (g_imguiVulkanInitialized)
+            {
+                ImGui_ImplVulkan_NewFrame();
+            }
+            else
+            {
+                ImGui_ImplOpenGL2_NewFrame();
+            }
+#else
+            ImGui_ImplOpenGL2_NewFrame();
+#endif
+        }
         else
         {
             ImGui_ImplOpenGL2_NewFrame();
         }
         ImGui_ImplWin32_NewFrame();
-
-        if (g_rendererBackend != RendererBackend::DirectX12)
-        {
-            ImGuiIO& io = ImGui::GetIO();
-            POINT cursorPos = {};
-            if (g_hwnd != nullptr && GetCursorPos(&cursorPos) && ScreenToClient(g_hwnd, &cursorPos))
-            {
-                io.AddMousePosEvent(static_cast<float>(cursorPos.x), static_cast<float>(cursorPos.y));
-            }
-            else
-            {
-                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-            }
-
-            io.AddMouseButtonEvent(0, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-            io.AddMouseButtonEvent(1, (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-            io.AddMouseButtonEvent(2, (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
-        }
 
         if (g_rendererBackend != RendererBackend::DirectX12)
         {
@@ -948,6 +1098,24 @@ namespace EditorUi
             ID3D12DescriptorHeap* descriptorHeaps[] = { g_imguiSrvHeap.Get() };
             commandList->SetDescriptorHeaps(1, descriptorHeaps);
             ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+        }
+        else if (g_rendererBackend == RendererBackend::Vulkan)
+        {
+#if APPLICATIONDLL_HAS_VULKAN
+            if (g_imguiVulkanInitialized)
+            {
+                if (renderDevice != nullptr)
+                {
+                    renderDevice->SetImGuiDrawData(ImGui::GetDrawData());
+                }
+            }
+            else
+            {
+                ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+            }
+#else
+            ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+#endif
         }
         else
         {

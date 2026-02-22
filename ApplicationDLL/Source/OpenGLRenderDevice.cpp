@@ -159,7 +159,19 @@ void OpenGLRenderDevice::PreRender(const float clearColor[4])
         const GLsizei viewportWidth = static_cast<GLsizei>((std::max)(1L, clientRect.right - clientRect.left));
         const GLsizei viewportHeight = static_cast<GLsizei>((std::max)(1L, clientRect.bottom - clientRect.top));
         glViewport(0, 0, viewportWidth, viewportHeight);
+        glScissor(0, 0, viewportWidth, viewportHeight);
     }
+
+    // Reset critical state so previous frame/backend draw state doesn't leak into clear/present.
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+    glDrawBuffer(GL_BACK);
+    glReadBuffer(GL_BACK);
+
     glClearColor(c ? c[0] : 0.1f, c ? c[1] : 0.1f, c ? c[2] : 0.1f, c ? c[3] : 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
@@ -211,4 +223,55 @@ void OpenGLRenderDevice::Render()
             }
         }
     }
+}
+
+void OpenGLRenderDevice::DrawQuadNdc(float centerX, float centerY, float width, float height)
+{
+    if (hdc_ == nullptr || hglrc_ == nullptr)
+    {
+        return;
+    }
+
+    if (!wglMakeCurrent(hdc_, hglrc_))
+    {
+        return;
+    }
+
+    const float halfWidth = (std::max)(width * 0.5f, 0.005f);
+    const float halfHeight = (std::max)(height * 0.5f, 0.005f);
+    const float left = centerX - halfWidth;
+    const float right = centerX + halfWidth;
+    const float bottom = centerY - halfHeight;
+    const float top = centerY + halfHeight;
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glBegin(GL_TRIANGLES);
+    glColor4f(0.95f, 0.65f, 0.15f, 1.0f);
+    glVertex2f(left, bottom);
+    glVertex2f(left, top);
+    glVertex2f(right, bottom);
+
+    glColor4f(0.95f, 0.65f, 0.15f, 1.0f);
+    glVertex2f(right, bottom);
+    glVertex2f(left, top);
+    glVertex2f(right, top);
+    glEnd();
+
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }

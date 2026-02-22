@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 struct ID3D12CommandQueue;
+struct ImDrawData;
 
 class IRenderDevice
 {
@@ -18,6 +19,9 @@ public:
     virtual void PreRender(const float clearColor[4]) = 0;
     virtual void Render() = 0;
     virtual bool PrepareImGuiRenderContext() { return true; }
+    virtual bool SupportsEditorUi() const { return true; }
+    virtual void SetImGuiDrawData(ImDrawData* drawData) { (void)drawData; }
+    virtual void DrawQuadNdc(float centerX, float centerY, float width, float height) {}
 
     virtual ID3D12CommandQueue* GetDx12CommandQueue() { return nullptr; }
 };

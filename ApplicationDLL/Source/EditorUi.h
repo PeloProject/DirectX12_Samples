@@ -4,6 +4,7 @@
 #include "RendererBackend.h"
 
 struct ID3D12CommandQueue;
+class IRenderDevice;
 
 struct EditorUiRuntimeState
 {
@@ -26,7 +27,7 @@ struct EditorUiCallbacks
 
 namespace EditorUi
 {
-    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, UINT initialWidth, UINT initialHeight);
+    bool Initialize(RendererBackend backend, HWND hwnd, ID3D12CommandQueue* commandQueue, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight);
     void Shutdown();
     bool IsInitialized();
     bool HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -39,5 +40,5 @@ namespace EditorUi
     void BeginSceneRenderToTexture(bool isPieRunning, const float* gameClearColor, const float* defaultClearColor);
     void EndSceneRenderToTexture();
 
-    void RenderFrame(bool isStandaloneMode, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks);
+    void RenderFrame(bool isStandaloneMode, IRenderDevice* renderDevice, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks);
 }

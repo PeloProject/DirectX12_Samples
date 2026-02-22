@@ -5,6 +5,7 @@ using CreateNativeWindowFn = HWND(__cdecl*)();
 using ShowNativeWindowFn = void(__cdecl*)();
 using DestroyNativeWindowFn = void(__cdecl*)();
 using MessageLoopIterationFn = void(__cdecl*)();
+using GetNativeWindowHandleFn = HWND(__cdecl*)();
 using StartPieFn = void(__cdecl*)();
 using StopPieFn = void(__cdecl*)();
 using SetStandaloneModeFn = void(__cdecl*)(BOOL);
@@ -64,6 +65,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     auto showNativeWindow = reinterpret_cast<ShowNativeWindowFn>(GetProcAddress(module, "ShowNativeWindow"));
     auto destroyNativeWindow = reinterpret_cast<DestroyNativeWindowFn>(GetProcAddress(module, "DestroyNativeWindow"));
     auto messageLoopIteration = reinterpret_cast<MessageLoopIterationFn>(GetProcAddress(module, "MessageLoopIteration"));
+    auto getNativeWindowHandle = reinterpret_cast<GetNativeWindowHandleFn>(GetProcAddress(module, "GetNativeWindowHandle"));
     auto startPie = reinterpret_cast<StartPieFn>(GetProcAddress(module, "StartPie"));
     auto stopPie = reinterpret_cast<StopPieFn>(GetProcAddress(module, "StopPie"));
     auto setStandaloneMode = reinterpret_cast<SetStandaloneModeFn>(GetProcAddress(module, "SetStandaloneMode"));
@@ -102,9 +104,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         startPie();
     }
 
-    while (IsWindow(hwnd))
+    while (true)
     {
         messageLoopIteration();
+        HWND activeHwnd = (getNativeWindowHandle != nullptr) ? getNativeWindowHandle() : hwnd;
+        if (activeHwnd == nullptr || !IsWindow(activeHwnd))
+        {
+            break;
+        }
         Sleep(16);
     }
 

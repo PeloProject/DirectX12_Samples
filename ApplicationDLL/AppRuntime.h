@@ -2,15 +2,14 @@
 
 #include "Source/IRenderDevice.h"
 #include "Source/RendererBackend.h"
+#include "GameQuad.h"
 
-#include <PolygonTest.h>
 #include <Windows.h>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 using PieTickCallback = void(__cdecl*)(float);
 using PieGameStartFn = void(__cdecl*)();
@@ -50,8 +49,7 @@ struct RuntimeState
     float g_pieHotReloadCheckTimer = 0.0f;
     float g_pieManagedPublishCheckTimer = 0.0f;
     float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
-    std::unordered_set<uint32_t> g_dummyGameQuads;
+    std::unordered_map<uint32_t, std::unique_ptr<IGameQuad>> g_gameQuads;
     uint32_t g_nextGameQuadHandle = 1;
     RendererBackend g_displayRendererBackend = RendererBackend::DirectX12;
     RendererBackend g_rendererBackend = RendererBackend::DirectX12;
@@ -104,3 +102,4 @@ extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
 extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend);
 extern "C" __declspec(dllexport) uint32_t GetRendererBackend();
+extern "C" __declspec(dllexport) HWND GetNativeWindowHandle();

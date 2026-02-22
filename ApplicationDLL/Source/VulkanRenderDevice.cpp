@@ -1,8 +1,13 @@
 ﻿#include "pch.h"
 #include "VulkanRenderDevice.h"
+#include "ThirdParty/imgui/imgui.h"
+#if APPLICATIONDLL_HAS_VULKAN
+#include "ThirdParty/imgui/backends/imgui_impl_vulkan.h"
+#endif
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 
 #if APPLICATIONDLL_HAS_VULKAN
@@ -26,10 +31,14 @@ bool VulkanRenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
     fallback_.SetPresentBackendLabel("Vulkan(OpenGLFallback)");
 #if APPLICATIONDLL_HAS_VULKAN
-    // Native Vulkan path is temporarily disabled because it can block at runtime on some environments.
-    // Keep Vulkan backend operational through OpenGL fallback path.
-    useNativeVulkan_ = false;
-    LOG_DEBUG("VulkanRenderDevice: native Vulkan path disabled. Using OpenGL fallback present path");
+    if (InitializeNativeVulkan(hwnd, width, height))
+    {
+        useNativeVulkan_ = true;
+        LOG_DEBUG("VulkanRenderDevice: native Vulkan initialized");
+        return true;
+    }
+
+    LOG_DEBUG("VulkanRenderDevice: native Vulkan initialize failed. Using OpenGL fallback present path");
     useNativeVulkan_ = false;
 #endif
 
@@ -44,6 +53,8 @@ void VulkanRenderDevice::Shutdown()
         if (device_ != VK_NULL_HANDLE)
         {
             vkDeviceWaitIdle(device_);
+            pendingImGuiDrawData_ = nullptr;
+            pendingQuads_.clear();
 
             if (inFlightFence_ != VK_NULL_HANDLE)
             {
@@ -60,6 +71,11 @@ void VulkanRenderDevice::Shutdown()
                 vkDestroySemaphore(device_, renderFinishedSemaphore_, nullptr);
                 renderFinishedSemaphore_ = VK_NULL_HANDLE;
             }
+            if (imguiDescriptorPool_ != VK_NULL_HANDLE)
+            {
+                vkDestroyDescriptorPool(device_, imguiDescriptorPool_, nullptr);
+                imguiDescriptorPool_ = VK_NULL_HANDLE;
+            }
 
             if (commandPool_ != VK_NULL_HANDLE)
             {
@@ -67,8 +83,17 @@ void VulkanRenderDevice::Shutdown()
                 commandPool_ = VK_NULL_HANDLE;
                 commandBuffers_.clear();
             }
+        }
+        CleanupSwapchain();
 
-            CleanupSwapchain();
+        if (renderPass_ != VK_NULL_HANDLE && device_ != VK_NULL_HANDLE)
+        {
+            vkDestroyRenderPass(device_, renderPass_, nullptr);
+            renderPass_ = VK_NULL_HANDLE;
+        }
+
+        if (device_ != VK_NULL_HANDLE)
+        {
             vkDestroyDevice(device_, nullptr);
             device_ = VK_NULL_HANDLE;
         }
@@ -132,6 +157,8 @@ void VulkanRenderDevice::PreRender(const float clearColor[4])
 #if APPLICATIONDLL_HAS_VULKAN
     if (useNativeVulkan_)
     {
+        pendingImGuiDrawData_ = nullptr;
+        pendingQuads_.clear();
         return;
     }
 #endif
@@ -218,6 +245,40 @@ void VulkanRenderDevice::Render()
     fallback_.Render();
 }
 
+void VulkanRenderDevice::DrawQuadNdc(float centerX, float centerY, float width, float height)
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        QuadNdc quad = {};
+        quad.centerX = centerX;
+        quad.centerY = centerY;
+        quad.width = (std::max)(width, 0.01f);
+        quad.height = (std::max)(height, 0.01f);
+        pendingQuads_.push_back(quad);
+        return;
+    }
+#endif
+    fallback_.DrawQuadNdc(centerX, centerY, width, height);
+}
+
+void VulkanRenderDevice::SetImGuiDrawData(ImDrawData* drawData)
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        pendingImGuiDrawData_ = drawData;
+        return;
+    }
+#endif
+    (void)drawData;
+}
+
+bool VulkanRenderDevice::SupportsEditorUi() const
+{
+    return true;
+}
+
 bool VulkanRenderDevice::PrepareImGuiRenderContext()
 {
 #if APPLICATIONDLL_HAS_VULKAN
@@ -277,7 +338,8 @@ bool VulkanRenderDevice::InitializeNativeVulkan(HWND hwnd, UINT width, UINT heig
         !CreateRenderPass() ||
         !CreateFramebuffers() ||
         !CreateCommandPoolAndBuffers() ||
-        !CreateSyncObjects())
+        !CreateSyncObjects() ||
+        !CreateImGuiDescriptorPool())
     {
         return false;
     }
@@ -523,6 +585,11 @@ bool VulkanRenderDevice::CreateImageViews()
 
 bool VulkanRenderDevice::CreateRenderPass()
 {
+    if (renderPass_ != VK_NULL_HANDLE)
+    {
+        return true;
+    }
+
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapchainFormat_;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -634,6 +701,37 @@ bool VulkanRenderDevice::CreateSyncObjects()
     return true;
 }
 
+bool VulkanRenderDevice::CreateImGuiDescriptorPool()
+{
+    if (imguiDescriptorPool_ != VK_NULL_HANDLE)
+    {
+        return true;
+    }
+
+    VkDescriptorPoolSize poolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_SAMPLER, 128 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 128 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 128 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 128 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 128 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 128 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 128 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 128 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 128 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 128 },
+        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 128 }
+    };
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets = 128u * static_cast<uint32_t>(_countof(poolSizes));
+    poolInfo.poolSizeCount = static_cast<uint32_t>(_countof(poolSizes));
+    poolInfo.pPoolSizes = poolSizes;
+
+    return CheckVk(vkCreateDescriptorPool(device_, &poolInfo, nullptr, &imguiDescriptorPool_));
+}
+
 void VulkanRenderDevice::CleanupSwapchain()
 {
     if (device_ == VK_NULL_HANDLE)
@@ -649,12 +747,6 @@ void VulkanRenderDevice::CleanupSwapchain()
         }
     }
     framebuffers_.clear();
-
-    if (renderPass_ != VK_NULL_HANDLE)
-    {
-        vkDestroyRenderPass(device_, renderPass_, nullptr);
-        renderPass_ = VK_NULL_HANDLE;
-    }
 
     for (VkImageView view : imageViews_)
     {
@@ -706,6 +798,62 @@ void VulkanRenderDevice::RecordCommandBuffer(uint32_t imageIndex)
     renderPassInfo.pClearValues = &clearValue;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (pendingImGuiDrawData_ != nullptr && pendingImGuiDrawData_->CmdListsCount > 0)
+    {
+        ImGui_ImplVulkan_RenderDrawData(pendingImGuiDrawData_, commandBuffer);
+    }
+
+    if (!pendingQuads_.empty())
+    {
+        VkClearAttachment quadAttachment = {};
+        quadAttachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        quadAttachment.colorAttachment = 0;
+        quadAttachment.clearValue.color.float32[0] = 0.95f;
+        quadAttachment.clearValue.color.float32[1] = 0.65f;
+        quadAttachment.clearValue.color.float32[2] = 0.15f;
+        quadAttachment.clearValue.color.float32[3] = 1.0f;
+
+        for (const QuadNdc& quad : pendingQuads_)
+        {
+            const float halfWidth = quad.width * 0.5f;
+            const float halfHeight = quad.height * 0.5f;
+            const float leftNdc = quad.centerX - halfWidth;
+            const float rightNdc = quad.centerX + halfWidth;
+            const float bottomNdc = quad.centerY - halfHeight;
+            const float topNdc = quad.centerY + halfHeight;
+
+            const float x0f = ((leftNdc * 0.5f) + 0.5f) * static_cast<float>(swapchainExtent_.width);
+            const float x1f = ((rightNdc * 0.5f) + 0.5f) * static_cast<float>(swapchainExtent_.width);
+            const float y0f = ((1.0f - topNdc) * 0.5f) * static_cast<float>(swapchainExtent_.height);
+            const float y1f = ((1.0f - bottomNdc) * 0.5f) * static_cast<float>(swapchainExtent_.height);
+
+            const int32_t x0 = static_cast<int32_t>(std::floor((std::min)(x0f, x1f)));
+            const int32_t y0 = static_cast<int32_t>(std::floor((std::min)(y0f, y1f)));
+            const int32_t x1 = static_cast<int32_t>(std::ceil((std::max)(x0f, x1f)));
+            const int32_t y1 = static_cast<int32_t>(std::ceil((std::max)(y0f, y1f)));
+
+            const int32_t clippedX0 = (std::max)(0, (std::min)(x0, static_cast<int32_t>(swapchainExtent_.width)));
+            const int32_t clippedY0 = (std::max)(0, (std::min)(y0, static_cast<int32_t>(swapchainExtent_.height)));
+            const int32_t clippedX1 = (std::max)(0, (std::min)(x1, static_cast<int32_t>(swapchainExtent_.width)));
+            const int32_t clippedY1 = (std::max)(0, (std::min)(y1, static_cast<int32_t>(swapchainExtent_.height)));
+
+            const uint32_t rectWidth = static_cast<uint32_t>((std::max)(0, clippedX1 - clippedX0));
+            const uint32_t rectHeight = static_cast<uint32_t>((std::max)(0, clippedY1 - clippedY0));
+            if (rectWidth == 0 || rectHeight == 0)
+            {
+                continue;
+            }
+
+            VkClearRect clearRect = {};
+            clearRect.rect.offset = { clippedX0, clippedY0 };
+            clearRect.rect.extent = { rectWidth, rectHeight };
+            clearRect.baseArrayLayer = 0;
+            clearRect.layerCount = 1;
+            vkCmdClearAttachments(commandBuffer, 1, &quadAttachment, 1, &clearRect);
+        }
+    }
+
     vkCmdEndRenderPass(commandBuffer);
     vkEndCommandBuffer(commandBuffer);
 }

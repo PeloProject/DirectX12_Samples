@@ -96,3 +96,8 @@ extern "C" __declspec(dllexport) uint32_t GetRendererBackend()
 {
     return Runtime().GetRendererBackend();
 }
+
+extern "C" __declspec(dllexport) HWND GetNativeWindowHandle()
+{
+    return RuntimeStateRef().g_hwnd;
+}

@@ -22,6 +22,7 @@ namespace
             RuntimeStateRef().g_displayRendererBackend,
             RuntimeStateRef().g_hwnd,
             RuntimeStateRef().g_renderDevice != nullptr ? RuntimeStateRef().g_renderDevice->GetDx12CommandQueue() : nullptr,
+            RuntimeStateRef().g_renderDevice.get(),
             static_cast<UINT>(Application::GetWindowWidth()),
             static_cast<UINT>(Application::GetWindowHeight()));
     }
@@ -62,12 +63,20 @@ namespace
             ConfigureD3D12DebugFilters();
         }
 
-        RuntimeStateRef().g_imguiInitialized = InitializeImGui();
-        if (!RuntimeStateRef().g_imguiInitialized)
+        if (RuntimeStateRef().g_renderDevice->SupportsEditorUi())
         {
-            RuntimeStateRef().g_pieGameStatus = "Editor UI initialization failed";
-            ShutdownRendererAndUi();
-            return false;
+            RuntimeStateRef().g_imguiInitialized = InitializeImGui();
+            if (!RuntimeStateRef().g_imguiInitialized)
+            {
+                RuntimeStateRef().g_pieGameStatus = "Editor UI initialization failed";
+                ShutdownRendererAndUi();
+                return false;
+            }
+        }
+        else
+        {
+            RuntimeStateRef().g_imguiInitialized = false;
+            LOG_DEBUG("InitializeRendererAndUi: Editor UI disabled for native Vulkan path");
         }
 
         RuntimeStateRef().g_pieGameStatus =
@@ -241,7 +250,7 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                     mouseY,
                     RendererBackendToString(RuntimeStateRef().g_rendererBackend));
             }
-            if (handledByImGui || (isMouseMessage && EditorUi::WantsMouseCapture()))
+            if (handledByImGui)
             {
                 return 1;
             }
@@ -359,6 +368,9 @@ void AppRuntime::DestroyNativeWindow()
     RuntimeStateRef().g_rendererBackendLocked = false;
 }
 
+///=====================================================================
+/// @brief レンダラーの切り替えの適用
+///=====================================================================
 bool AppRuntime::ApplyPendingRendererSwitch()
 {
     if (!RuntimeStateRef().g_pendingRendererSwitch || RuntimeStateRef().g_hwnd == NULL)
@@ -392,7 +404,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
     LOG_DEBUG("ApplyPendingRendererSwitch: StopPieImmediate done");
     ShutdownRendererAndUi();
     LOG_DEBUG("ApplyPendingRendererSwitch: ShutdownRendererAndUi done");
-    const bool needsWindowRecreate = false;
+    const bool needsWindowRecreate = true;
     const bool initializeOk = needsWindowRecreate
         ? RecreateWindowForRendererSwitch(targetBackend)
         : InitializeRendererAndUi(targetBackend);
@@ -438,6 +450,8 @@ bool AppRuntime::ApplyPendingRendererSwitch()
         StartPieImmediate();
     }
     LOG_DEBUG("ApplyPendingRendererSwitch: success");
+
+	RuntimeStateRef().g_rendererBackend = targetBackend;
     return true;
 }
 

@@ -374,9 +374,10 @@ namespace Editor
             // ネイティブウィンドウの親をWPFウィンドウに設定
             NativeInterop.SetParent(childHandle, hwndParent.Handle);
 
-            // ウィンドウスタイルを調整（ボーダーなし等）
-            SetWindowLong(childHandle, GWL_STYLE,
-                (GetWindowLong(childHandle, GWL_STYLE) & ~WS_POPUP) | WS_CHILD);
+            // WPF 埋め込み時は子ウィンドウ向けスタイルへ正規化する。
+            // WS_OVERLAPPEDWINDOW 系が残ると OpenGL 子ウィンドウで更新不良が起きることがある。
+            const int childStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+            SetWindowLong(childHandle, GWL_STYLE, childStyle);
 
 
             // 表示
@@ -422,6 +423,9 @@ namespace Editor
 
         private const int GWL_STYLE = -16;
         private const int WS_CHILD = 0x40000000;
+        private const int WS_VISIBLE = 0x10000000;
+        private const int WS_CLIPSIBLINGS = 0x04000000;
+        private const int WS_CLIPCHILDREN = 0x02000000;
         private const int WS_POPUP = unchecked((int)0x80000000);
     }
 

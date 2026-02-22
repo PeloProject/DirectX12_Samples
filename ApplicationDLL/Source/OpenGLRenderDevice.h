@@ -15,6 +15,7 @@ public:
     bool Resize(UINT width, UINT height) override;
     void PreRender(const float clearColor[4]) override;
     void Render() override;
+    void DrawQuadNdc(float centerX, float centerY, float width, float height) override;
     bool PrepareImGuiRenderContext() override;
     void SetPresentBackendLabel(const char* label);
 

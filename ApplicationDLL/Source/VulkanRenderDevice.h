@@ -6,6 +6,9 @@
 #if defined(__has_include)
 #if __has_include(<vulkan/vulkan.h>)
 #define APPLICATIONDLL_HAS_VULKAN 1
+#if !defined(VK_USE_PLATFORM_WIN32_KHR)
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#endif
 #include <vulkan/vulkan.h>
 #else
 #define APPLICATIONDLL_HAS_VULKAN 0
@@ -29,9 +32,32 @@ public:
     bool Resize(UINT width, UINT height) override;
     void PreRender(const float clearColor[4]) override;
     void Render() override;
+    bool SupportsEditorUi() const override;
+    void SetImGuiDrawData(ImDrawData* drawData) override;
+    void DrawQuadNdc(float centerX, float centerY, float width, float height) override;
     bool PrepareImGuiRenderContext() override;
 
+#if APPLICATIONDLL_HAS_VULKAN
+    bool IsUsingNativeVulkan() const { return useNativeVulkan_; }
+    VkInstance GetVkInstance() const { return instance_; }
+    VkPhysicalDevice GetVkPhysicalDevice() const { return physicalDevice_; }
+    VkDevice GetVkDevice() const { return device_; }
+    uint32_t GetVkGraphicsQueueFamilyIndex() const { return graphicsQueueFamilyIndex_; }
+    VkQueue GetVkGraphicsQueue() const { return graphicsQueue_; }
+    VkRenderPass GetVkRenderPass() const { return renderPass_; }
+    VkDescriptorPool GetVkImGuiDescriptorPool() const { return imguiDescriptorPool_; }
+    uint32_t GetVkSwapchainImageCount() const { return static_cast<uint32_t>(swapchainImages_.size()); }
+#endif
+
 private:
+    struct QuadNdc
+    {
+        float centerX = 0.0f;
+        float centerY = 0.0f;
+        float width = 0.8f;
+        float height = 1.4f;
+    };
+
 #if APPLICATIONDLL_HAS_VULKAN
     bool InitializeNativeVulkan(HWND hwnd, UINT width, UINT height);
     bool PickPhysicalDevice();
@@ -42,6 +68,7 @@ private:
     bool CreateFramebuffers();
     bool CreateCommandPoolAndBuffers();
     bool CreateSyncObjects();
+    bool CreateImGuiDescriptorPool();
     void CleanupSwapchain();
     void RecordCommandBuffer(uint32_t imageIndex);
 
@@ -66,9 +93,12 @@ private:
     VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
     VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
     VkFence inFlightFence_ = VK_NULL_HANDLE;
+    VkDescriptorPool imguiDescriptorPool_ = VK_NULL_HANDLE;
     bool useNativeVulkan_ = false;
 #endif
 
     OpenGLRenderDevice fallback_;
+    ImDrawData* pendingImGuiDrawData_ = nullptr;
+    std::vector<QuadNdc> pendingQuads_;
     float pendingClearColor_[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 };

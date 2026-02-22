@@ -36,11 +36,12 @@ namespace
 
 void RenderGameQuads()
 {
-    for (auto& quadEntry : RuntimeStateRef().g_gameQuads)
+    RuntimeState& state = RuntimeStateRef();
+    for (auto& quadEntry : state.g_gameQuads)
     {
         if (quadEntry.second != nullptr)
         {
-            quadEntry.second->Render();
+            quadEntry.second->Render(state.g_renderDevice.get());
         }
     }
 }
@@ -48,7 +49,6 @@ void RenderGameQuads()
 void DestroyAllGameQuads()
 {
     RuntimeStateRef().g_gameQuads.clear();
-    RuntimeStateRef().g_dummyGameQuads.clear();
     RuntimeStateRef().g_nextGameQuadHandle = 1;
 }
 
@@ -101,7 +101,7 @@ void StartPieImmediate()
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTimeValid = true;
     }
-    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size() + RuntimeStateRef().g_dummyGameQuads.size();
+    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size();
     if (totalQuadCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
     {
         RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
@@ -153,14 +153,15 @@ uint32_t AppRuntime::CreateGameQuad()
     try
     {
         const uint32_t handle = RuntimeStateRef().g_nextGameQuadHandle++;
-        if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        std::unique_ptr<IGameQuad> quad = CreateGameQuadForBackend(RuntimeStateRef().g_rendererBackend);
+        if (quad == nullptr)
         {
-            RuntimeStateRef().g_gameQuads[handle] = std::make_unique<PolygonTest>();
+            RuntimeStateRef().g_pieGameStatus = "CreateGameQuad failed: unsupported backend";
+            return 0;
         }
-        else
-        {
-            RuntimeStateRef().g_dummyGameQuads.insert(handle);
-        }
+
+        quad->SetTransform(0.0f, 0.0f, 0.8f, 1.4f);
+        RuntimeStateRef().g_gameQuads[handle] = std::move(quad);
         RuntimeStateRef().g_pieGameStatus = "Game quad created. handle=" + std::to_string(handle);
         return handle;
     }
@@ -184,16 +185,10 @@ void AppRuntime::DestroyGameQuad(uint32_t handle)
     }
 
     RuntimeStateRef().g_gameQuads.erase(handle);
-    RuntimeStateRef().g_dummyGameQuads.erase(handle);
 }
 
 void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)
 {
-    if (RuntimeStateRef().g_dummyGameQuads.find(handle) != RuntimeStateRef().g_dummyGameQuads.end())
-    {
-        return;
-    }
-
     const auto it = RuntimeStateRef().g_gameQuads.find(handle);
     if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr)
     {
@@ -252,6 +247,8 @@ void AppRuntime::MessageLoopIteration()
         }
     }
 
+    const bool isNonDxBackend = (activeRenderBackend != RendererBackend::DirectX12);
+
     if (activeRenderBackend == RendererBackend::DirectX12)
     {
         BeginSceneRenderToTexture();
@@ -269,6 +266,12 @@ void AppRuntime::MessageLoopIteration()
         RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
     }
 
+    if (isNonDxBackend)
+    {
+        SceneManager::GetInstance().Render();
+        RenderGameQuads();
+    }
+
     if (RuntimeStateRef().g_imguiInitialized)
     {
         const std::string moduleSourceText = RuntimeStateRef().g_pieGameSourceModulePath.empty()
@@ -283,20 +286,33 @@ void AppRuntime::MessageLoopIteration()
         uiState.moduleSourceText = moduleSourceText.c_str();
         uiState.pieGameModulePath = RuntimeStateRef().g_pieGameModulePath.c_str();
         uiState.pieManagedLastPublishLogPath = RuntimeStateRef().g_pieManagedLastPublishLogPath.c_str();
-        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_gameQuads.size() + RuntimeStateRef().g_dummyGameQuads.size());
+        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_gameQuads.size());
 
         EditorUiCallbacks uiCallbacks = {};
         uiCallbacks.startPie = &StartPie;
         uiCallbacks.stopPie = &StopPie;
         uiCallbacks.setRendererBackend = &SetRendererBackendFromEditorUi;
 
-        if (RuntimeStateRef().g_renderDevice != nullptr &&
-            activeRenderBackend != RendererBackend::DirectX12)
+        bool imguiRenderContextReady = true;
+        if (RuntimeStateRef().g_renderDevice != nullptr && isNonDxBackend)
         {
-            RuntimeStateRef().g_renderDevice->PrepareImGuiRenderContext();
+            imguiRenderContextReady = RuntimeStateRef().g_renderDevice->PrepareImGuiRenderContext();
         }
 
-        EditorUi::RenderFrame(RuntimeStateRef().g_isStandaloneMode, uiState, uiCallbacks);
+        if (imguiRenderContextReady)
+        {
+            EditorUi::RenderFrame(RuntimeStateRef().g_isStandaloneMode, RuntimeStateRef().g_renderDevice.get(), uiState, uiCallbacks);
+        }
+        else
+        {
+            static uint32_t imguiContextFailureCounter = 0;
+            ++imguiContextFailureCounter;
+            if ((imguiContextFailureCounter % 120) == 0)
+            {
+                LOG_DEBUG("PrepareImGuiRenderContext failed: backend=%s",
+                    RendererBackendToString(activeRenderBackend));
+            }
+        }
     }
 
     if (RuntimeStateRef().g_renderDevice != nullptr)
@@ -356,12 +372,13 @@ BOOL AppRuntime::SetRendererBackend(uint32_t backend)
         return FALSE;
     }
 
-    RuntimeStateRef().g_rendererBackend = targetBackend;
-    RuntimeStateRef().g_pendingRendererSwitch = false;
-    RuntimeStateRef().g_pendingRendererBackend = RuntimeStateRef().g_displayRendererBackend;
+    RuntimeStateRef().g_pendingRendererSwitch = true;
+    RuntimeStateRef().g_pendingRendererBackend = targetBackend;
     RuntimeStateRef().g_pieGameStatus =
-        std::string("Renderer active: ") + RendererBackendToString(RuntimeStateRef().g_rendererBackend) +
-        " (UI: " + RendererBackendToString(RuntimeStateRef().g_displayRendererBackend) + ")";
+        std::string("Renderer switch requested: ") +
+        RendererBackendToString(RuntimeStateRef().g_displayRendererBackend) +
+        " -> " +
+        RendererBackendToString(targetBackend);
     return TRUE;
 }
 
