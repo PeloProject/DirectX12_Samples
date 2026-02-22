@@ -45,6 +45,9 @@ namespace
     static float g_sceneViewOrbitPitchDeg = 35.0f;
     static bool g_sceneViewUse3DGrid = false;
     static constexpr float kSceneGridBaseSpacing = 32.0f;
+    static bool g_rendererSwitchQueued = false;
+    static uint32_t g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::DirectX12);
+    static int g_rendererSwitchDelayFrames = 0;
 
     static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle)
     {
@@ -146,6 +149,10 @@ namespace
     {
         g_sceneRenderTarget.Reset();
         g_sceneRtvHeap.Reset();
+        g_sceneSrvAllocated = false;
+        g_sceneSrvCpuHandle = {};
+        g_sceneSrvGpuHandle = {};
+        g_sceneRtvCpuHandle = {};
         g_sceneRenderWidth = 1;
         g_sceneRenderHeight = 1;
     }
@@ -400,6 +407,53 @@ namespace
             }
         }
         ImGui::TextWrapped("%s", state.pieGameStatus != nullptr ? state.pieGameStatus : "");
+        ImGui::Text("Renderer:");
+        ImGui::SameLine();
+        const bool isDx12 = state.currentRendererBackend == static_cast<uint32_t>(RendererBackend::DirectX12);
+        const bool isVulkan = state.currentRendererBackend == static_cast<uint32_t>(RendererBackend::Vulkan);
+        const bool isOpenGL = state.currentRendererBackend == static_cast<uint32_t>(RendererBackend::OpenGL);
+        if (isDx12) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+        if (ImGui::Button("DirectX12"))
+        {
+            g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::DirectX12);
+            g_rendererSwitchQueued = true;
+            g_rendererSwitchDelayFrames = 1;
+        }
+        if (isDx12) { ImGui::PopStyleColor(); }
+        ImGui::SameLine();
+        if (isVulkan) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+        if (ImGui::Button("Vulkan"))
+        {
+            g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::Vulkan);
+            g_rendererSwitchQueued = true;
+            g_rendererSwitchDelayFrames = 1;
+        }
+        if (isVulkan) { ImGui::PopStyleColor(); }
+        ImGui::SameLine();
+        if (isOpenGL) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+        if (ImGui::Button("OpenGL"))
+        {
+            g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::OpenGL);
+            g_rendererSwitchQueued = true;
+            g_rendererSwitchDelayFrames = 1;
+        }
+        if (isOpenGL) { ImGui::PopStyleColor(); }
+
+        if (g_rendererSwitchQueued)
+        {
+            if (g_rendererSwitchDelayFrames > 0)
+            {
+                --g_rendererSwitchDelayFrames;
+            }
+            else
+            {
+                if (callbacks.setRendererBackend != nullptr)
+                {
+                    callbacks.setRendererBackend(g_queuedRendererBackend);
+                }
+                g_rendererSwitchQueued = false;
+            }
+        }
         const std::string lastLoadErrorText = (state.pieGameLastLoadError == nullptr || state.pieGameLastLoadError[0] == '\0') ? "(none)" : state.pieGameLastLoadError;
         const std::string moduleSourceText = (state.moduleSourceText == nullptr || state.moduleSourceText[0] == '\0') ? "(none)" : state.moduleSourceText;
         ImGui::Text("Last load error (selectable):");
@@ -707,7 +761,59 @@ namespace EditorUi
 
     bool HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
-        return g_initialized && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
+        if (!g_initialized)
+        {
+            return false;
+        }
+
+        const bool handled = ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam);
+        if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP)
+        {
+            ImGuiIO& io = ImGui::GetIO();
+            LOG_DEBUG("EditorUi::HandleWndProc msg=%u handled=%d io.MouseDown[0]=%d io.WantCaptureMouse=%d",
+                msg,
+                handled ? 1 : 0,
+                io.MouseDown[0] ? 1 : 0,
+                io.WantCaptureMouse ? 1 : 0);
+        }
+        return handled;
+    }
+
+    bool WantsMouseCapture()
+    {
+        if (!g_initialized)
+        {
+            return false;
+        }
+        return ImGui::GetIO().WantCaptureMouse;
+    }
+
+    void InjectWin32Input(UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        IM_UNUSED(msg);
+        IM_UNUSED(wParam);
+        IM_UNUSED(lParam);
+    }
+
+    void ResetInputState()
+    {
+        if (!g_initialized)
+        {
+            return;
+        }
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddMouseButtonEvent(0, false);
+        io.AddMouseButtonEvent(1, false);
+        io.AddMouseButtonEvent(2, false);
+        io.AddMouseButtonEvent(3, false);
+        io.AddMouseButtonEvent(4, false);
+
+        POINT cursorPos = {};
+        if (g_hwnd != nullptr && GetCursorPos(&cursorPos) && ScreenToClient(g_hwnd, &cursorPos))
+        {
+            io.AddMousePosEvent(static_cast<float>(cursorPos.x), static_cast<float>(cursorPos.y));
+        }
     }
 
     void RequestSceneRenderSize(UINT width, UINT height)
@@ -796,6 +902,29 @@ namespace EditorUi
             ImGui_ImplOpenGL2_NewFrame();
         }
         ImGui_ImplWin32_NewFrame();
+
+        if (g_rendererBackend != RendererBackend::DirectX12)
+        {
+            ImGuiIO& io = ImGui::GetIO();
+            POINT cursorPos = {};
+            if (g_hwnd != nullptr && GetCursorPos(&cursorPos) && ScreenToClient(g_hwnd, &cursorPos))
+            {
+                io.AddMousePosEvent(static_cast<float>(cursorPos.x), static_cast<float>(cursorPos.y));
+            }
+            else
+            {
+                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+            }
+
+            io.AddMouseButtonEvent(0, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+            io.AddMouseButtonEvent(1, (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+            io.AddMouseButtonEvent(2, (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+        }
+
+        if (g_rendererBackend != RendererBackend::DirectX12)
+        {
+            ImGui::GetIO().DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+        }
         ImGui::NewFrame();
 
         if (isStandaloneMode)
@@ -822,6 +951,27 @@ namespace EditorUi
         }
         else
         {
+            static uint32_t nonDxFrameCounter = 0;
+            ++nonDxFrameCounter;
+            if ((nonDxFrameCounter % 240) == 0)
+            {
+                ImDrawData* drawData = ImGui::GetDrawData();
+                const int cmdLists = (drawData != nullptr) ? drawData->CmdListsCount : -1;
+                const int totalVtx = (drawData != nullptr) ? drawData->TotalVtxCount : -1;
+                ImGuiIO& io = ImGui::GetIO();
+                const ImVec2 displaySize = (drawData != nullptr) ? drawData->DisplaySize : ImVec2(0.0f, 0.0f);
+                const ImVec2 fbScale = (drawData != nullptr) ? drawData->FramebufferScale : ImVec2(0.0f, 0.0f);
+                LOG_DEBUG("EditorUi OpenGL/Vulkan frame: cmdLists=%d totalVtx=%d mousePos=(%.1f,%.1f) wantCapture=%d display=(%.1f,%.1f) fbScale=(%.1f,%.1f)",
+                    cmdLists,
+                    totalVtx,
+                    io.MousePos.x,
+                    io.MousePos.y,
+                    io.WantCaptureMouse ? 1 : 0,
+                    displaySize.x,
+                    displaySize.y,
+                    fbScale.x,
+                    fbScale.y);
+            }
             ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
         }
     }

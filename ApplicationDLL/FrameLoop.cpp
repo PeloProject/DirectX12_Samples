@@ -18,6 +18,11 @@ namespace
 {
     constexpr float kDefaultSceneClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
+    bool SetRendererBackendFromEditorUi(uint32_t backend)
+    {
+        return Runtime().SetRendererBackend(backend) == TRUE;
+    }
+
     void BeginSceneRenderToTexture()
     {
         EditorUi::BeginSceneRenderToTexture(RuntimeStateRef().g_isPieRunning, RuntimeStateRef().g_gameClearColor, kDefaultSceneClearColor);
@@ -203,6 +208,7 @@ void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float cent
 ///==========================================================
 void AppRuntime::MessageLoopIteration()
 {
+    static uint32_t frameCounter = 0;
     if (RuntimeStateRef().g_hwnd == NULL)
     {
         return;
@@ -214,6 +220,13 @@ void AppRuntime::MessageLoopIteration()
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+
+    ApplyPendingRendererSwitch();
+
+    const RendererBackend activeRenderBackend =
+        (RuntimeStateRef().g_renderDevice != nullptr)
+        ? RuntimeStateRef().g_renderDevice->Backend()
+        : RuntimeStateRef().g_displayRendererBackend;
 
     UpdatePie();
 
@@ -233,13 +246,13 @@ void AppRuntime::MessageLoopIteration()
 
     if (RuntimeStateRef().g_imguiInitialized)
     {
-        if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+        if (activeRenderBackend == RendererBackend::DirectX12)
         {
             EditorUi::EnsureSceneRenderSize();
         }
     }
 
-    if (RuntimeStateRef().g_rendererBackend == RendererBackend::DirectX12)
+    if (activeRenderBackend == RendererBackend::DirectX12)
     {
         BeginSceneRenderToTexture();
         SceneManager::GetInstance().Render();
@@ -264,6 +277,7 @@ void AppRuntime::MessageLoopIteration()
 
         EditorUiRuntimeState uiState = {};
         uiState.isPieRunning = RuntimeStateRef().g_isPieRunning;
+        uiState.currentRendererBackend = static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
         uiState.pieGameStatus = RuntimeStateRef().g_pieGameStatus.c_str();
         uiState.pieGameLastLoadError = RuntimeStateRef().g_pieGameLastLoadError.c_str();
         uiState.moduleSourceText = moduleSourceText.c_str();
@@ -274,6 +288,13 @@ void AppRuntime::MessageLoopIteration()
         EditorUiCallbacks uiCallbacks = {};
         uiCallbacks.startPie = &StartPie;
         uiCallbacks.stopPie = &StopPie;
+        uiCallbacks.setRendererBackend = &SetRendererBackendFromEditorUi;
+
+        if (RuntimeStateRef().g_renderDevice != nullptr &&
+            activeRenderBackend != RendererBackend::DirectX12)
+        {
+            RuntimeStateRef().g_renderDevice->PrepareImGuiRenderContext();
+        }
 
         EditorUi::RenderFrame(RuntimeStateRef().g_isStandaloneMode, uiState, uiCallbacks);
     }
@@ -282,29 +303,66 @@ void AppRuntime::MessageLoopIteration()
     {
         RuntimeStateRef().g_renderDevice->Render();
     }
+
+    if (activeRenderBackend != RendererBackend::DirectX12 &&
+        RuntimeStateRef().g_hwnd != NULL)
+    {
+        InvalidateRect(RuntimeStateRef().g_hwnd, nullptr, FALSE);
+    }
+
+    static uint32_t nonDxProgressCounter = 0;
+    if (activeRenderBackend != RendererBackend::DirectX12)
+    {
+        ++nonDxProgressCounter;
+        if ((nonDxProgressCounter % 120) == 0)
+        {
+            LOG_DEBUG("NonDX loop progress: backend=%s imgui=%d",
+                RendererBackendToString(activeRenderBackend),
+                RuntimeStateRef().g_imguiInitialized ? 1 : 0);
+        }
+    }
+    else
+    {
+        nonDxProgressCounter = 0;
+    }
+
+    ++frameCounter;
+    if ((frameCounter % 240) == 0)
+    {
+        LOG_DEBUG("Frame heartbeat: selected=%s active=%s imgui=%d pie=%d",
+            RendererBackendToString(RuntimeStateRef().g_rendererBackend),
+            RendererBackendToString(activeRenderBackend),
+            RuntimeStateRef().g_imguiInitialized ? 1 : 0,
+            RuntimeStateRef().g_isPieRunning ? 1 : 0);
+    }
 }
 
 BOOL AppRuntime::SetRendererBackend(uint32_t backend)
 {
-    if (RuntimeStateRef().g_rendererBackendLocked || RuntimeStateRef().g_hwnd != NULL)
-    {
-        return FALSE;
-    }
+    RendererBackend targetBackend = RendererBackend::DirectX12;
 
     switch (backend)
     {
     case static_cast<uint32_t>(RendererBackend::DirectX12):
-        RuntimeStateRef().g_rendererBackend = RendererBackend::DirectX12;
-        return TRUE;
+        targetBackend = RendererBackend::DirectX12;
+        break;
     case static_cast<uint32_t>(RendererBackend::Vulkan):
-        RuntimeStateRef().g_rendererBackend = RendererBackend::Vulkan;
-        return TRUE;
+        targetBackend = RendererBackend::Vulkan;
+        break;
     case static_cast<uint32_t>(RendererBackend::OpenGL):
-        RuntimeStateRef().g_rendererBackend = RendererBackend::OpenGL;
-        return TRUE;
+        targetBackend = RendererBackend::OpenGL;
+        break;
     default:
         return FALSE;
     }
+
+    RuntimeStateRef().g_rendererBackend = targetBackend;
+    RuntimeStateRef().g_pendingRendererSwitch = false;
+    RuntimeStateRef().g_pendingRendererBackend = RuntimeStateRef().g_displayRendererBackend;
+    RuntimeStateRef().g_pieGameStatus =
+        std::string("Renderer active: ") + RendererBackendToString(RuntimeStateRef().g_rendererBackend) +
+        " (UI: " + RendererBackendToString(RuntimeStateRef().g_displayRendererBackend) + ")";
+    return TRUE;
 }
 
 uint32_t AppRuntime::GetRendererBackend() const

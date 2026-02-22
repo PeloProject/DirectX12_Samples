@@ -29,6 +29,7 @@ public:
     bool Resize(UINT width, UINT height) override;
     void PreRender(const float clearColor[4]) override;
     void Render() override;
+    bool PrepareImGuiRenderContext() override;
 
 private:
 #if APPLICATIONDLL_HAS_VULKAN

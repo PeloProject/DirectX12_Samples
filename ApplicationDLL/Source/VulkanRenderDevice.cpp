@@ -24,22 +24,12 @@ VulkanRenderDevice::~VulkanRenderDevice()
 
 bool VulkanRenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
+    fallback_.SetPresentBackendLabel("Vulkan(OpenGLFallback)");
 #if APPLICATIONDLL_HAS_VULKAN
-    bool enableNativeVulkan = false;
-    char* envValue = nullptr;
-    size_t envLen = 0;
-    if (_dupenv_s(&envValue, &envLen, "APP_VULKAN_NATIVE") == 0 && envValue != nullptr)
-    {
-        enableNativeVulkan = (std::strcmp(envValue, "1") == 0);
-        free(envValue);
-        envValue = nullptr;
-    }
-
-    if (enableNativeVulkan && InitializeNativeVulkan(hwnd, width, height))
-    {
-        useNativeVulkan_ = true;
-        return true;
-    }
+    // Native Vulkan path is temporarily disabled because it can block at runtime on some environments.
+    // Keep Vulkan backend operational through OpenGL fallback path.
+    useNativeVulkan_ = false;
+    LOG_DEBUG("VulkanRenderDevice: native Vulkan path disabled. Using OpenGL fallback present path");
     useNativeVulkan_ = false;
 #endif
 
@@ -212,11 +202,31 @@ void VulkanRenderDevice::Render()
         {
             Resize(swapchainExtent_.width, swapchainExtent_.height);
         }
+        static uint32_t presentCounter = 0;
+        ++presentCounter;
+        if ((presentCounter % 240) == 0)
+        {
+            LOG_DEBUG("Active present state: backend=Vulkan(native) extent=(%u,%u) imageIndex=%u",
+                swapchainExtent_.width,
+                swapchainExtent_.height,
+                imageIndex);
+        }
         return;
     }
 #endif
 
     fallback_.Render();
+}
+
+bool VulkanRenderDevice::PrepareImGuiRenderContext()
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        return true;
+    }
+#endif
+    return fallback_.PrepareImGuiRenderContext();
 }
 
 #if APPLICATIONDLL_HAS_VULKAN

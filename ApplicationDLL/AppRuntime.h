@@ -53,8 +53,11 @@ struct RuntimeState
     std::unordered_map<uint32_t, std::unique_ptr<PolygonTest>> g_gameQuads;
     std::unordered_set<uint32_t> g_dummyGameQuads;
     uint32_t g_nextGameQuadHandle = 1;
-    RendererBackend g_rendererBackend = RendererBackend::Vulkan;
+    RendererBackend g_displayRendererBackend = RendererBackend::DirectX12;
+    RendererBackend g_rendererBackend = RendererBackend::DirectX12;
     bool g_rendererBackendLocked = false;
+    bool g_pendingRendererSwitch = false;
+    RendererBackend g_pendingRendererBackend = RendererBackend::DirectX12;
 };
 
 class AppRuntime
@@ -80,6 +83,7 @@ public:
     void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
     BOOL SetRendererBackend(uint32_t backend);
     uint32_t GetRendererBackend() const;
+    bool ApplyPendingRendererSwitch();
 
     void MessageLoopIteration();
     void UpdatePie();

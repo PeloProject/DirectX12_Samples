@@ -17,6 +17,7 @@ public:
     virtual bool Resize(UINT width, UINT height) = 0;
     virtual void PreRender(const float clearColor[4]) = 0;
     virtual void Render() = 0;
+    virtual bool PrepareImGuiRenderContext() { return true; }
 
     virtual ID3D12CommandQueue* GetDx12CommandQueue() { return nullptr; }
 };

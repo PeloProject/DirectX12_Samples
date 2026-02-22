@@ -117,7 +117,10 @@ void DirectXDevice::Shutdown()
 
 #ifdef _DEBUG
 	// ライブオブジェクトのレポート
-	ReportLiveDeviceObjects(debugDevice);
+	if (debugDevice)
+	{
+		ReportLiveDeviceObjects(debugDevice);
+	}
 #endif
 }
 
@@ -130,10 +133,6 @@ DirectXDevice::~DirectXDevice()
 	if (!m_isShutdown) {
 		Shutdown();
 	}
-	else {
-		OutputDebugStringA("Already shutdown, destructor has nothing to do\n");
-	}
-
 }
 
 #ifdef _DEBUG
@@ -145,7 +144,7 @@ void DirectXDevice::ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugDevi
 {
 	// D3D12デバイスのライブオブジェクト
 	if (!debugDevice) {
-		LOG_DEBUG("ERROR: debugDevice is null!");
+		LOG_DEBUG("D3D12 debug device is unavailable. Skipping live object report.");
 		return;
 	}
 
@@ -181,17 +180,18 @@ void DirectXDevice::ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugDevi
 bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
 	LOG_DEBUG("DirectXの初期化を開始");
+	m_isShutdown = false;
 
 #ifdef _DEBUG
 	EnableDebugLayer(); // デバッグレイヤーを有効化
 #endif
-	CreateGraphicsInterface(); // DXGIファクトリの作成
-	CreateDevice();      // デバイスの作成
-	CreateCommandList();// コマンドリストの作成
-	CreateCommandQueue();// コマンドキューの作成
-	CreateSwapChain(hwnd, width, height);// スワップチェインの作成
-	CreateRenderTargetView();// レンダーターゲットビューの作成
-	CreateFence();			// フェンスの作成
+	if (!CreateGraphicsInterface()) { return false; } // DXGIファクトリの作成
+	if (!CreateDevice()) { return false; }            // デバイスの作成
+	if (!CreateCommandList()) { return false; }       // コマンドリストの作成
+	if (!CreateCommandQueue()) { return false; }      // コマンドキューの作成
+	if (!CreateSwapChain(hwnd, width, height)) { return false; } // スワップチェインの作成
+	if (!CreateRenderTargetView()) { return false; }  // レンダーターゲットビューの作成
+	if (!CreateFence()) { return false; }             // フェンスの作成
 	return true;
 }
 
@@ -608,14 +608,30 @@ void DirectXDevice::WaitForPreviousFrame()
 	}
 
 	// 前のフレームが完了するまで待機
-	m_pCommandQueue->Signal(m_pFence.Get(), ++m_FenceValue);
+	const HRESULT signalHr = m_pCommandQueue->Signal(m_pFence.Get(), ++m_FenceValue);
+	if (FAILED(signalHr))
+	{
+		LOG_DEBUG("Fence signal failed: 0x%08X", signalHr);
+		return;
+	}
 	if (m_pFence->GetCompletedValue() < m_FenceValue)
 	{
 		HANDLE eventHandle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 		if (eventHandle != nullptr)
 		{
-			m_pFence->SetEventOnCompletion(m_FenceValue, eventHandle);
-			WaitForSingleObject(eventHandle, INFINITE);
+			const HRESULT setEventHr = m_pFence->SetEventOnCompletion(m_FenceValue, eventHandle);
+			if (SUCCEEDED(setEventHr))
+			{
+				const DWORD waitResult = WaitForSingleObject(eventHandle, 1000);
+				if (waitResult == WAIT_TIMEOUT)
+				{
+					LOG_DEBUG("Fence wait timeout. Continue shutdown path.");
+				}
+			}
+			else
+			{
+				LOG_DEBUG("SetEventOnCompletion failed: 0x%08X", setEventHr);
+			}
 			CloseHandle(eventHandle);
 		}
 		else

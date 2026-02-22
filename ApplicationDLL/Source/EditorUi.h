@@ -8,6 +8,7 @@ struct ID3D12CommandQueue;
 struct EditorUiRuntimeState
 {
     bool isPieRunning = false;
+    uint32_t currentRendererBackend = 0;
     const char* pieGameStatus = "";
     const char* pieGameLastLoadError = "";
     const char* moduleSourceText = "";
@@ -20,6 +21,7 @@ struct EditorUiCallbacks
 {
     void (*startPie)() = nullptr;
     void (*stopPie)() = nullptr;
+    bool (*setRendererBackend)(uint32_t backend) = nullptr;
 };
 
 namespace EditorUi
@@ -28,6 +30,9 @@ namespace EditorUi
     void Shutdown();
     bool IsInitialized();
     bool HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    bool WantsMouseCapture();
+    void InjectWin32Input(UINT msg, WPARAM wParam, LPARAM lParam);
+    void ResetInputState();
 
     void RequestSceneRenderSize(UINT width, UINT height);
     bool EnsureSceneRenderSize();
