@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "EditorUi.h"
 
-#include "DirectXDevice.h"
+#include "Dx12RenderDevice.h"
 #include "IRenderDevice.h"
 #include "VulkanRenderDevice.h"
 
@@ -78,7 +78,7 @@ namespace
             return false;
         }
 
-        ID3D12Device* device = DirectXDevice::GetDevice();
+        ID3D12Device* device = Dx12RenderDevice::GetDevice();
         if (device == nullptr || g_imguiSrvHeap == nullptr)
         {
             return false;
@@ -325,7 +325,7 @@ namespace
 
     ///========================================================================
     /// <summary>
-	/// ドッキングスペースを使用したエディタUIの描画
+	/// ドッキングスペ�Eスを使用したエチE��タUIの描画
     /// </summary>
     /// <param name="state"></param>
     /// <param name="callbacks"></param>
@@ -709,7 +709,7 @@ namespace EditorUi
 
     bool InitializeDirectX12(HWND hwnd, ID3D12CommandQueue* commandQueue, IRenderDevice* renderDevice, UINT initialWidth, UINT initialHeight)
     {
-        ID3D12Device* device = DirectXDevice::GetDevice();
+        ID3D12Device* device = Dx12RenderDevice::GetDevice();
         if (device == nullptr || commandQueue == nullptr)
         {
             ImGui_ImplWin32_Shutdown();
@@ -873,7 +873,7 @@ namespace EditorUi
 
     ///=======================================
     /// <summary>
-	/// エディタUIをシャットダウンします。
+	/// エチE��タUIをシャチE��ダウンします、E
     /// </summary>
     ///=======================================
     void Shutdown()
@@ -1043,7 +1043,7 @@ namespace EditorUi
             return;
         }
 
-        ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+        ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
         if (commandList == nullptr)
         {
             return;
@@ -1069,7 +1069,7 @@ namespace EditorUi
             return;
         }
 
-        ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+        ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
         if (commandList == nullptr)
         {
             return;
@@ -1134,7 +1134,7 @@ namespace EditorUi
         ImGui::Render();
         if (g_rendererBackend == RendererBackend::DirectX12)
         {
-            ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+            ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
             if (commandList == nullptr)
             {
                 return;
@@ -1189,3 +1189,4 @@ namespace EditorUi
         }
     }
 }
+

@@ -28,6 +28,12 @@
     <Filter Include="ヘッダー ファイル\Scene">
       <UniqueIdentifier>{47535072-b4bb-4b33-97e5-1014013af28e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ヘッダー ファイル\GameQuadRenderers">
+      <UniqueIdentifier>{702b6f3f-6f84-4ca5-a31a-6ed22fe7b8fd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\GameQuadRenderers">
+      <UniqueIdentifier>{5ec9ca6a-21f5-47fd-9a18-33bc7af704c0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AppRuntime.h">
@@ -40,9 +46,6 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\DirectXDevice.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Source\Dx12RenderDevice.h">
@@ -117,6 +120,24 @@
     <ClInclude Include="WinHandleRAII.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\Dx12GameQuadRenderer.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\GameQuadRendererFactory.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\IGameQuadRenderer.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\NdcGameQuadRendererBase.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\OpenGlGameQuadRenderer.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.h">
+      <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -126,9 +147,6 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\DirectXDevice.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Source\Dx12RenderDevice.cpp">
@@ -202,6 +220,18 @@
     </ClCompile>
     <ClCompile Include="WindowHost.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameQuadRenderers\Dx12GameQuadRenderer.cpp">
+      <Filter>ソース ファイル\GameQuadRenderers</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameQuadRenderers\GameQuadRendererFactory.cpp">
+      <Filter>ソース ファイル\GameQuadRenderers</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameQuadRenderers\OpenGlGameQuadRenderer.cpp">
+      <Filter>ソース ファイル\GameQuadRenderers</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.cpp">
+      <Filter>ソース ファイル\GameQuadRenderers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -1,6 +1,6 @@
 ﻿#include "pch.h"
 #include "PolygonTest.h"
-#include "DirectXDevice.h"
+#include "Source/Dx12RenderDevice.h"
 #include <array>
 #include <algorithm>
 #include <filesystem>
@@ -187,7 +187,7 @@ HRESULT PolygonTest::CompileShaders()
 void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	// Gpuメモリの確保
-	HRESULT hr = DirectXDevice::GetDevice()->CreateCommittedResource(
+	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
@@ -226,7 +226,7 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 /// <param name="resourceDesc"></param>
 void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
-	HRESULT hr = DirectXDevice::GetDeviceComPtr()->CreateCommittedResource(
+	HRESULT hr = Dx12RenderDevice::GetDeviceComPtr()->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
@@ -249,7 +249,7 @@ void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, cons
 	//3, 2, 1
 	};
 
-	m_Indices = vector<short>(std::begin(indices), std::end(indices));
+	m_Indices = std::vector<short>(std::begin(indices), std::end(indices));
 
 	// インデックスデータの転送
 	unsigned short* indexMap = nullptr;
@@ -324,7 +324,7 @@ HRESULT PolygonTest::CreateGpuResources()
 	}
 
 	// ルートシグネチャの生成
-	hr = DirectXDevice::GetDevice()->CreateRootSignature(
+	hr = Dx12RenderDevice::GetDevice()->CreateRootSignature(
 		0,
 		rootSignatureBlob->GetBufferPointer(),
 		rootSignatureBlob->GetBufferSize(),
@@ -445,7 +445,7 @@ HRESULT PolygonTest::CreateGraphicsPipelineState()
 	gpipelineDesc.SampleDesc.Count = 1;		// マルチサンプリングの設定
 	gpipelineDesc.SampleDesc.Quality = 0;	// マルチサンプリングの品質レベル（最低）
 
-	HRESULT hr = DirectXDevice::GetDevice()->CreateGraphicsPipelineState(&gpipelineDesc, IID_PPV_ARGS(&m_pPipelineState));
+	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateGraphicsPipelineState(&gpipelineDesc, IID_PPV_ARGS(&m_pPipelineState));
 	if (!SUCCEEDED(hr)) {
 		LOG_DEBUG("CreateGraphicsPipelineState failed. hr=0x%08X", static_cast<unsigned int>(hr));
 		return hr;
@@ -482,7 +482,7 @@ HRESULT PolygonTest::CreateTextureBuffer()
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	// テクスチャ用のGPUリソースを作成
-	HRESULT hr = DirectXDevice::GetDevice()->CreateCommittedResource(
+	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
@@ -517,7 +517,7 @@ HRESULT PolygonTest::CreateTextureBuffer()
 	descriptorHeapDesc.NumDescriptors = 1; // ディスクリプタの数
 	descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // シェーダーリソースビュー用のヒープタイプ
 
-	hr = DirectXDevice::GetDevice()->CreateDescriptorHeap(
+	hr = Dx12RenderDevice::GetDevice()->CreateDescriptorHeap(
 		&descriptorHeapDesc,
 		IID_PPV_ARGS(&descriptorHeap)
 	);
@@ -540,7 +540,7 @@ void PolygonTest::Render()
 		m_isVertexDirty = false;
 	}
 
-	ID3D12GraphicsCommandList* commandList = DirectXDevice::GetCommandList();
+	ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
 	if (commandList == nullptr)
 	{
 		return;

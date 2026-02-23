@@ -1,10 +1,10 @@
-ï»¿#include "pch.h"
+#include "pch.h"
 
 #include "AppRuntime.h"
 #include "FrameLoop.h"
 
 #include "SceneManager.h"
-#include "Source/DirectXDevice.h"
+#include "Source/Dx12RenderDevice.h"
 #include "Source/EditorUi.h"
 #include "Source/RenderDeviceFactory.h"
 #include "Source/RendererBackend.h"
@@ -158,7 +158,7 @@ namespace
 
     void ConfigureD3D12DebugFilters()
     {
-        ID3D12Device* device = DirectXDevice::GetDevice();
+        ID3D12Device* device = Dx12RenderDevice::GetDevice();
         if (device == nullptr)
         {
             return;
@@ -182,11 +182,11 @@ namespace
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ãƒ—ãƒ­ã‚·ãƒ¼ã‚¸ãƒ£
-/// @param hwnd ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã¸ã®ãƒãƒ³ãƒ‰ãƒ«
-/// @param msg  ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã‚³ãƒ¼ãƒ‰
-/// @param wParam ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã«é–¢ã™ã‚‹è¿½åŠ ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿
-/// @param lParam ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã«é–¢ã™ã‚‹è¿½åŠ ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿
+/// @brief ƒEƒBƒ“ƒhƒEƒvƒƒV[ƒWƒƒ
+/// @param hwnd ƒEƒBƒ“ƒhƒE‚Ö‚Ìƒnƒ“ƒhƒ‹
+/// @param msg  ƒƒbƒZ[ƒWƒR[ƒh
+/// @param wParam ƒƒbƒZ[ƒW‚ÉŠÖ‚·‚é’Ç‰Áƒpƒ‰ƒ[ƒ^
+/// @param lParam ƒƒbƒZ[ƒW‚ÉŠÖ‚·‚é’Ç‰Áƒpƒ‰ƒ[ƒ^
 /// @return 
 ///=====================================================================
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -195,11 +195,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ãƒ—ãƒ­ã‚·ãƒ¼ã‚¸ãƒ£ã®æ“ä½œ
-/// @param hwnd ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã¸ã®ãƒãƒ³ãƒ‰ãƒ«
-/// @param msg  ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã‚³ãƒ¼ãƒ‰
-/// @param wParam ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã«é–¢ã™ã‚‹è¿½åŠ ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿
-/// @param lParam ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã«é–¢ã™ã‚‹è¿½åŠ ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿
+/// @brief ƒEƒBƒ“ƒhƒEƒvƒƒV[ƒWƒƒ‚Ì‘€ì
+/// @param hwnd ƒEƒBƒ“ƒhƒE‚Ö‚Ìƒnƒ“ƒhƒ‹
+/// @param msg  ƒƒbƒZ[ƒWƒR[ƒh
+/// @param wParam ƒƒbƒZ[ƒW‚ÉŠÖ‚·‚é’Ç‰Áƒpƒ‰ƒ[ƒ^
+/// @param lParam ƒƒbƒZ[ƒW‚ÉŠÖ‚·‚é’Ç‰Áƒpƒ‰ƒ[ƒ^
 /// @return 
 ///=====================================================================
 LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -260,8 +260,8 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®ç”Ÿæˆ
-/// @return ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ãƒãƒ³ãƒ‰ãƒ«
+/// @brief ƒEƒBƒ“ƒhƒE‚Ì¶¬
+/// @return ƒEƒBƒ“ƒhƒEƒnƒ“ƒhƒ‹
 ///=====================================================================
 HWND AppRuntime::CreateNativeWindow()
 {
@@ -325,7 +325,7 @@ HWND AppRuntime::CreateNativeWindow()
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®è¡¨ç¤º
+/// @brief ƒEƒBƒ“ƒhƒE‚Ì•\¦
 ///=====================================================================
 void AppRuntime::ShowNativeWindow()
 {
@@ -339,7 +339,7 @@ void AppRuntime::ShowNativeWindow()
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®éè¡¨ç¤º
+/// @brief ƒEƒBƒ“ƒhƒE‚Ì”ñ•\¦
 ///=====================================================================
 void AppRuntime::HideNativeWindow()
 {
@@ -351,7 +351,7 @@ void AppRuntime::HideNativeWindow()
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®å‰Šé™¤
+/// @brief ƒEƒBƒ“ƒhƒE‚Ìíœ
 ///=====================================================================
 void AppRuntime::DestroyNativeWindow()
 {
@@ -369,7 +369,7 @@ void AppRuntime::DestroyNativeWindow()
 }
 
 ///=====================================================================
-/// @brief ãƒ¬ãƒ³ãƒ€ãƒ©ãƒ¼ã®åˆ‡ã‚Šæ›¿ãˆã®é©ç”¨
+/// @brief ƒŒƒ“ƒ_ƒ‰[‚ÌØ‚è‘Ö‚¦‚Ì“K—p
 ///=====================================================================
 bool AppRuntime::ApplyPendingRendererSwitch()
 {
@@ -456,7 +456,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
 }
 
 ///=====================================================================
-/// @brief ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®ã‚µã‚¤ã‚ºã®å¤‰æ›´
+/// @brief ƒEƒBƒ“ƒhƒE‚ÌƒTƒCƒY‚Ì•ÏX
 ///=====================================================================
 void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -484,3 +484,4 @@ void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 
 }
+
