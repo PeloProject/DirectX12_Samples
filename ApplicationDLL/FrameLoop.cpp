@@ -270,6 +270,14 @@ void AppRuntime::MessageLoopIteration()
     {
         SceneManager::GetInstance().Render();
         RenderGameQuads();
+
+        if (RuntimeStateRef().g_imguiInitialized && RuntimeStateRef().g_renderDevice != nullptr)
+        {
+            UINT requestedWidth = 0;
+            UINT requestedHeight = 0;
+            EditorUi::GetRequestedSceneRenderSize(&requestedWidth, &requestedHeight);
+            RuntimeStateRef().g_renderDevice->CaptureEditorSceneTexture(requestedWidth, requestedHeight);
+        }
     }
 
     if (RuntimeStateRef().g_imguiInitialized)

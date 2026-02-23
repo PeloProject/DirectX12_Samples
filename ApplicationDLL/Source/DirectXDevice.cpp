@@ -195,11 +195,13 @@ bool DirectXDevice::Initialize(HWND hwnd, UINT width, UINT height)
 	return true;
 }
 
+///======================================================================================================
 /// <summary>
 /// DirectXのグラフィックインターフェースファクトリを作成する
 /// GPU、ディスプレイ、ウィンドウシステム間の低レベルインターフェース提供するものとなります。
 /// </summary>
 /// <returns></returns>
+///======================================================================================================
 bool DirectXDevice::CreateGraphicsInterface()
 {
 	// DXGIファクトリの作成
@@ -250,9 +252,6 @@ bool DirectXDevice::CreateGraphicsInterface()
 /// <returns></returns>
 IDXGIAdapter* DirectXDevice::GetAdapter()
 {
-
-#if true
-
 	// アダプタの取得（GPU優先で取得）
 	for (UINT i = 0; ; ++i)
 	{
@@ -283,46 +282,6 @@ IDXGIAdapter* DirectXDevice::GetAdapter()
 	}
 
 	return m_pAdapters.Get();
-
-#else
-	// アダプタの取得
-	std::vector<ComPtr<IDXGIAdapter>> adapters;
-
-	IDXGIAdapter* tempAdapter = nullptr;
-
-	for (UINT i = 0; m_pDxgiFactory->EnumAdapters(i, &tempAdapter) != DXGI_ERROR_NOT_FOUND; ++i)
-	{
-		adapters.push_back(tempAdapter);
-	}
-
-	// アダプタの情報を取得
-	IDXGIAdapter* selectedAdapter = nullptr;
-	for (size_t i = 0; i < adapters.size(); ++i)
-	{
-		DXGI_ADAPTER_DESC desc;
-		adapters[i]->GetDesc(&desc);
-		LOG_DEBUG("Adapter %d: %ls", i, desc.Description);
-
-		// ここでアダプタの情報を使って何か処理を行うことができます
-		if (desc.VendorId == 0x10DE) // NVIDIAのアダプタを探す
-		{
-			LOG_DEBUG("NVIDIA Adapter found: %ls", desc.Description);
-			selectedAdapter = adapters[i].Get();
-			selectedAdapter->AddRef();  // ★明示的に参照カウントを増やす
-			break;
-		}
-		else if (desc.VendorId == 0x1002) // AMDのアダプタを探す
-		{
-			LOG_DEBUG("AMD Adapter found: %ls", desc.Description);
-		}
-		else if (desc.VendorId == 0x8086) // Intelのアダプタを探す
-		{
-			LOG_DEBUG("Intel Adapter found: %ls", desc.Description);
-		}
-	}
-
-	return selectedAdapter;
-#endif
 }
 
 /// <summary>

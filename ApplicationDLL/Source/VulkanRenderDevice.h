@@ -36,6 +36,9 @@ public:
     void SetImGuiDrawData(ImDrawData* drawData) override;
     void DrawQuadNdc(float centerX, float centerY, float width, float height) override;
     bool PrepareImGuiRenderContext() override;
+    void CaptureEditorSceneTexture(UINT width, UINT height) override;
+    bool HasEditorSceneTexture() const override;
+    uintptr_t GetEditorSceneTextureHandle() const override;
 
 #if APPLICATIONDLL_HAS_VULKAN
     bool IsUsingNativeVulkan() const { return useNativeVulkan_; }
@@ -59,6 +62,11 @@ private:
     };
 
 #if APPLICATIONDLL_HAS_VULKAN
+    bool EnsureSceneCaptureResources(uint32_t width, uint32_t height, VkFormat format);
+    void DestroySceneCaptureResources();
+    bool RecordSceneCaptureCopy(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    uint32_t FindMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
+
     bool InitializeNativeVulkan(HWND hwnd, UINT width, UINT height);
     bool PickPhysicalDevice();
     bool CreateLogicalDevice();
@@ -94,6 +102,16 @@ private:
     VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
     VkFence inFlightFence_ = VK_NULL_HANDLE;
     VkDescriptorPool imguiDescriptorPool_ = VK_NULL_HANDLE;
+    VkImage sceneCaptureImage_ = VK_NULL_HANDLE;
+    VkDeviceMemory sceneCaptureMemory_ = VK_NULL_HANDLE;
+    VkImageView sceneCaptureView_ = VK_NULL_HANDLE;
+    VkSampler sceneCaptureSampler_ = VK_NULL_HANDLE;
+    VkDescriptorSet sceneCaptureDescriptorSet_ = VK_NULL_HANDLE;
+    uint32_t sceneCaptureWidth_ = 0;
+    uint32_t sceneCaptureHeight_ = 0;
+    VkFormat sceneCaptureFormat_ = VK_FORMAT_UNDEFINED;
+    bool sceneCaptureInitialized_ = false;
+    bool sceneCaptureEnabled_ = false;
     bool useNativeVulkan_ = false;
 #endif
 

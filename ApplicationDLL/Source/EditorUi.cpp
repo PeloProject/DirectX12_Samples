@@ -330,7 +330,31 @@ namespace
     /// <param name="state"></param>
     /// <param name="callbacks"></param>
     ///========================================================================
-    static void RenderEditorDockingUi(const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
+    static ImTextureID GetSceneTextureForUi(IRenderDevice* renderDevice, bool* outFlipY)
+    {
+        if (outFlipY != nullptr)
+        {
+            *outFlipY = false;
+        }
+
+        if (g_sceneRenderTarget != nullptr)
+        {
+            return (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
+        }
+
+        if (renderDevice != nullptr && renderDevice->HasEditorSceneTexture())
+        {
+            if (outFlipY != nullptr)
+            {
+                *outFlipY = true;
+            }
+            return (ImTextureID)(intptr_t)renderDevice->GetEditorSceneTextureHandle();
+        }
+
+        return (ImTextureID)0;
+    }
+
+    static void RenderEditorDockingUi(IRenderDevice* renderDevice, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
     {
         ImGuiWindowFlags hostWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -572,10 +596,13 @@ namespace
 
                     ImDrawList* drawList = ImGui::GetWindowDrawList();
                     drawList->PushClipRect(canvasMin, canvasMax, true);
-                    if (g_sceneRenderTarget != nullptr)
+                    bool flipY = false;
+                    ImTextureID sceneTextureId = GetSceneTextureForUi(renderDevice, &flipY);
+                    if (sceneTextureId != (ImTextureID)0)
                     {
-                        ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-                        drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
+                        const ImVec2 uv0 = flipY ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+                        const ImVec2 uv1 = flipY ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+                        drawList->AddImage(sceneTextureId, canvasMin, canvasMax, uv0, uv1);
                     }
                     else
                     {
@@ -609,10 +636,13 @@ namespace
 
                     ImDrawList* drawList = ImGui::GetWindowDrawList();
                     drawList->PushClipRect(canvasMin, canvasMax, true);
-                    if (g_sceneRenderTarget != nullptr)
+                    bool flipY = false;
+                    ImTextureID sceneTextureId = GetSceneTextureForUi(renderDevice, &flipY);
+                    if (sceneTextureId != (ImTextureID)0)
                     {
-                        ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-                        drawList->AddImage(sceneTextureId, canvasMin, canvasMax);
+                        const ImVec2 uv0 = flipY ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+                        const ImVec2 uv1 = flipY ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+                        drawList->AddImage(sceneTextureId, canvasMin, canvasMax, uv0, uv1);
                     }
                     else
                     {
@@ -633,7 +663,7 @@ namespace
         ImGui::End();
     }
 
-    static void RenderStandaloneViewportUi()
+    static void RenderStandaloneViewportUi(IRenderDevice* renderDevice)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->Pos);
@@ -650,7 +680,9 @@ namespace
         ImGui::Begin("StandaloneViewport", nullptr, flags);
         ImGui::PopStyleVar();
 
-        if (g_sceneRenderTarget != nullptr)
+        bool flipY = false;
+        ImTextureID sceneTextureId = GetSceneTextureForUi(renderDevice, &flipY);
+        if (sceneTextureId != (ImTextureID)0)
         {
             ImVec2 availableSize = ImGui::GetContentRegionAvail();
             if (availableSize.x > 1.0f && availableSize.y > 1.0f)
@@ -658,8 +690,9 @@ namespace
                 g_sceneRequestedRenderWidth = static_cast<UINT>(availableSize.x);
                 g_sceneRequestedRenderHeight = static_cast<UINT>(availableSize.y);
             }
-            ImTextureID sceneTextureId = (ImTextureID)(intptr_t)g_sceneSrvGpuHandle.ptr;
-            ImGui::Image(sceneTextureId, ImGui::GetContentRegionAvail());
+            const ImVec2 uv0 = flipY ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+            const ImVec2 uv1 = flipY ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+            ImGui::Image(sceneTextureId, ImGui::GetContentRegionAvail(), uv0, uv1);
         }
         else
         {
@@ -978,6 +1011,18 @@ namespace EditorUi
         }
     }
 
+    void GetRequestedSceneRenderSize(UINT* outWidth, UINT* outHeight)
+    {
+        if (outWidth != nullptr)
+        {
+            *outWidth = g_sceneRequestedRenderWidth;
+        }
+        if (outHeight != nullptr)
+        {
+            *outHeight = g_sceneRequestedRenderHeight;
+        }
+    }
+
     bool EnsureSceneRenderSize()
     {
         if (!g_initialized || g_sceneRequestedRenderWidth == 0 || g_sceneRequestedRenderHeight == 0)
@@ -1079,11 +1124,11 @@ namespace EditorUi
 
         if (isStandaloneMode)
         {
-            RenderStandaloneViewportUi();
+            RenderStandaloneViewportUi(renderDevice);
         }
         else
         {
-            RenderEditorDockingUi(state, callbacks);
+            RenderEditorDockingUi(renderDevice, state, callbacks);
         }
 
         ImGui::Render();

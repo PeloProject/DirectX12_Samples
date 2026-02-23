@@ -94,6 +94,18 @@ bool OpenGLRenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
 
 void OpenGLRenderDevice::Shutdown()
 {
+    if (editorSceneTexture_ != 0)
+    {
+        if (hglrc_ != nullptr && hdc_ != nullptr)
+        {
+            wglMakeCurrent(hdc_, hglrc_);
+        }
+        glDeleteTextures(1, &editorSceneTexture_);
+        editorSceneTexture_ = 0;
+        editorSceneTextureWidth_ = 0;
+        editorSceneTextureHeight_ = 0;
+    }
+
     if (hglrc_ != nullptr)
     {
         wglMakeCurrent(nullptr, nullptr);
@@ -124,6 +136,97 @@ bool OpenGLRenderDevice::Resize(UINT width, UINT height)
 
     glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     return true;
+}
+
+bool OpenGLRenderDevice::EnsureEditorSceneTexture(UINT width, UINT height)
+{
+    if (width == 0 || height == 0)
+    {
+        return false;
+    }
+
+    if (editorSceneTexture_ != 0 &&
+        editorSceneTextureWidth_ == width &&
+        editorSceneTextureHeight_ == height)
+    {
+        return true;
+    }
+
+    if (editorSceneTexture_ != 0)
+    {
+        glDeleteTextures(1, &editorSceneTexture_);
+        editorSceneTexture_ = 0;
+    }
+
+    glGenTextures(1, &editorSceneTexture_);
+    if (editorSceneTexture_ == 0)
+    {
+        editorSceneTextureWidth_ = 0;
+        editorSceneTextureHeight_ = 0;
+        return false;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, editorSceneTexture_);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        static_cast<GLsizei>(width),
+        static_cast<GLsizei>(height),
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    editorSceneTextureWidth_ = width;
+    editorSceneTextureHeight_ = height;
+    return true;
+}
+
+void OpenGLRenderDevice::CaptureEditorSceneTexture(UINT width, UINT height)
+{
+    if (hglrc_ == nullptr || hdc_ == nullptr || width == 0 || height == 0)
+    {
+        return;
+    }
+
+    if (!wglMakeCurrent(hdc_, hglrc_))
+    {
+        return;
+    }
+
+    GLint viewport[4] = {};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    const UINT viewportWidth = static_cast<UINT>((std::max)(viewport[2], 1));
+    const UINT viewportHeight = static_cast<UINT>((std::max)(viewport[3], 1));
+    const UINT copyWidth = (std::min)(width, viewportWidth);
+    const UINT copyHeight = (std::min)(height, viewportHeight);
+    if (copyWidth == 0 || copyHeight == 0)
+    {
+        return;
+    }
+
+    if (!EnsureEditorSceneTexture(copyWidth, copyHeight))
+    {
+        return;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, editorSceneTexture_);
+    glCopyTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        0,
+        0,
+        0,
+        0,
+        static_cast<GLsizei>(copyWidth),
+        static_cast<GLsizei>(copyHeight));
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 bool OpenGLRenderDevice::PrepareImGuiRenderContext()

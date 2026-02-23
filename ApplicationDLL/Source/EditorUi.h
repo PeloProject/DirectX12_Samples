@@ -36,6 +36,7 @@ namespace EditorUi
     void ResetInputState();
 
     void RequestSceneRenderSize(UINT width, UINT height);
+    void GetRequestedSceneRenderSize(UINT* outWidth, UINT* outHeight);
     bool EnsureSceneRenderSize();
     void BeginSceneRenderToTexture(bool isPieRunning, const float* gameClearColor, const float* defaultClearColor);
     void EndSceneRenderToTexture();

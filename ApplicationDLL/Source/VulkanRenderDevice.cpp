@@ -19,6 +19,22 @@ namespace
     {
         return result == VK_SUCCESS;
     }
+
+    bool IsImGuiVulkanBackendReady()
+    {
+        if (ImGui::GetCurrentContext() == nullptr)
+        {
+            return false;
+        }
+
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.BackendRendererUserData == nullptr || io.BackendRendererName == nullptr)
+        {
+            return false;
+        }
+
+        return std::strstr(io.BackendRendererName, "imgui_impl_vulkan") != nullptr;
+    }
 }
 #endif
 
@@ -55,6 +71,8 @@ void VulkanRenderDevice::Shutdown()
             vkDeviceWaitIdle(device_);
             pendingImGuiDrawData_ = nullptr;
             pendingQuads_.clear();
+
+            DestroySceneCaptureResources();
 
             if (inFlightFence_ != VK_NULL_HANDLE)
             {
@@ -139,6 +157,10 @@ bool VulkanRenderDevice::Resize(UINT width, UINT height)
             !CreateCommandPoolAndBuffers())
         {
             return false;
+        }
+        if (sceneCaptureEnabled_ && !EnsureSceneCaptureResources(swapchainExtent_.width, swapchainExtent_.height, swapchainFormat_))
+        {
+            sceneCaptureEnabled_ = false;
         }
         return true;
     }
@@ -290,6 +312,41 @@ bool VulkanRenderDevice::PrepareImGuiRenderContext()
     return fallback_.PrepareImGuiRenderContext();
 }
 
+void VulkanRenderDevice::CaptureEditorSceneTexture(UINT width, UINT height)
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        IM_UNUSED(width);
+        IM_UNUSED(height);
+        return;
+    }
+#endif
+    fallback_.CaptureEditorSceneTexture(width, height);
+}
+
+bool VulkanRenderDevice::HasEditorSceneTexture() const
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        return sceneCaptureEnabled_ && sceneCaptureDescriptorSet_ != VK_NULL_HANDLE && sceneCaptureInitialized_;
+    }
+#endif
+    return fallback_.HasEditorSceneTexture();
+}
+
+uintptr_t VulkanRenderDevice::GetEditorSceneTextureHandle() const
+{
+#if APPLICATIONDLL_HAS_VULKAN
+    if (useNativeVulkan_)
+    {
+        return (uintptr_t)sceneCaptureDescriptorSet_;
+    }
+#endif
+    return fallback_.GetEditorSceneTextureHandle();
+}
+
 #if APPLICATIONDLL_HAS_VULKAN
 bool VulkanRenderDevice::InitializeNativeVulkan(HWND hwnd, UINT width, UINT height)
 {
@@ -342,6 +399,11 @@ bool VulkanRenderDevice::InitializeNativeVulkan(HWND hwnd, UINT width, UINT heig
         !CreateImGuiDescriptorPool())
     {
         return false;
+    }
+
+    if (sceneCaptureEnabled_ && !EnsureSceneCaptureResources(swapchainExtent_.width, swapchainExtent_.height, swapchainFormat_))
+    {
+        sceneCaptureEnabled_ = false;
     }
 
     return true;
@@ -524,6 +586,11 @@ bool VulkanRenderDevice::CreateSwapchain(UINT width, UINT height)
     createInfo.imageExtent = extent;
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    sceneCaptureEnabled_ = (capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
+    if (sceneCaptureEnabled_)
+    {
+        createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    }
 
     uint32_t queueFamilyIndices[] = { graphicsQueueFamilyIndex_, presentQueueFamilyIndex_ };
     if (graphicsQueueFamilyIndex_ != presentQueueFamilyIndex_)
@@ -593,11 +660,11 @@ bool VulkanRenderDevice::CreateRenderPass()
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapchainFormat_;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference colorAttachmentRef = {};
@@ -772,6 +839,282 @@ void VulkanRenderDevice::CleanupSwapchain()
     }
 }
 
+uint32_t VulkanRenderDevice::FindMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties) const
+{
+    VkPhysicalDeviceMemoryProperties memoryProperties = {};
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memoryProperties);
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
+    {
+        const bool typeMatch = (typeBits & (1u << i)) != 0;
+        const bool propertyMatch = (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties;
+        if (typeMatch && propertyMatch)
+        {
+            return i;
+        }
+    }
+    return UINT32_MAX;
+}
+
+void VulkanRenderDevice::DestroySceneCaptureResources()
+{
+    if (device_ == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    if (sceneCaptureDescriptorSet_ != VK_NULL_HANDLE)
+    {
+        if (ImGui::GetCurrentContext() != nullptr)
+        {
+            ImGui_ImplVulkan_RemoveTexture(sceneCaptureDescriptorSet_);
+        }
+        sceneCaptureDescriptorSet_ = VK_NULL_HANDLE;
+    }
+
+    if (sceneCaptureSampler_ != VK_NULL_HANDLE)
+    {
+        vkDestroySampler(device_, sceneCaptureSampler_, nullptr);
+        sceneCaptureSampler_ = VK_NULL_HANDLE;
+    }
+    if (sceneCaptureView_ != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(device_, sceneCaptureView_, nullptr);
+        sceneCaptureView_ = VK_NULL_HANDLE;
+    }
+    if (sceneCaptureImage_ != VK_NULL_HANDLE)
+    {
+        vkDestroyImage(device_, sceneCaptureImage_, nullptr);
+        sceneCaptureImage_ = VK_NULL_HANDLE;
+    }
+    if (sceneCaptureMemory_ != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(device_, sceneCaptureMemory_, nullptr);
+        sceneCaptureMemory_ = VK_NULL_HANDLE;
+    }
+    sceneCaptureWidth_ = 0;
+    sceneCaptureHeight_ = 0;
+    sceneCaptureFormat_ = VK_FORMAT_UNDEFINED;
+    sceneCaptureInitialized_ = false;
+}
+
+bool VulkanRenderDevice::EnsureSceneCaptureResources(uint32_t width, uint32_t height, VkFormat format)
+{
+    if (!sceneCaptureEnabled_ || width == 0 || height == 0 || device_ == VK_NULL_HANDLE)
+    {
+        return false;
+    }
+
+    const bool recreate =
+        sceneCaptureImage_ == VK_NULL_HANDLE ||
+        sceneCaptureWidth_ != width ||
+        sceneCaptureHeight_ != height ||
+        sceneCaptureFormat_ != format;
+
+    if (recreate)
+    {
+        DestroySceneCaptureResources();
+
+        VkImageCreateInfo imageInfo = {};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = format;
+        imageInfo.extent = { width, height, 1 };
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (!CheckVk(vkCreateImage(device_, &imageInfo, nullptr, &sceneCaptureImage_)))
+        {
+            return false;
+        }
+
+        VkMemoryRequirements memReq = {};
+        vkGetImageMemoryRequirements(device_, sceneCaptureImage_, &memReq);
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReq.size;
+        allocInfo.memoryTypeIndex = FindMemoryTypeIndex(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (allocInfo.memoryTypeIndex == UINT32_MAX ||
+            !CheckVk(vkAllocateMemory(device_, &allocInfo, nullptr, &sceneCaptureMemory_)))
+        {
+            DestroySceneCaptureResources();
+            return false;
+        }
+
+        if (!CheckVk(vkBindImageMemory(device_, sceneCaptureImage_, sceneCaptureMemory_, 0)))
+        {
+            DestroySceneCaptureResources();
+            return false;
+        }
+
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = sceneCaptureImage_;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        if (!CheckVk(vkCreateImageView(device_, &viewInfo, nullptr, &sceneCaptureView_)))
+        {
+            DestroySceneCaptureResources();
+            return false;
+        }
+
+        VkSamplerCreateInfo samplerInfo = {};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+        if (!CheckVk(vkCreateSampler(device_, &samplerInfo, nullptr, &sceneCaptureSampler_)))
+        {
+            DestroySceneCaptureResources();
+            return false;
+        }
+
+        sceneCaptureWidth_ = width;
+        sceneCaptureHeight_ = height;
+        sceneCaptureFormat_ = format;
+        sceneCaptureInitialized_ = false;
+    }
+
+    if (sceneCaptureDescriptorSet_ == VK_NULL_HANDLE && IsImGuiVulkanBackendReady())
+    {
+        sceneCaptureDescriptorSet_ = ImGui_ImplVulkan_AddTexture(
+            sceneCaptureSampler_,
+            sceneCaptureView_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        if (sceneCaptureDescriptorSet_ == VK_NULL_HANDLE)
+        {
+            return false;
+        }
+    }
+
+    return sceneCaptureImage_ != VK_NULL_HANDLE;
+}
+
+bool VulkanRenderDevice::RecordSceneCaptureCopy(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+    if (!sceneCaptureEnabled_ || sceneCaptureImage_ == VK_NULL_HANDLE || imageIndex >= swapchainImages_.size())
+    {
+        return false;
+    }
+
+    VkImageMemoryBarrier barriersBefore[2] = {};
+    barriersBefore[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barriersBefore[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barriersBefore[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barriersBefore[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barriersBefore[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barriersBefore[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersBefore[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersBefore[0].image = swapchainImages_[imageIndex];
+    barriersBefore[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barriersBefore[0].subresourceRange.baseMipLevel = 0;
+    barriersBefore[0].subresourceRange.levelCount = 1;
+    barriersBefore[0].subresourceRange.baseArrayLayer = 0;
+    barriersBefore[0].subresourceRange.layerCount = 1;
+
+    barriersBefore[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barriersBefore[1].srcAccessMask = sceneCaptureInitialized_ ? VK_ACCESS_SHADER_READ_BIT : 0;
+    barriersBefore[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barriersBefore[1].oldLayout = sceneCaptureInitialized_ ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    barriersBefore[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barriersBefore[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersBefore[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersBefore[1].image = sceneCaptureImage_;
+    barriersBefore[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barriersBefore[1].subresourceRange.baseMipLevel = 0;
+    barriersBefore[1].subresourceRange.levelCount = 1;
+    barriersBefore[1].subresourceRange.baseArrayLayer = 0;
+    barriersBefore[1].subresourceRange.layerCount = 1;
+
+    const VkPipelineStageFlags srcStageBefore =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+        (sceneCaptureInitialized_ ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageBefore,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        2, barriersBefore);
+
+    VkImageCopy copyRegion = {};
+    copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.srcSubresource.mipLevel = 0;
+    copyRegion.srcSubresource.baseArrayLayer = 0;
+    copyRegion.srcSubresource.layerCount = 1;
+    copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.dstSubresource.mipLevel = 0;
+    copyRegion.dstSubresource.baseArrayLayer = 0;
+    copyRegion.dstSubresource.layerCount = 1;
+    copyRegion.extent.width = swapchainExtent_.width;
+    copyRegion.extent.height = swapchainExtent_.height;
+    copyRegion.extent.depth = 1;
+
+    vkCmdCopyImage(
+        commandBuffer,
+        swapchainImages_[imageIndex],
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        sceneCaptureImage_,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &copyRegion);
+
+    VkImageMemoryBarrier barriersAfter[2] = {};
+    barriersAfter[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barriersAfter[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barriersAfter[0].dstAccessMask = 0;
+    barriersAfter[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barriersAfter[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barriersAfter[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersAfter[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersAfter[0].image = swapchainImages_[imageIndex];
+    barriersAfter[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barriersAfter[0].subresourceRange.baseMipLevel = 0;
+    barriersAfter[0].subresourceRange.levelCount = 1;
+    barriersAfter[0].subresourceRange.baseArrayLayer = 0;
+    barriersAfter[0].subresourceRange.layerCount = 1;
+
+    barriersAfter[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barriersAfter[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barriersAfter[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    barriersAfter[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barriersAfter[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barriersAfter[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersAfter[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriersAfter[1].image = sceneCaptureImage_;
+    barriersAfter[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barriersAfter[1].subresourceRange.baseMipLevel = 0;
+    barriersAfter[1].subresourceRange.levelCount = 1;
+    barriersAfter[1].subresourceRange.baseArrayLayer = 0;
+    barriersAfter[1].subresourceRange.layerCount = 1;
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        2, barriersAfter);
+    sceneCaptureInitialized_ = true;
+    return true;
+}
+
 void VulkanRenderDevice::RecordCommandBuffer(uint32_t imageIndex)
 {
     VkCommandBuffer commandBuffer = commandBuffers_[imageIndex];
@@ -782,11 +1125,66 @@ void VulkanRenderDevice::RecordCommandBuffer(uint32_t imageIndex)
     vkResetCommandBuffer(commandBuffer, 0);
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-    VkClearValue clearValue = {};
-    clearValue.color.float32[0] = pendingClearColor_[0];
-    clearValue.color.float32[1] = pendingClearColor_[1];
-    clearValue.color.float32[2] = pendingClearColor_[2];
-    clearValue.color.float32[3] = pendingClearColor_[3];
+    VkImageMemoryBarrier toTransferDstBarrier = {};
+    toTransferDstBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransferDstBarrier.srcAccessMask = 0;
+    toTransferDstBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransferDstBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    toTransferDstBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransferDstBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransferDstBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransferDstBarrier.image = swapchainImages_[imageIndex];
+    toTransferDstBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    toTransferDstBarrier.subresourceRange.baseMipLevel = 0;
+    toTransferDstBarrier.subresourceRange.levelCount = 1;
+    toTransferDstBarrier.subresourceRange.baseArrayLayer = 0;
+    toTransferDstBarrier.subresourceRange.layerCount = 1;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &toTransferDstBarrier);
+
+    VkClearColorValue clearColor = {};
+    clearColor.float32[0] = pendingClearColor_[0];
+    clearColor.float32[1] = pendingClearColor_[1];
+    clearColor.float32[2] = pendingClearColor_[2];
+    clearColor.float32[3] = pendingClearColor_[3];
+    VkImageSubresourceRange clearRange = {};
+    clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    clearRange.baseMipLevel = 0;
+    clearRange.levelCount = 1;
+    clearRange.baseArrayLayer = 0;
+    clearRange.layerCount = 1;
+    vkCmdClearColorImage(
+        commandBuffer,
+        swapchainImages_[imageIndex],
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        &clearColor,
+        1,
+        &clearRange);
+
+    VkImageMemoryBarrier toColorAttachmentBarrier = {};
+    toColorAttachmentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toColorAttachmentBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toColorAttachmentBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    toColorAttachmentBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toColorAttachmentBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    toColorAttachmentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColorAttachmentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColorAttachmentBarrier.image = swapchainImages_[imageIndex];
+    toColorAttachmentBarrier.subresourceRange = clearRange;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &toColorAttachmentBarrier);
 
     VkRenderPassBeginInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -794,15 +1192,11 @@ void VulkanRenderDevice::RecordCommandBuffer(uint32_t imageIndex)
     renderPassInfo.framebuffer = framebuffers_[imageIndex];
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = swapchainExtent_;
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearValue;
+    renderPassInfo.clearValueCount = 0;
+    renderPassInfo.pClearValues = nullptr;
 
+    // Pass 1: game content only (without ImGui)
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    if (pendingImGuiDrawData_ != nullptr && pendingImGuiDrawData_->CmdListsCount > 0)
-    {
-        ImGui_ImplVulkan_RenderDrawData(pendingImGuiDrawData_, commandBuffer);
-    }
 
     if (!pendingQuads_.empty())
     {
@@ -855,6 +1249,38 @@ void VulkanRenderDevice::RecordCommandBuffer(uint32_t imageIndex)
     }
 
     vkCmdEndRenderPass(commandBuffer);
+    if (sceneCaptureEnabled_ && sceneCaptureImage_ != VK_NULL_HANDLE)
+    {
+        RecordSceneCaptureCopy(commandBuffer, imageIndex);
+    }
+
+    if (pendingImGuiDrawData_ != nullptr && pendingImGuiDrawData_->CmdListsCount > 0)
+    {
+        VkImageMemoryBarrier toColorForImGuiBarrier = {};
+        toColorForImGuiBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toColorForImGuiBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        toColorForImGuiBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        toColorForImGuiBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        toColorForImGuiBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        toColorForImGuiBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toColorForImGuiBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toColorForImGuiBarrier.image = swapchainImages_[imageIndex];
+        toColorForImGuiBarrier.subresourceRange = clearRange;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &toColorForImGuiBarrier);
+
+        // Pass 2: ImGui overlay only
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        ImGui_ImplVulkan_RenderDrawData(pendingImGuiDrawData_, commandBuffer);
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
     vkEndCommandBuffer(commandBuffer);
 }
 #endif

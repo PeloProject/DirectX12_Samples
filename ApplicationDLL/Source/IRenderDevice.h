@@ -3,6 +3,7 @@
 #include "RendererBackend.h"
 
 #include <Windows.h>
+#include <cstdint>
 
 struct ID3D12CommandQueue;
 struct ImDrawData;
@@ -22,6 +23,9 @@ public:
     virtual bool SupportsEditorUi() const { return true; }
     virtual void SetImGuiDrawData(ImDrawData* drawData) { (void)drawData; }
     virtual void DrawQuadNdc(float centerX, float centerY, float width, float height) {}
+    virtual void CaptureEditorSceneTexture(UINT width, UINT height) { (void)width; (void)height; }
+    virtual bool HasEditorSceneTexture() const { return false; }
+    virtual uintptr_t GetEditorSceneTextureHandle() const { return 0; }
 
     virtual ID3D12CommandQueue* GetDx12CommandQueue() { return nullptr; }
 };
