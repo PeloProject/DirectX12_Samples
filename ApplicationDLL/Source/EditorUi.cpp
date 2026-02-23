@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -54,7 +55,109 @@ namespace
     static bool g_rendererSwitchQueued = false;
     static uint32_t g_queuedRendererBackend = static_cast<uint32_t>(RendererBackend::DirectX12);
     static int g_rendererSwitchDelayFrames = 0;
+    static constexpr char kAssetDragDropType[] = "ASSET_BROWSER_ITEM";
 
+    struct SampleAssetEntry
+    {
+        const char* assetPath = "";
+    };
+
+    struct SampleActorEntry
+    {
+        std::string actorName;
+        std::string sourceAssetPath;
+        float location[3] = { 0.0f, 0.0f, 0.0f };
+        float rotation[3] = { 0.0f, 0.0f, 0.0f };
+        float scale[3] = { 1.0f, 1.0f, 1.0f };
+    };
+
+    static constexpr SampleAssetEntry kSampleAssets[] =
+    {
+        { "Meshes/SM_Cube.asset" },
+        { "Meshes/SM_Capsule.asset" },
+        { "Meshes/SM_Cone.asset" },
+        { "Lights/BP_PointLight.asset" },
+        { "Cameras/BP_CineCamera.asset" }
+    };
+
+    static std::vector<SampleActorEntry> g_worldActors;
+    static int g_selectedActorIndex = -1;
+    static int g_spawnedActorSerial = 1;
+    static std::string g_lastDropResult;
+
+    static std::string MakeSpawnActorName(const char* assetPath)
+    {
+        if (assetPath == nullptr || assetPath[0] == '\0')
+        {
+            return "Actor";
+        }
+
+        std::string baseName = assetPath;
+        const size_t slashPos = baseName.find_last_of("/\\");
+        if (slashPos != std::string::npos)
+        {
+            baseName = baseName.substr(slashPos + 1);
+        }
+        const size_t extPos = baseName.find_last_of('.');
+        if (extPos != std::string::npos)
+        {
+            baseName = baseName.substr(0, extPos);
+        }
+        if (baseName.empty())
+        {
+            baseName = "Actor";
+        }
+
+        char nameBuffer[128] = {};
+        sprintf_s(nameBuffer, "%s_%02d", baseName.c_str(), g_spawnedActorSerial++);
+        return nameBuffer;
+    }
+
+    static void EnsureSampleWorldInitialized()
+    {
+        if (!g_worldActors.empty())
+        {
+            return;
+        }
+
+        SampleActorEntry directionalLight;
+        directionalLight.actorName = "DirectionalLight";
+        directionalLight.sourceAssetPath = "Lights/BP_DirectionalLight.asset";
+        directionalLight.rotation[0] = -35.0f;
+        directionalLight.rotation[1] = 40.0f;
+        g_worldActors.push_back(directionalLight);
+
+        SampleActorEntry mainCamera;
+        mainCamera.actorName = "MainCamera";
+        mainCamera.sourceAssetPath = "Cameras/BP_Camera.asset";
+        mainCamera.location[0] = 0.0f;
+        mainCamera.location[1] = 140.0f;
+        mainCamera.location[2] = -250.0f;
+        mainCamera.rotation[0] = 20.0f;
+        g_worldActors.push_back(mainCamera);
+
+        g_selectedActorIndex = !g_worldActors.empty() ? 0 : -1;
+    }
+
+    static bool SpawnActorFromAssetIndex(int assetIndex)
+    {
+        if (assetIndex < 0 || assetIndex >= static_cast<int>(IM_ARRAYSIZE(kSampleAssets)))
+        {
+            return false;
+        }
+
+        const SampleAssetEntry& asset = kSampleAssets[assetIndex];
+        SampleActorEntry actor;
+        actor.actorName = MakeSpawnActorName(asset.assetPath);
+        actor.sourceAssetPath = asset.assetPath;
+        actor.location[0] = static_cast<float>(g_spawnedActorSerial - 2) * 25.0f;
+        actor.location[1] = 0.0f;
+        actor.location[2] = 0.0f;
+
+        g_worldActors.push_back(actor);
+        g_selectedActorIndex = static_cast<int>(g_worldActors.size()) - 1;
+        return true;
+    }
     static void ImGuiSrvDescriptorAlloc(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* outCpuDescHandle, D3D12_GPU_DESCRIPTOR_HANDLE* outGpuDescHandle)
     {
         IM_ASSERT(g_imguiSrvAllocated < g_imguiSrvCapacity);
@@ -356,6 +459,8 @@ namespace
 
     static void RenderEditorDockingUi(IRenderDevice* renderDevice, const EditorUiRuntimeState& state, const EditorUiCallbacks& callbacks)
     {
+        EnsureSampleWorldInitialized();
+
         ImGuiWindowFlags hostWindowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->Pos);
@@ -400,30 +505,56 @@ namespace
         ImGui::End();
 
         ImGui::Begin("World Outliner");
-        ImGui::Text("DemoActor");
-        ImGui::BulletText("DirectionalLight");
-        ImGui::BulletText("MainCamera");
-        ImGui::BulletText("SM_Cube_01");
+        ImGui::Text("Actors: %d", static_cast<int>(g_worldActors.size()));
+        ImGui::Separator();
+        for (int i = 0; i < static_cast<int>(g_worldActors.size()); ++i)
+        {
+            const bool isSelected = (g_selectedActorIndex == i);
+            if (ImGui::Selectable(g_worldActors[i].actorName.c_str(), isSelected))
+            {
+                g_selectedActorIndex = i;
+            }
+        }
         ImGui::End();
 
         ImGui::Begin("Details");
-        ImGui::Text("Transform");
-        static float location[3] = { 0.0f, 0.0f, 0.0f };
-        static float rotation[3] = { 0.0f, 0.0f, 0.0f };
-        static float scale[3] = { 1.0f, 1.0f, 1.0f };
-        ImGui::DragFloat3("Location", location, 0.1f);
-        ImGui::DragFloat3("Rotation", rotation, 0.5f);
-        ImGui::DragFloat3("Scale", scale, 0.01f);
+        if (g_selectedActorIndex >= 0 && g_selectedActorIndex < static_cast<int>(g_worldActors.size()))
+        {
+            SampleActorEntry& selectedActor = g_worldActors[g_selectedActorIndex];
+            ImGui::Text("Selected: %s", selectedActor.actorName.c_str());
+            ImGui::Text("Source: %s", selectedActor.sourceAssetPath.c_str());
+            ImGui::Separator();
+            ImGui::Text("Transform");
+            ImGui::DragFloat3("Location", selectedActor.location, 0.1f);
+            ImGui::DragFloat3("Rotation", selectedActor.rotation, 0.5f);
+            ImGui::DragFloat3("Scale", selectedActor.scale, 0.01f);
+        }
+        else
+        {
+            ImGui::TextUnformatted("No actor selected.");
+        }
         ImGui::End();
 
-        ImGui::Begin("Content Browser");
-        ImGui::Text("Assets");
+        ImGui::Begin("Asset Browser");
+        ImGui::TextUnformatted("Drag asset into Scene tab viewport.");
         ImGui::Separator();
-        ImGui::BulletText("Materials/M_Default");
-        ImGui::BulletText("Meshes/SM_Cube");
-        ImGui::BulletText("Textures/T_Checker");
+        for (int i = 0; i < static_cast<int>(IM_ARRAYSIZE(kSampleAssets)); ++i)
+        {
+            const SampleAssetEntry& asset = kSampleAssets[i];
+            ImGui::Selectable(asset.assetPath, false, ImGuiSelectableFlags_AllowDoubleClick);
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            {
+                ImGui::SetDragDropPayload(kAssetDragDropType, &i, sizeof(i));
+                ImGui::Text("Drop to Scene: %s", asset.assetPath);
+                ImGui::EndDragDropSource();
+            }
+        }
+        if (!g_lastDropResult.empty())
+        {
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", g_lastDropResult.c_str());
+        }
         ImGui::End();
-
         ImGui::Begin("PIE Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
         ImGui::Text("Play In Editor");
         if (ImGui::Button(state.isPieRunning ? "Stop PIE" : "Start PIE"))
@@ -535,6 +666,32 @@ namespace
 
                     ImGui::InvisibleButton("##SceneCanvas", availableSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
                     const bool isHovered = ImGui::IsItemHovered();
+                    const bool canvasActive = ImGui::IsItemActive();
+
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kAssetDragDropType))
+                        {
+                            if (payload->DataSize == sizeof(int))
+                            {
+                                const int assetIndex = *static_cast<const int*>(payload->Data);
+                                if (SpawnActorFromAssetIndex(assetIndex))
+                                {
+                                    g_lastDropResult = "Spawned actor: " + g_worldActors[g_selectedActorIndex].actorName +
+                                        " (from " + g_worldActors[g_selectedActorIndex].sourceAssetPath + ")";
+                                }
+                                else
+                                {
+                                    g_lastDropResult = "Failed to spawn actor: invalid asset payload.";
+                                }
+                            }
+                            else
+                            {
+                                g_lastDropResult = "Failed to spawn actor: payload size mismatch.";
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
 
                     if (isHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
                     {
@@ -613,6 +770,10 @@ namespace
                         ? "Scene View  Grid: 3D  RMB: Orbit  MMB: Pan  Wheel: Zoom"
                         : "Scene View  Grid: 2D  MMB: Pan  Wheel: Zoom";
                     drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 10.0f), IM_COL32(210, 210, 210, 255), hintText);
+                    if (canvasActive || isHovered)
+                    {
+                        drawList->AddText(ImVec2(canvasMin.x + 10.0f, canvasMin.y + 30.0f), IM_COL32(220, 220, 140, 255), "Drop asset here to spawn actor");
+                    }
                     drawList->PopClipRect();
                 }
                 else
