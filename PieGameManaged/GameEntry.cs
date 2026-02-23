@@ -54,7 +54,7 @@ internal static class GameEntry
         float height = 1.0f + 0.35f * (1.0f - pulse);
         if (_quadHandle != 0)
         {
-            //SetGameQuadTransform(_quadHandle, centerX, centerY, width, height);
+            SetGameQuadTransform(_quadHandle, centerX, centerY, width, height);
         }
     }
 

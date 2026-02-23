@@ -328,6 +328,15 @@ void OpenGLRenderDevice::Render()
     }
 }
 
+///=======================================================
+/// <summary>
+/// 正規化デバイス座標（NDC）で、指定した中心座標（centerX, centerY）と幅・高さで四角形を描画します。OpenGLの即時モードを使用し、テクスチャ・深度テスト・カリングを無効化、ブレンドを有効化して2つの三角形で矩形を構成します。hdc_ または hglrc_ が null の場合、または wglMakeCurrent が失敗した場合は何も描画せずに戻ります。描画色は固定（約オレンジ）です。
+/// </summary>
+/// <param name="centerX">矩形の中心の X 座標（NDC、通常は -1.0 ～ 1.0 の範囲を想定）。</param>
+/// <param name="centerY">矩形の中心の Y 座標（NDC、通常は -1.0 ～ 1.0 の範囲を想定）。</param>
+/// <param name="width">矩形の幅（NDC 単位）。内部で幅の半分は最小 0.005 にクランプされます。</param>
+/// <param name="height">矩形の高さ（NDC 単位）。内部で高さの半分は最小 0.005 にクランプされます。</param>
+///=======================================================
 void OpenGLRenderDevice::DrawQuadNdc(float centerX, float centerY, float width, float height)
 {
     if (hdc_ == nullptr || hglrc_ == nullptr)

@@ -84,6 +84,7 @@ private:
 	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
 
 	std::vector<TextureRGBA> m_TextureData;
+	ComPtr<ID3D12DescriptorHeap> m_pTexDescHeap;
 
 	std::vector<short> m_Indices;
 };

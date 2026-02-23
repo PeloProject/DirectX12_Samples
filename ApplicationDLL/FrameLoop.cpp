@@ -148,6 +148,13 @@ void AppRuntime::SetGameClearColor(float r, float g, float b, float a)
     RuntimeStateRef().g_gameClearColor[3] = a;
 }
 
+
+///=====================================================
+/// <summary>
+/// 新しいゲーム用クアッド（IGameQuad）を作成して内部状態に登録します。成功すると一意のハンドルを返し、失敗時は0を返します。作成時にトランスフォームを設定し、状態文字列（g_pieGameStatus）を更新します。
+/// </summary>
+/// <returns>作成されたゲームクアッドのハンドル（uint32_t）。作成に失敗した場合は0を返します。</returns>
+///=====================================================
 uint32_t AppRuntime::CreateGameQuad()
 {
     try

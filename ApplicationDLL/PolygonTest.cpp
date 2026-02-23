@@ -92,14 +92,19 @@ void PolygonTest::SetTransform(float centerX, float centerY, float width, float 
 	m_isVertexDirty = true;
 }
 
+///=========================================================================================
+/// <summary>
+/// m_quadTransformの中心座標と幅・高さに基づいて、四角形の4頂点の位置とUV座標をm_Verticesに設定するメンバ関数。
+/// </summary>
+///=========================================================================================
 void PolygonTest::ApplyQuadTransform()
 {
-	const float halfWidth = m_quadTransform.width * 0.5f;
-	const float halfHeight = m_quadTransform.height * 0.5f;
-	const float left = m_quadTransform.centerX - halfWidth;
-	const float right = m_quadTransform.centerX + halfWidth;
-	const float bottom = m_quadTransform.centerY - halfHeight;
-	const float top = m_quadTransform.centerY + halfHeight;
+	const float halfWidth	= m_quadTransform.width * 0.5f;
+	const float halfHeight	= m_quadTransform.height * 0.5f;
+	const float left		= m_quadTransform.centerX - halfWidth;
+	const float right		= m_quadTransform.centerX + halfWidth;
+	const float bottom		= m_quadTransform.centerY - halfHeight;
+	const float top			= m_quadTransform.centerY + halfHeight;
 
 	m_Vertices[0] = { { left, bottom, 0.0f }, { 0.0f, 1.0f } };
 	m_Vertices[1] = { { left, top, 0.0f }, { 0.0f, 0.0f } };
@@ -179,11 +184,13 @@ HRESULT PolygonTest::CompileShaders()
 	return S_OK;
 }
 
+///=========================================================================================
 /// <summary>
 /// 頂点バッファ用のコミット済みGPUリソースを作成し、クラス内の頂点データを転送して頂点バッファビューを設定します。
 /// </summary>
 /// <param name="heapProps">D3D12_HEAP_PROPERTIES 構造体。頂点バッファのためのヒープ割り当てのプロパティ（メモリ種類や作成方法など）を指定します。</param>
 /// <param name="resourceDesc">D3D12_RESOURCE_DESC 構造体。作成するリソースのサイズ、フォーマット、使用方法などの記述を指定します。</param>
+///==========================================================================================
 void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	// Gpuメモリの確保
@@ -306,6 +313,34 @@ HRESULT PolygonTest::CreateGpuResources()
 
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 	rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	
+	D3D12_DESCRIPTOR_RANGE descriptorRange = {};
+	descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorRange.NumDescriptors = 1; // シェーダーリソースビューの数(Texture1つ）
+	descriptorRange.BaseShaderRegister = 0; // t0 レジスタから
+	descriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_PARAMETER rootParameter = {};
+	rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParameter.DescriptorTable.NumDescriptorRanges = 1;
+	rootParameter.DescriptorTable.pDescriptorRanges = &descriptorRange;
+	rootParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーでのみ使用
+
+	rootSignatureDesc.pParameters = &rootParameter;
+	rootSignatureDesc.NumParameters = 1;
+	
+	D3D12_STATIC_SAMPLER_DESC samplerDesc = {};
+	samplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+	samplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	samplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	samplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+	samplerDesc.MinLOD = 0.0f;
+	samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	samplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーでのみ使用
+
+	rootSignatureDesc.pStaticSamplers = &samplerDesc;
+	rootSignatureDesc.NumStaticSamplers = 1;
 
 	ID3DBlob* errorBlob = nullptr;
 	ID3DBlob* rootSignatureBlob = nullptr;
@@ -357,6 +392,7 @@ HRESULT PolygonTest::CreateGpuResources()
 /// </summary>
 HRESULT PolygonTest::CreateGraphicsPipelineState()
 {
+	// 頂点入力レイアウトの設定
 	D3D12_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 		{ // 座標乗法
 			"POSITION",
@@ -502,14 +538,13 @@ HRESULT PolygonTest::CreateTextureBuffer()
 		nullptr,
 		m_TextureData.data(),
 		256 * sizeof(TextureRGBA),
-		256 * 256 * sizeof(TextureRGBA)
+		m_TextureData.size() * sizeof(TextureRGBA)
 	);
 	if (!SUCCEEDED(hr)) {
 		LOG_DEBUG("Texture Data Write Error");
 		return hr;
 	}
 
-	ComPtr<ID3D12DescriptorHeap> descriptorHeap;
 	// シェーダーリソースビューの設定
 	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc = {};
 	descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // シェーダーから見えるようにする
@@ -519,7 +554,18 @@ HRESULT PolygonTest::CreateTextureBuffer()
 
 	hr = Dx12RenderDevice::GetDevice()->CreateDescriptorHeap(
 		&descriptorHeapDesc,
-		IID_PPV_ARGS(&descriptorHeap)
+		IID_PPV_ARGS(&m_pTexDescHeap)
+	);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = resourceDesc.Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Texture2D.MipLevels = 1;
+	Dx12RenderDevice::GetDevice()->CreateShaderResourceView(
+		m_pTextureBuffer.Get(),
+		&srvDesc,
+		m_pTexDescHeap->GetCPUDescriptorHandleForHeapStart()
 	);
 
 	return hr;
@@ -557,6 +603,9 @@ void PolygonTest::Render()
 	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = commandList;
 	m_pCommandList->SetPipelineState(m_pPipelineState.Get());
 	m_pCommandList->SetGraphicsRootSignature(m_pRootSignature.Get());
+	m_pCommandList->SetDescriptorHeaps(1, m_pTexDescHeap.GetAddressOf());
+	m_pCommandList->SetGraphicsRootDescriptorTable(0, m_pTexDescHeap->GetGPUDescriptorHandleForHeapStart());
+
 	m_pCommandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height) };
 	m_pCommandList->RSSetScissorRects(1, &scissorRect);
