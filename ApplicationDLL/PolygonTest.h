@@ -1,6 +1,9 @@
 ﻿#pragma once
 #include "MathUtil.h"
+#include "Source/PipelineLibrary.h"
 #include <d3d12.h>
+
+#include <memory>
 
 using namespace WL;
 using Microsoft::WRL::ComPtr;
@@ -42,19 +45,6 @@ private:
 	HRESULT CreateTextureBuffer();
 
 	void ApplyTransformations();
-
-	
-
-	/// <summary>
-	/// グラフィックスパイプラインステートを作成します。
-	/// GPUに描画方法を指示する為の設定情報をまとめたものになります。
-	/// </summary>
-	HRESULT CreateGraphicsPipelineState();
-
-	/// <summary>
-	/// シェーダーのコンパイル
-	/// </summary>
-	HRESULT CompileShaders();
 	void ApplyQuadTransform();
 	void UploadVertexBufferData();
 
@@ -70,12 +60,7 @@ private:
 	Vertex m_Vertices[4];
 	bool m_isVertexDirty = true;
 
-	ComPtr<ID3D12PipelineState> m_pPipelineState;
-
-	ComPtr<ID3DBlob> m_pVertexShaderBlob;
-	ComPtr<ID3DBlob> m_pPixelShaderBlob;
-
-	ComPtr<ID3D12RootSignature> m_pRootSignature;
+	std::shared_ptr<const PipelineLibrary::Pipeline> m_pipeline;
 
 	ComPtr<ID3D12Resource>		m_pVertexBuffer;
 	ComPtr<ID3D12Resource>		m_pIndexBuffer;
@@ -88,4 +73,3 @@ private:
 
 	std::vector<short> m_Indices;
 };
-

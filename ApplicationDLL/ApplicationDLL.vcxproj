@@ -190,8 +190,10 @@
     <ClInclude Include="Source\Dx12RenderDevice.h" />
     <ClInclude Include="Source\Math\MathUtil.h" />
     <ClInclude Include="Source\OpenGLRenderDevice.h" />
+    <ClInclude Include="Source\PipelineLibrary.h" />
     <ClInclude Include="Source\RenderDeviceFactory.h" />
     <ClInclude Include="Source\RendererBackend.h" />
+    <ClInclude Include="Source\ShaderCompiler.h" />
     <ClInclude Include="Source\Scene\SceneBase.h" />
     <ClInclude Include="Source\Scene\SceneGame.h" />
     <ClInclude Include="Source\Scene\SceneManager.h" />
@@ -222,8 +224,10 @@
     <ClCompile Include="Source\GraphicsDevice.cpp" />
     <ClCompile Include="Source\Math\MathUtil.cpp" />
     <ClCompile Include="Source\OpenGLRenderDevice.cpp" />
+    <ClCompile Include="Source\PipelineLibrary.cpp" />
     <ClCompile Include="Source\RenderDeviceFactory.cpp" />
     <ClCompile Include="Source\RendererBackend.cpp" />
+    <ClCompile Include="Source\ShaderCompiler.cpp" />
     <ClCompile Include="Source\Scene\SceneBase.cpp" />
     <ClCompile Include="Source\Scene\SceneGame.cpp" />
     <ClCompile Include="Source\Scene\SceneManager.cpp" />

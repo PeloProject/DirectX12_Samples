@@ -138,6 +138,12 @@
     <ClInclude Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.h">
       <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
     </ClInclude>
+    <ClInclude Include="Source\PipelineLibrary.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\ShaderCompiler.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -232,6 +238,12 @@
     </ClCompile>
     <ClCompile Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.cpp">
       <Filter>ソース ファイル\GameQuadRenderers</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\PipelineLibrary.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\ShaderCompiler.cpp">
+      <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
