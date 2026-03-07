@@ -24,6 +24,10 @@ namespace
             renderer_->SetTransform(centerX, centerY, width, height);
         }
 
+        ///===================================================
+        /// @brief 描画
+        /// @param renderDevice 
+        ///===================================================
         void Render(IRenderDevice* renderDevice) override
         {
             if (renderer_ == nullptr)

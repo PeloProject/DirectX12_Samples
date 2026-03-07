@@ -173,11 +173,13 @@
     <ClInclude Include="GameQuad.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="OpenGLShaderCompiler.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PieAutoPublish.h" />
     <ClInclude Include="PieLoader.h" />
     <ClInclude Include="PolygonTest.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="ShaderCompilerBase.h" />
     <ClInclude Include="Source\EditorUi.h" />
     <ClInclude Include="Source\GameQuadRenderers\Dx12GameQuadRenderer.h" />
     <ClInclude Include="Source\GameQuadRenderers\GameQuadRendererFactory.h" />
@@ -188,6 +190,7 @@
     <ClInclude Include="Source\GraphicsDevice.h" />
     <ClInclude Include="Source\IRenderDevice.h" />
     <ClInclude Include="Source\Dx12RenderDevice.h" />
+    <ClInclude Include="Source\Material.h" />
     <ClInclude Include="Source\Math\MathUtil.h" />
     <ClInclude Include="Source\OpenGLRenderDevice.h" />
     <ClInclude Include="Source\PipelineLibrary.h" />
@@ -206,6 +209,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="FrameLoop.cpp" />
     <ClCompile Include="GameQuad.cpp" />
+    <ClCompile Include="OpenGLShaderCompiler.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -215,6 +219,7 @@
     <ClCompile Include="PieAutoPublish.cpp" />
     <ClCompile Include="PieLoader.cpp" />
     <ClCompile Include="PolygonTest.cpp" />
+    <ClCompile Include="ShaderCompilerBase.cpp" />
     <ClCompile Include="Source\Dx12RenderDevice.cpp" />
     <ClCompile Include="Source\EditorUi.cpp" />
     <ClCompile Include="Source\GameQuadRenderers\Dx12GameQuadRenderer.cpp" />
@@ -222,6 +227,7 @@
     <ClCompile Include="Source\GameQuadRenderers\OpenGlGameQuadRenderer.cpp" />
     <ClCompile Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.cpp" />
     <ClCompile Include="Source\GraphicsDevice.cpp" />
+    <ClCompile Include="Source\Material.cpp" />
     <ClCompile Include="Source\Math\MathUtil.cpp" />
     <ClCompile Include="Source\OpenGLRenderDevice.cpp" />
     <ClCompile Include="Source\PipelineLibrary.cpp" />

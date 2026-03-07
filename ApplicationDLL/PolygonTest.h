@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "MathUtil.h"
+#include "Source/Material.h"
 #include "Source/PipelineLibrary.h"
 #include <d3d12.h>
 
@@ -60,7 +61,7 @@ private:
 	Vertex m_Vertices[4];
 	bool m_isVertexDirty = true;
 
-	std::shared_ptr<const PipelineLibrary::Pipeline> m_pipeline;
+	Material m_material;
 
 	ComPtr<ID3D12Resource>		m_pVertexBuffer;
 	ComPtr<ID3D12Resource>		m_pIndexBuffer;
@@ -69,7 +70,6 @@ private:
 	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
 
 	std::vector<TextureRGBA> m_TextureData;
-	ComPtr<ID3D12DescriptorHeap> m_pTexDescHeap;
 
 	std::vector<short> m_Indices;
 };

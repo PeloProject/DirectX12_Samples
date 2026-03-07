@@ -193,7 +193,19 @@ HRESULT PolygonTest::CreateGpuResources()
 		return hr;
 	}
 
-	static const D3D12_INPUT_ELEMENT_DESC kInputLayout[] = {
+	Material::MaterialDesc materialDesc = {};
+	materialDesc.pipelineKey.vertexShaderFile = L"BasicVertexShader.hlsl";
+	materialDesc.pipelineKey.vertexEntryPoint = "BasicVS";
+	materialDesc.pipelineKey.vertexShaderModel = "vs_5_0";
+	materialDesc.pipelineKey.pixelShaderFile = L"BasicPixelShader.hlsl";
+	materialDesc.pipelineKey.pixelEntryPoint = "BasicPS";
+	materialDesc.pipelineKey.pixelShaderModel = "ps_5_0";
+	materialDesc.pipelineKey.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	materialDesc.pipelineKey.cullMode = D3D12_CULL_MODE_NONE;
+	materialDesc.pipelineKey.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	materialDesc.pipelineKey.enableDepth = false;
+	materialDesc.pipelineKey.enableBlend = false;
+	materialDesc.inputElements = {
 		{
 			"POSITION",
 			0,
@@ -213,26 +225,14 @@ HRESULT PolygonTest::CreateGpuResources()
 			0
 		}
 	};
+	materialDesc.textureResource = m_pTextureBuffer.Get();
+	materialDesc.textureFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	materialDesc.textureMipLevels = 1;
 
-	PipelineLibrary::PipelineKey pipelineKey = {};
-	pipelineKey.vertexShaderFile = L"BasicVertexShader.hlsl";
-	pipelineKey.vertexEntryPoint = "BasicVS";
-	pipelineKey.vertexShaderModel = "vs_5_0";
-	pipelineKey.pixelShaderFile = L"BasicPixelShader.hlsl";
-	pipelineKey.pixelEntryPoint = "BasicPS";
-	pipelineKey.pixelShaderModel = "ps_5_0";
-	pipelineKey.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	pipelineKey.cullMode = D3D12_CULL_MODE_NONE;
-	pipelineKey.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	pipelineKey.enableDepth = false;
-	pipelineKey.enableBlend = false;
-
-	hr = GetPipelineLibrary().GetOrCreate(
+	hr = m_material.Initialize(
 		Dx12RenderDevice::GetDevice(),
-		pipelineKey,
-		kInputLayout,
-		_countof(kInputLayout),
-		&m_pipeline);
+		GetPipelineLibrary(),
+		materialDesc);
 	if (FAILED(hr))
 	{
 		return hr;
@@ -288,28 +288,6 @@ HRESULT PolygonTest::CreateTextureBuffer()
 		return hr;
 	}
 
-	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc = {};
-	descriptorHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	descriptorHeapDesc.NodeMask = 0;
-	descriptorHeapDesc.NumDescriptors = 1;
-	descriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
-	hr = Dx12RenderDevice::GetDevice()->CreateDescriptorHeap(
-		&descriptorHeapDesc,
-		IID_PPV_ARGS(&m_pTexDescHeap)
-	);
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Format = resourceDesc.Format;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.Texture2D.MipLevels = 1;
-	Dx12RenderDevice::GetDevice()->CreateShaderResourceView(
-		m_pTextureBuffer.Get(),
-		&srvDesc,
-		m_pTexDescHeap->GetCPUDescriptorHandleForHeapStart()
-	);
-
 	return hr;
 }
 
@@ -329,7 +307,7 @@ void PolygonTest::Render()
 	}
 
 	ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
-	if (commandList == nullptr || m_pipeline == nullptr)
+	if (commandList == nullptr)
 	{
 		return;
 	}
@@ -343,10 +321,7 @@ void PolygonTest::Render()
 	viewport.MaxDepth = 1.0f;
 
 	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = commandList;
-	m_pCommandList->SetPipelineState(m_pipeline->pipelineState.Get());
-	m_pCommandList->SetGraphicsRootSignature(m_pipeline->rootSignature.Get());
-	m_pCommandList->SetDescriptorHeaps(1, m_pTexDescHeap.GetAddressOf());
-	m_pCommandList->SetGraphicsRootDescriptorTable(0, m_pTexDescHeap->GetGPUDescriptorHandleForHeapStart());
+	m_material.Bind(m_pCommandList.Get());
 
 	m_pCommandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height) };

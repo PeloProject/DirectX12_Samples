@@ -135,6 +135,10 @@ void StopPieImmediate()
     RuntimeStateRef().g_pieGameStatus = "PIE stopped";
 }
 
+///=====================================================
+/// @brief PIE起動中か？
+/// @return 
+///=====================================================
 BOOL AppRuntime::IsPieRunning() const
 {
     return RuntimeStateRef().g_isPieRunning ? TRUE : FALSE;
