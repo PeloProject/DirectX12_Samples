@@ -24,10 +24,7 @@ struct RuntimeState
     std::unique_ptr<IRenderDevice> g_renderDevice;
     bool g_imguiInitialized = false;
     PieTickCallback g_pieTickCallback = nullptr;
-    bool g_isPieRunning = false;
     bool g_isStandaloneMode = false;
-    bool g_pendingStartPie = false;
-    bool g_pendingStopPie = false;
     HMODULE g_pieGameModule = nullptr;
     PieGameStartFn g_pieGameStart = nullptr;
     PieGameTickFn g_pieGameTick = nullptr;

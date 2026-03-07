@@ -254,13 +254,13 @@ bool TryHotReloadPieGameModule()
 
 bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus)
 {
-    const bool wasRunning = RuntimeStateRef().g_isPieRunning;
+    const bool wasRunning = AppRuntime::Get().GetPlayInEditor().IsPieRunning();
     if (wasRunning && RuntimeStateRef().g_pieGameStop != nullptr)
     {
         RuntimeStateRef().g_pieGameStop();
     }
     DestroyAllGameQuads();
-    RuntimeStateRef().g_isPieRunning = false;
+    AppRuntime::Get().GetPlayInEditor().StopImmediate();
 
     UnloadPieGameModule();
     if (!EnsurePieGameModuleLoaded())
@@ -272,7 +272,7 @@ bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus
     if (wasRunning && RuntimeStateRef().g_pieGameStart != nullptr)
     {
         RuntimeStateRef().g_pieGameStart();
-        RuntimeStateRef().g_isPieRunning = true;
+        AppRuntime::Get().GetPlayInEditor().StartImmediate();
     }
 
     RuntimeStateRef().g_pieGameStatus = successStatus;
@@ -281,7 +281,7 @@ bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus
 
 bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath, const char* successStatus, const char* failureStatus)
 {
-    const bool wasRunning = RuntimeStateRef().g_isPieRunning;
+    const bool wasRunning = AppRuntime::Get().GetPlayInEditor().IsPieRunning();
     HMODULE oldModule = RuntimeStateRef().g_pieGameModule;
     PieGameStopFn oldStop = RuntimeStateRef().g_pieGameStop;
 
@@ -306,11 +306,13 @@ bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath, const 
     if (wasRunning && RuntimeStateRef().g_pieGameStart != nullptr)
     {
         RuntimeStateRef().g_pieGameStart();
-        RuntimeStateRef().g_isPieRunning = true;
+		AppRuntime::Get().GetPlayInEditor().StartImmediate();
+        //RuntimeStateRef().g_isPieRunning = true;
     }
     else
     {
-        RuntimeStateRef().g_isPieRunning = wasRunning;
+        AppRuntime::Get().GetPlayInEditor().StopImmediate();
+        //RuntimeStateRef().g_isPieRunning = wasRunning;
     }
 
     RuntimeStateRef().g_pieGameStatus = successStatus;

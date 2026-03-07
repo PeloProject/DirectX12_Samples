@@ -360,7 +360,7 @@ void AppRuntime::DestroyNativeWindow()
         return;
     }
 
-    StopPieImmediate();
+    m_PlayInEditor.StopImmediate();
     ShutdownImGui();
     ShutdownRendererAndUi();
     DestroyWindow(RuntimeStateRef().g_hwnd);
@@ -390,7 +390,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
     RuntimeStateRef().g_pendingRendererSwitch = false;
     const RendererBackend targetBackend = RuntimeStateRef().g_pendingRendererBackend;
     const RendererBackend previousBackend = RuntimeStateRef().g_rendererBackend;
-    const bool wasPieRunning = RuntimeStateRef().g_isPieRunning;
+    const bool wasPieRunning = m_PlayInEditor.IsPieRunning();
     LOG_DEBUG("ApplyPendingRendererSwitch: %s -> %s",
         RendererBackendToString(previousBackend),
         RendererBackendToString(targetBackend));
@@ -400,7 +400,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
         return true;
     }
 
-    StopPieImmediate();
+    m_PlayInEditor.StopImmediate();
     LOG_DEBUG("ApplyPendingRendererSwitch: StopPieImmediate done");
     ShutdownRendererAndUi();
     LOG_DEBUG("ApplyPendingRendererSwitch: ShutdownRendererAndUi done");
@@ -434,7 +434,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
         SetForegroundWindow(RuntimeStateRef().g_hwnd);
         if (wasPieRunning)
         {
-            StartPieImmediate();
+            m_PlayInEditor.StartImmediate();
         }
         return false;
     }
@@ -447,7 +447,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
     SetForegroundWindow(RuntimeStateRef().g_hwnd);
     if (wasPieRunning)
     {
-        StartPieImmediate();
+        m_PlayInEditor.StartImmediate();
     }
     LOG_DEBUG("ApplyPendingRendererSwitch: success");
 

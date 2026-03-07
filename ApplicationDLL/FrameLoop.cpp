@@ -25,7 +25,7 @@ namespace
 
     void BeginSceneRenderToTexture()
     {
-        EditorUi::BeginSceneRenderToTexture(RuntimeStateRef().g_isPieRunning, RuntimeStateRef().g_gameClearColor, kDefaultSceneClearColor);
+        EditorUi::BeginSceneRenderToTexture(AppRuntime::Get().GetPlayInEditor().IsPieRunning(), RuntimeStateRef().g_gameClearColor, kDefaultSceneClearColor);
     }
 
     void EndSceneRenderToTexture()
@@ -152,7 +152,7 @@ void AppRuntime::MessageLoopIteration()
     SceneManager::GetInstance().Update(kFixedDeltaTime);
     TickPieManagedAutoPublish(kFixedDeltaTime);
 
-    if (RuntimeStateRef().g_isPieRunning)
+    if (m_PlayInEditor.IsPieRunning())
     {
         RuntimeStateRef().g_pieHotReloadCheckTimer += kFixedDeltaTime;
         if (RuntimeStateRef().g_pieHotReloadCheckTimer >= 0.5f)
@@ -210,7 +210,7 @@ void AppRuntime::MessageLoopIteration()
             : RuntimeStateRef().g_pieGameSourceModulePath;
 
         EditorUiRuntimeState uiState = {};
-        uiState.isPieRunning = RuntimeStateRef().g_isPieRunning;
+        uiState.isPieRunning = m_PlayInEditor.IsPieRunning();
         uiState.currentRendererBackend = static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
         uiState.pieGameStatus = RuntimeStateRef().g_pieGameStatus.c_str();
         uiState.pieGameLastLoadError = RuntimeStateRef().g_pieGameLastLoadError.c_str();
@@ -280,7 +280,7 @@ void AppRuntime::MessageLoopIteration()
             RendererBackendToString(RuntimeStateRef().g_rendererBackend),
             RendererBackendToString(activeRenderBackend),
             RuntimeStateRef().g_imguiInitialized ? 1 : 0,
-            RuntimeStateRef().g_isPieRunning ? 1 : 0);
+            m_PlayInEditor.IsPieRunning() ? 1 : 0);
     }
 }
 

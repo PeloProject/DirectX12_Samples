@@ -293,7 +293,7 @@ bool TryStartPieManagedAutoPublish()
 
 void TickPieManagedAutoPublish(float deltaTime)
 {
-    if (!RuntimeStateRef().g_isPieRunning)
+    if (!AppRuntime::Get().GetPlayInEditor().IsPieRunning())
     {
         return;
     }

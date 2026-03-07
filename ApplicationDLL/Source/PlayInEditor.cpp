@@ -30,8 +30,8 @@ void PlayInEditor::SetPieTickCallback(PieTickCallback callback)
 ///========================================================
 void PlayInEditor::RequestStartPie()
 {
-    RuntimeStateRef().g_pendingStopPie = false;
-    RuntimeStateRef().g_pendingStartPie = true;
+    m_IsStopRequest = false;
+    m_IsStartRequest = true;
 }
 
 ///========================================================
@@ -39,8 +39,8 @@ void PlayInEditor::RequestStartPie()
 ///========================================================
 void PlayInEditor::RequestStopPie()
 {
-    RuntimeStateRef().g_pendingStartPie = false;
-    RuntimeStateRef().g_pendingStopPie = true;
+    m_IsStartRequest = false;
+    m_IsStopRequest = true;
 }
 
 ///========================================================
@@ -56,52 +56,18 @@ void PlayInEditor::SetStandaloneMode(BOOL enabled)
     }
 }
 
-///====================================================
-/// @brief PIE開始
-///====================================================
-void StartPieImmediate()
-{
-    if (!EnsurePieGameModuleLoaded())
-    {
-        RuntimeStateRef().g_isPieRunning = false;
-        return;
-    }
-
-    const std::string statusBeforeStart = RuntimeStateRef().g_pieGameStatus;
-    RuntimeStateRef().g_pieGameStart();
-    RuntimeStateRef().g_isPieRunning = true;
-    RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;
-    std::filesystem::file_time_type initialSourceWriteTime = {};
-    if (TryGetPieManagedSourceWriteTime(initialSourceWriteTime))
-    {
-        RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
-        RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTimeValid = true;
-    }
-    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size();
-    if (totalQuadCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
-    {
-        RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
-        return;
-    }
-    if (RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
-    {
-        RuntimeStateRef().g_pieGameStatus = "PIE running (C#)";
-    }
-}
 
 ///====================================================
 /// @brief PIE停止
 ///====================================================
-void StopPieImmediate()
+void PlayInEditor::StopImmediate()
 {
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameStop != nullptr)
+    if (m_IsRunning && RuntimeStateRef().g_pieGameStop != nullptr)
     {
         RuntimeStateRef().g_pieGameStop();
     }
     DestroyAllGameQuads();
-    RuntimeStateRef().g_isPieRunning = false;
+    m_IsRunning = false;
     RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;
@@ -119,36 +85,38 @@ void StopPieImmediate()
 ///=====================================================
 BOOL PlayInEditor::IsPieRunning() const
 {
-    return RuntimeStateRef().g_isPieRunning ? TRUE : FALSE;
+    return m_IsRunning ? TRUE : FALSE;
 }
 
 ///=====================================================
 /// <summary>
-/// PIE（Play In Editor）の状態を更新します。保留中の停止/開始フラグを処理して即時停止・開始を行い、PIEが実行中の場合は固定デルタタイム（1/60秒）で g_pieGameTick および g_pieTickCallback を呼び出します。
+/// PIE（Play In Editor）の状態を更新します。保留中の停止/開始フラグを処理して即時停止・開始を行い、
+/// PIEが実行中の場合は固定デルタタイム（1/60秒）で g_pieGameTick および g_pieTickCallback を呼び出します。
 /// </summary>
 ///=====================================================
 void PlayInEditor::UpdatePie()
 {
     // PIE停止
-    if (RuntimeStateRef().g_pendingStopPie)
+    if (m_IsStopRequest)
     {
-        RuntimeStateRef().g_pendingStopPie = false;
-        StopPieImmediate();
+        m_IsStopRequest = false;
+        StopImmediate();
     }
 
     // PIE開始
-    if (RuntimeStateRef().g_pendingStartPie)
+    if (m_IsStartRequest)
     {
-        RuntimeStateRef().g_pendingStartPie = false;
-        StartPieImmediate();
+        m_IsStartRequest = false;
+        StartImmediate();
     }
 
+	// PIEのTick更新
     constexpr float kFixedDeltaTime = 1.0f / 60.0f;
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameTick != nullptr)
+    if (m_IsRunning && RuntimeStateRef().g_pieGameTick != nullptr)
     {
         RuntimeStateRef().g_pieGameTick(kFixedDeltaTime);
     }
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieTickCallback != nullptr)
+    if (m_IsRunning && RuntimeStateRef().g_pieTickCallback != nullptr)
     {
         RuntimeStateRef().g_pieTickCallback(kFixedDeltaTime);
     }
@@ -162,13 +130,13 @@ void PlayInEditor::StartImmediate()
 {
     if (!EnsurePieGameModuleLoaded())
     {
-        RuntimeStateRef().g_isPieRunning = false;
+        m_IsRunning = false;
         return;
     }
 
     const std::string statusBeforeStart = RuntimeStateRef().g_pieGameStatus;
     RuntimeStateRef().g_pieGameStart();
-    RuntimeStateRef().g_isPieRunning = true;
+    m_IsRunning = true;
     RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;

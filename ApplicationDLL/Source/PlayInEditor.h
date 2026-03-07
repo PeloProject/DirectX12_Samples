@@ -5,8 +5,8 @@ using PieTickCallback = void(__cdecl*)(float);
 class PlayInEditor final
 {
 private:
-    bool m_IsStart = false;
-    bool m_IsStop = false;
+    bool m_IsStartRequest = false;
+    bool m_IsStopRequest = false;
     bool m_IsRunning = false;
 public:
     PlayInEditor();
@@ -19,4 +19,6 @@ public:
     BOOL IsPieRunning() const;
     void UpdatePie();
     void StartImmediate();
+    void StopImmediate();
+
 };
