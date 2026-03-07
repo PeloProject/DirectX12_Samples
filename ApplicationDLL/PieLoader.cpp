@@ -129,6 +129,10 @@ std::filesystem::path GetCurrentModuleDirectory()
     return std::filesystem::path(currentDir);
 }
 
+///======================================================
+/// @brief ゲームモジュールの確保
+/// @return 確保成功
+///======================================================
 bool EnsurePieGameModuleLoaded()
 {
     if (RuntimeStateRef().g_pieGameModule != nullptr)

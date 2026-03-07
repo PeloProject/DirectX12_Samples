@@ -1,8 +1,8 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "OpenGLShaderCompiler.h"
 
-#include <gl/GL.h>
-#include <GL/glut.h>
+#include "Source/OpenGLLoader.h"
+#include <glad/glad.h>
 
 #include <array>
 #include <filesystem>
@@ -67,7 +67,10 @@ HRESULT OpenGLShaderCompiler::CompileFromFile()
 	// 例えば、glCompileShaderやglLinkProgramなどのOpenGL関数を使用してシェーダーをコンパイルするコードを記述することができます。
 	const std::filesystem::path shaderPath = ResolveShaderPath(L"shaderFileName");
 	
-    var vertShader = glCreateShader(GL_VERTEX_SHADER);
+
+    GLuint shader = glCreateShader(GL_VERTEX_SHADER);
+    //glShaderSource(shader, sizeof source / sizeof source[0], source, 0);
+    //glCompileShader(shader);
 
 	return S_OK; // 成功した場合はS_OKを返す
 }

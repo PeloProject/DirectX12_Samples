@@ -92,7 +92,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)ThirdParty\glad\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -112,7 +112,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)ThirdParty\glad\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -132,8 +132,8 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'==''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'==''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <ForcedIncludeFiles>math.h</ForcedIncludeFiles>
     </ClCompile>
@@ -155,8 +155,8 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'==''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'==''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -192,8 +192,10 @@
     <ClInclude Include="Source\Dx12RenderDevice.h" />
     <ClInclude Include="Source\Material.h" />
     <ClInclude Include="Source\Math\MathUtil.h" />
+    <ClInclude Include="Source\OpenGLLoader.h" />
     <ClInclude Include="Source\OpenGLRenderDevice.h" />
     <ClInclude Include="Source\PipelineLibrary.h" />
+    <ClInclude Include="Source\PlayInEditor.h" />
     <ClInclude Include="Source\RenderDeviceFactory.h" />
     <ClInclude Include="Source\RendererBackend.h" />
     <ClInclude Include="Source\ShaderCompiler.h" />
@@ -229,8 +231,10 @@
     <ClCompile Include="Source\GraphicsDevice.cpp" />
     <ClCompile Include="Source\Material.cpp" />
     <ClCompile Include="Source\Math\MathUtil.cpp" />
+    <ClCompile Include="Source\OpenGLLoader.cpp" />
     <ClCompile Include="Source\OpenGLRenderDevice.cpp" />
     <ClCompile Include="Source\PipelineLibrary.cpp" />
+    <ClCompile Include="Source\PlayInEditor.cpp" />
     <ClCompile Include="Source\RenderDeviceFactory.cpp" />
     <ClCompile Include="Source\RendererBackend.cpp" />
     <ClCompile Include="Source\ShaderCompiler.cpp" />
@@ -242,6 +246,7 @@
     <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_opengl2.cpp" />
     <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_vulkan.cpp" Condition="'$(VULKAN_SDK)'!=''" />
     <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="ThirdParty\glad\src\glad.c" Condition="Exists('$(ProjectDir)ThirdParty\glad\src\glad.c')" />
     <ClCompile Include="ThirdParty\imgui\imgui.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp" />
     <ClCompile Include="ThirdParty\imgui\imgui_tables.cpp" />

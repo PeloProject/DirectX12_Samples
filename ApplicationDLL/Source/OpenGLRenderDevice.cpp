@@ -1,7 +1,7 @@
 ﻿#include "pch.h"
 #include "OpenGLRenderDevice.h"
 
-#include <gl/GL.h>
+#include "OpenGLLoader.h"
 
 #pragma comment(lib, "opengl32.lib")
 
@@ -83,6 +83,13 @@ bool OpenGLRenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
     if (!wglMakeCurrent(hdc_, hglrc_))
     {
         LOG_DEBUG("%s RenderDevice::Initialize failed: wglMakeCurrent", presentBackendLabel_);
+        Shutdown();
+        return false;
+    }
+
+    if (!InitializeOpenGLLoader())
+    {
+        LOG_DEBUG("%s RenderDevice::Initialize failed: %s loader init", presentBackendLabel_, GetOpenGLLoaderName());
         Shutdown();
         return false;
     }

@@ -39,27 +39,27 @@ extern "C" __declspec(dllexport) void DestroyNativeWindow()
 
 extern "C" __declspec(dllexport) void SetPieTickCallback(PieTickCallback callback)
 {
-    Runtime().SetPieTickCallback(callback);
+    Runtime().GetPlayInEditor().SetPieTickCallback(callback);
 }
 
 extern "C" __declspec(dllexport) void StartPie()
 {
-    Runtime().RequestStartPie();
+    Runtime().GetPlayInEditor().RequestStartPie();
 }
 
 extern "C" __declspec(dllexport) void StopPie()
 {
-    Runtime().RequestStopPie();
+    Runtime().GetPlayInEditor().RequestStopPie();
 }
 
 extern "C" __declspec(dllexport) void SetStandaloneMode(BOOL enabled)
 {
-    Runtime().SetStandaloneMode(enabled);
+    Runtime().GetPlayInEditor().SetStandaloneMode(enabled);
 }
 
 extern "C" __declspec(dllexport) BOOL IsPieRunning()
 {
-    return Runtime().IsPieRunning();
+    return Runtime().GetPlayInEditor().IsPieRunning();
 }
 
 extern "C" __declspec(dllexport) void SetGameClearColor(float r, float g, float b, float a)

@@ -3,6 +3,7 @@
 #include "Source/IRenderDevice.h"
 #include "Source/RendererBackend.h"
 #include "GameQuad.h"
+#include "PlayInEditor.h"
 
 #include <Windows.h>
 #include <cstdint>
@@ -11,10 +12,11 @@
 #include <string>
 #include <unordered_map>
 
-using PieTickCallback = void(__cdecl*)(float);
+
 using PieGameStartFn = void(__cdecl*)();
 using PieGameTickFn = void(__cdecl*)(float);
 using PieGameStopFn = void(__cdecl*)();
+
 
 struct RuntimeState
 {
@@ -62,6 +64,9 @@ class AppRuntime
 {
 public:
     static AppRuntime& Get();
+#pragma region PIE
+	PlayInEditor& GetPlayInEditor() { return m_PlayInEditor; }
+#pragma endregion
 
     HWND CreateNativeWindow();
     void ShowNativeWindow();
@@ -70,11 +75,7 @@ public:
 
     void ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-    void SetPieTickCallback(PieTickCallback callback);
-    void RequestStartPie();
-    void RequestStopPie();
-    void SetStandaloneMode(BOOL enabled);
-    BOOL IsPieRunning() const;
+
     void SetGameClearColor(float r, float g, float b, float a);
     uint32_t CreateGameQuad();
     void DestroyGameQuad(uint32_t handle);
@@ -84,7 +85,7 @@ public:
     bool ApplyPendingRendererSwitch();
 
     void MessageLoopIteration();
-    void UpdatePie();
+
     LRESULT HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
     RuntimeState& MutableState();
@@ -93,6 +94,7 @@ public:
 private:
     AppRuntime() = default;
     RuntimeState state_;
+    PlayInEditor m_PlayInEditor;
 };
 
 AppRuntime& Runtime();

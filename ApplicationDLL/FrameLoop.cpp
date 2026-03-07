@@ -52,97 +52,9 @@ void DestroyAllGameQuads()
     RuntimeStateRef().g_nextGameQuadHandle = 1;
 }
 
-void AppRuntime::SetPieTickCallback(PieTickCallback callback)
-{
-    RuntimeStateRef().g_pieTickCallback = callback;
-}
 
-void AppRuntime::RequestStartPie()
-{
-    RuntimeStateRef().g_pendingStopPie = false;
-    RuntimeStateRef().g_pendingStartPie = true;
-}
 
-void AppRuntime::RequestStopPie()
-{
-    RuntimeStateRef().g_pendingStartPie = false;
-    RuntimeStateRef().g_pendingStopPie = true;
-}
 
-void AppRuntime::SetStandaloneMode(BOOL enabled)
-{
-    RuntimeStateRef().g_isStandaloneMode = (enabled == TRUE);
-    if (RuntimeStateRef().g_hwnd != NULL)
-    {
-        SetWindowText(RuntimeStateRef().g_hwnd, RuntimeStateRef().g_isStandaloneMode ? _T("PieGameManaged Player") : _T("Native Window"));
-    }
-}
-
-///====================================================
-/// @brief PIE開始
-///====================================================
-void StartPieImmediate()
-{
-    if (!EnsurePieGameModuleLoaded())
-    {
-        RuntimeStateRef().g_isPieRunning = false;
-        return;
-    }
-
-    const std::string statusBeforeStart = RuntimeStateRef().g_pieGameStatus;
-    RuntimeStateRef().g_pieGameStart();
-    RuntimeStateRef().g_isPieRunning = true;
-    RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;
-    std::filesystem::file_time_type initialSourceWriteTime = {};
-    if (TryGetPieManagedSourceWriteTime(initialSourceWriteTime))
-    {
-        RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
-        RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTimeValid = true;
-    }
-    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size();
-    if (totalQuadCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
-    {
-        RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
-        return;
-    }
-    if (RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
-    {
-        RuntimeStateRef().g_pieGameStatus = "PIE running (C#)";
-    }
-}
-
-///====================================================
-/// @brief PIE停止
-///====================================================
-void StopPieImmediate()
-{
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameStop != nullptr)
-    {
-        RuntimeStateRef().g_pieGameStop();
-    }
-    DestroyAllGameQuads();
-    RuntimeStateRef().g_isPieRunning = false;
-    RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
-    RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;
-
-    ScopedHandle publishProcess(RuntimeStateRef().g_pieManagedPublishProcess);
-    RuntimeStateRef().g_pieManagedPublishProcess = nullptr;
-
-    UnloadPieGameModule();
-    RuntimeStateRef().g_pieGameStatus = "PIE stopped";
-}
-
-///=====================================================
-/// @brief PIE起動中か？
-/// @return 
-///=====================================================
-BOOL AppRuntime::IsPieRunning() const
-{
-    return RuntimeStateRef().g_isPieRunning ? TRUE : FALSE;
-}
 
 void AppRuntime::SetGameClearColor(float r, float g, float b, float a)
 {
@@ -234,7 +146,7 @@ void AppRuntime::MessageLoopIteration()
         ? RuntimeStateRef().g_renderDevice->Backend()
         : RuntimeStateRef().g_displayRendererBackend;
 
-    UpdatePie();
+	m_PlayInEditor.UpdatePie();
 
     constexpr float kFixedDeltaTime = 1.0f / 60.0f;
     SceneManager::GetInstance().Update(kFixedDeltaTime);
@@ -406,29 +318,3 @@ uint32_t AppRuntime::GetRendererBackend() const
     return static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
 }
 
-void AppRuntime::UpdatePie()
-{
-    // PIE停止
-    if (RuntimeStateRef().g_pendingStopPie)
-    {
-        RuntimeStateRef().g_pendingStopPie = false;
-        StopPieImmediate();
-    }
-
-    // PIE開始
-    if (RuntimeStateRef().g_pendingStartPie)
-    {
-        RuntimeStateRef().g_pendingStartPie = false;
-        StartPieImmediate();
-    }
-
-    constexpr float kFixedDeltaTime = 1.0f / 60.0f;
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieGameTick != nullptr)
-    {
-        RuntimeStateRef().g_pieGameTick(kFixedDeltaTime);
-    }
-    if (RuntimeStateRef().g_isPieRunning && RuntimeStateRef().g_pieTickCallback != nullptr)
-    {
-        RuntimeStateRef().g_pieTickCallback(kFixedDeltaTime);
-    }
-}
