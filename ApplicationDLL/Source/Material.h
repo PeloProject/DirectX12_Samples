@@ -32,7 +32,7 @@ public:
 
 private:
     std::shared_ptr<const PipelineLibrary::Pipeline> pipeline_;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> textureHeap_;
+    //Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> textureHeap_;
 
 	RHITexture* m_pTexture = nullptr;
 };

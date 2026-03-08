@@ -22,6 +22,12 @@ public:
 		return m_pGlobalTextureHeap.Get();
 	}
 
+	ID3D12DescriptorHeap** GetGlobalTextureHeapAddress()
+	{
+		return m_pGlobalTextureHeap.GetAddressOf();
+	}
+
+
 private:
 	DescriptorHeapManager() = default;
 
