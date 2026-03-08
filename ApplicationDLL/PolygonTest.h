@@ -2,6 +2,7 @@
 #include "MathUtil.h"
 #include "Source/Material.h"
 #include "Source/PipelineLibrary.h"
+#include "DX12Texture.h"
 #include <d3d12.h>
 
 #include <memory>
@@ -49,6 +50,7 @@ private:
 	void ApplyQuadTransform();
 	void UploadVertexBufferData();
 
+
 	struct QuadTransform
 	{
 		float centerX = 0.0f;
@@ -66,10 +68,13 @@ private:
 	ComPtr<ID3D12Resource>		m_pVertexBuffer;
 	ComPtr<ID3D12Resource>		m_pIndexBuffer;
 	ComPtr<ID3D12Resource>		m_pTextureBuffer;
+	ComPtr<ID3D12Resource>		m_pImageTextureBuffer;
 	D3D12_VERTEX_BUFFER_VIEW	m_VertexBufferView = {};
 	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
 
 	std::vector<TextureRGBA> m_TextureData;
 
 	std::vector<short> m_Indices;
+
+	DX12Texture m_TextureTest;
 };

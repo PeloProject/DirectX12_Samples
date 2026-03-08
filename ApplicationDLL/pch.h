@@ -7,6 +7,7 @@
 #ifndef PCH_H
 #define PCH_H
 
+#pragma comment(lib, "DirectXTex.lib")
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -24,6 +25,7 @@
 #include <vector>
 #include <stdexcept>
 #include <wrl/client.h>
+#include <DirectXTex.h>
 
 #include "Application.h"
 

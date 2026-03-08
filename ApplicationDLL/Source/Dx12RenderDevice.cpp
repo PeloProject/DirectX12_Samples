@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Dx12RenderDevice.h"
+#include "DescriptorHeapManager.h"
 
 #include <Windows.h>
 #include <cstring>
@@ -345,6 +346,7 @@ bool Dx12RenderDevice::Resize(UINT width, UINT height)
     }
     backBuffers_.clear();
     rtvHeap_.Reset();
+	DescriptorHeapManager::Get().ResetGlobalTextureHeap();
 
     const HRESULT hr = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
     if (FAILED(hr))

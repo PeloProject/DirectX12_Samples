@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Material.h"
+#include "DX12Texture.h"
 
 HRESULT Material::Initialize(
     ID3D12Device* device,
@@ -33,15 +34,15 @@ HRESULT Material::Initialize(
     {
         return hr;
     }
-
+	DX12Texture* dx12Texture = static_cast<DX12Texture*>(desc.textureResource);
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = desc.textureFormat;
+    srvDesc.Format = dx12Texture->GetMetadata().format;
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Texture2D.MipLevels = desc.textureMipLevels;
+    srvDesc.Texture2D.MipLevels = dx12Texture->GetMetadata().mipLevels;
 
     device->CreateShaderResourceView(
-        desc.textureResource,
+        static_cast<ID3D12Resource*>(desc.textureResource->GetTextureBuffer()),
         &srvDesc,
         textureHeap_->GetCPUDescriptorHandleForHeapStart());
 

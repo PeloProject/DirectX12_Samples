@@ -34,6 +34,12 @@
     <Filter Include="ソース ファイル\GameQuadRenderers">
       <UniqueIdentifier>{5ec9ca6a-21f5-47fd-9a18-33bc7af704c0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\RHI">
+      <UniqueIdentifier>{9c7e0601-4a6b-46cb-849d-9d03db8a574e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\RHI">
+      <UniqueIdentifier>{5fc51242-5333-4c11-be49-08a2621ff954}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AppRuntime.h">
@@ -142,6 +148,15 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Source\PlayInEditor.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="RHITexture.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="DX12Texture.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="DescriptorHeapManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
@@ -267,6 +282,15 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Source\PlayInEditor.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="RHITexture.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="DX12Texture.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DescriptorHeapManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>

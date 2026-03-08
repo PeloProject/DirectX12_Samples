@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PipelineLibrary.h"
-
+#include "RHITexture.h"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -15,9 +15,7 @@ public:
     {
         PipelineLibrary::PipelineKey pipelineKey;
         std::vector<D3D12_INPUT_ELEMENT_DESC> inputElements;
-        ID3D12Resource* textureResource = nullptr;
-        DXGI_FORMAT textureFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-        UINT textureMipLevels = 1;
+        RHITexture* textureResource = nullptr;
     };
 
     HRESULT Initialize(
@@ -27,7 +25,14 @@ public:
 
     void Bind(ID3D12GraphicsCommandList* commandList) const;
 
+    void SetTexture(RHITexture* texture)
+    {
+        m_pTexture = texture;
+	}   
+
 private:
     std::shared_ptr<const PipelineLibrary::Pipeline> pipeline_;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> textureHeap_;
+
+	RHITexture* m_pTexture = nullptr;
 };

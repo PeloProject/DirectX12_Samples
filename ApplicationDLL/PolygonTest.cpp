@@ -81,6 +81,7 @@ void PolygonTest::UploadVertexBufferData()
 	}
 }
 
+
 ///=========================================================================================
 /// <summary>
 /// 頂点バッファ用のコミット済みGPUリソースを作成し、クラス内の頂点データを転送して頂点バッファビューを設定します。
@@ -225,9 +226,7 @@ HRESULT PolygonTest::CreateGpuResources()
 			0
 		}
 	};
-	materialDesc.textureResource = m_pTextureBuffer.Get();
-	materialDesc.textureFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	materialDesc.textureMipLevels = 1;
+	materialDesc.textureResource = &m_TextureTest;
 
 	hr = m_material.Initialize(
 		Dx12RenderDevice::GetDevice(),
