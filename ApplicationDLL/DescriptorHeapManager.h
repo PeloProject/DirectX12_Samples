@@ -27,6 +27,7 @@ public:
 		return m_pGlobalTextureHeap.GetAddressOf();
 	}
 
+	bool InitializeGlobalTextureHeap(ID3D12Device* device, UINT numDescriptors);
 
 private:
 	DescriptorHeapManager() = default;

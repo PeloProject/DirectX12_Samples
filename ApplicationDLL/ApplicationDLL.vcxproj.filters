@@ -40,6 +40,24 @@
     <Filter Include="ヘッダー ファイル\RHI">
       <UniqueIdentifier>{5fc51242-5333-4c11-be49-08a2621ff954}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\System">
+      <UniqueIdentifier>{f8d34a53-461b-4475-88a5-34dd343dfb04}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Editor">
+      <UniqueIdentifier>{4713013f-b449-439e-8dea-9180c3556dff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Editor">
+      <UniqueIdentifier>{a0971819-026c-4240-a5ed-b39099c43b80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Renderer">
+      <UniqueIdentifier>{4aa9be38-81b1-4ddb-b0ad-2ec57a9620e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\System">
+      <UniqueIdentifier>{0979fdf5-4dd8-4dba-b668-75e476545d8f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Renderer">
+      <UniqueIdentifier>{a3cc81dc-922d-4e68-8503-676bc9b4670a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AppRuntime.h">
@@ -54,38 +72,8 @@
     <ClInclude Include="pch.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Dx12RenderDevice.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\EditorUi.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\GraphicsDevice.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Material.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\IRenderDevice.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Math\MathUtil.h">
       <Filter>ヘッダー ファイル\Math</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\OpenGLRenderDevice.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\OpenGLLoader.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\RenderDeviceFactory.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\RendererBackend.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="PolygonTest.h">
-      <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Source\Scene\SceneBase.h">
       <Filter>ヘッダー ファイル\Scene</Filter>
@@ -96,19 +84,10 @@
     <ClInclude Include="Source\Scene\SceneGame.h">
       <Filter>ヘッダー ファイル\Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Source\VulkanRenderDevice.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="Application.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="PieAutoPublish.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="PieLoader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="WinHandleRAII.h">
@@ -132,32 +111,71 @@
     <ClInclude Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.h">
       <Filter>ヘッダー ファイル\GameQuadRenderers</Filter>
     </ClInclude>
-    <ClInclude Include="Source\PipelineLibrary.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\ShaderCompiler.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="GameQuad.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="OpenGLShaderCompiler.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="ShaderCompilerBase.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\PlayInEditor.h">
-      <Filter>ヘッダー ファイル</Filter>
-    </ClInclude>
     <ClInclude Include="RHITexture.h">
       <Filter>ヘッダー ファイル\RHI</Filter>
     </ClInclude>
+    <ClInclude Include="Source\EditorUi.h">
+      <Filter>ヘッダー ファイル\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Dx12RenderDevice.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\IRenderDevice.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
     <ClInclude Include="DX12Texture.h">
-      <Filter>ヘッダー ファイル</Filter>
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\RenderDeviceFactory.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\RendererBackend.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\OpenGLRenderDevice.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GraphicsDevice.h">
+      <Filter>ヘッダー ファイル\System</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\PlayInEditor.h">
+      <Filter>ヘッダー ファイル\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="PieAutoPublish.h">
+      <Filter>ヘッダー ファイル\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="PieLoader.h">
+      <Filter>ヘッダー ファイル\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="GameQuad.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
     </ClInclude>
     <ClInclude Include="DescriptorHeapManager.h">
-      <Filter>ヘッダー ファイル</Filter>
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\OpenGLLoader.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="OpenGLShaderCompiler.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\ShaderCompiler.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderCompilerBase.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="PolygonTest.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\VulkanRenderDevice.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Material.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\PipelineLibrary.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -170,35 +188,8 @@
     <ClCompile Include="pch.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Dx12RenderDevice.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\EditorUi.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\GraphicsDevice.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Material.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Math\MathUtil.cpp">
       <Filter>ソース ファイル\Math</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\OpenGLRenderDevice.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\OpenGLLoader.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\RenderDeviceFactory.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\RendererBackend.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="PolygonTest.cpp">
-      <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Source\Scene\SceneBase.cpp">
       <Filter>ソース ファイル\Scene</Filter>
@@ -209,43 +200,10 @@
     <ClCompile Include="Source\Scene\SceneGame.cpp">
       <Filter>ソース ファイル\Scene</Filter>
     </ClCompile>
-    <ClCompile Include="Source\VulkanRenderDevice.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="Application.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_opengl2.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\glad\src\glad.c" Condition="Exists('$(ProjectDir)ThirdParty\glad\src\glad.c')">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\imgui.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\imgui_tables.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="FrameLoop.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="PieAutoPublish.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="PieLoader.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="WindowHost.cpp">
@@ -263,35 +221,95 @@
     <ClCompile Include="Source\GameQuadRenderers\VulkanGameQuadRenderer.cpp">
       <Filter>ソース ファイル\GameQuadRenderers</Filter>
     </ClCompile>
-    <ClCompile Include="Source\PipelineLibrary.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\ShaderCompiler.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="GameQuad.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_vulkan.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="OpenGLShaderCompiler.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="ShaderCompilerBase.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\PlayInEditor.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="RHITexture.cpp">
       <Filter>ソース ファイル\RHI</Filter>
     </ClCompile>
-    <ClCompile Include="DX12Texture.cpp">
-      <Filter>ソース ファイル</Filter>
+    <ClCompile Include="Source\EditorUi.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_draw.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_dx12.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_opengl2.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_vulkan.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\backends\imgui_impl_win32.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
     </ClCompile>
     <ClCompile Include="DescriptorHeapManager.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Dx12RenderDevice.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="DX12Texture.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="GameQuad.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\OpenGLLoader.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\OpenGLRenderDevice.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="OpenGLShaderCompiler.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\ShaderCompiler.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="ShaderCompilerBase.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GraphicsDevice.cpp">
+      <Filter>ソース ファイル\System</Filter>
+    </ClCompile>
+    <ClCompile Include="PieAutoPublish.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="PieLoader.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Material.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="PolygonTest.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\RenderDeviceFactory.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\VulkanRenderDevice.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\RendererBackend.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\PlayInEditor.cpp">
+      <Filter>ソース ファイル\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\PipelineLibrary.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui.cpp">
+      <Filter>ソース ファイル\System</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_tables.cpp">
+      <Filter>ソース ファイル\System</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\imgui\imgui_widgets.cpp">
+      <Filter>ソース ファイル\System</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\glad\src\glad.c">
+      <Filter>ソース ファイル\System</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

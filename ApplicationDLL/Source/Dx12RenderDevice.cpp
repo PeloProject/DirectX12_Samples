@@ -190,6 +190,11 @@ bool Dx12RenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
     if (!CreateSwapChain(hwnd, width, height)) return false;
     if (!CreateRenderTargetView()) return false;
     if (!CreateFence()) return false;
+
+	if (!DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get(), 100))
+    {
+        return false;
+    }
     return true;
 }
 

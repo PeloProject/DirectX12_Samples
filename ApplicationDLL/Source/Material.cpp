@@ -62,8 +62,10 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
         return;
     }
 
+    auto textureHeap = DescriptorHeapManager::Get().GetGlobalTextureHeapAddress();
+	auto handle = DescriptorHeapManager::Get().GetSRVDescriptorHandleForGlobalTextureHeap();
     commandList->SetPipelineState(pipeline_->pipelineState.Get());
     commandList->SetGraphicsRootSignature(pipeline_->rootSignature.Get());
-    commandList->SetDescriptorHeaps(1, DescriptorHeapManager::Get().GetGlobalTextureHeapAddress());
-    commandList->SetGraphicsRootDescriptorTable(0, DescriptorHeapManager::Get().GetSRVDescriptorHandleForGlobalTextureHeap());
+    commandList->SetDescriptorHeaps(1, textureHeap);
+    commandList->SetGraphicsRootDescriptorTable(0, handle);
 }
