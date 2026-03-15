@@ -14,6 +14,7 @@ public:
 
 	void* GetTextureBuffer() const override { return m_pTextureBuffer.Get(); }
 	DirectX::TexMetadata GetMetadata() const { return m_Metadata; }
+	UINT GetDescriptorIndex() const { return descriptorIndex; }
 private:
 
 	void LoadTexture();

@@ -177,6 +177,9 @@
     <ClInclude Include="Renderer\PipelineLibrary.h">
       <Filter>ヘッダー ファイル\Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="RHI\TextureManager.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -308,8 +311,11 @@
     <ClCompile Include="System\imgui_widgets.cpp">
       <Filter>ソース ファイル\System</Filter>
     </ClCompile>
-    <ClCompile Include="System\glad.c">
-      <Filter>ソース ファイル\System</Filter>
+    <ClCompile Include="ThirdParty\glad\src\glad.c">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="RHI\TextureManager.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

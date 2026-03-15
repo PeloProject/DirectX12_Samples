@@ -191,7 +191,7 @@ bool Dx12RenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
     if (!CreateRenderTargetView()) return false;
     if (!CreateFence()) return false;
 
-	if (!DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get(), 100))
+	if (!DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get()))
     {
         return false;
     }
@@ -351,7 +351,7 @@ bool Dx12RenderDevice::Resize(UINT width, UINT height)
     }
     backBuffers_.clear();
     rtvHeap_.Reset();
-	DescriptorHeapManager::Get().ResetGlobalTextureHeap();
+	//DescriptorHeapManager::Get().ResetGlobalTextureHeap();
 
     const HRESULT hr = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
     if (FAILED(hr))
@@ -359,6 +359,7 @@ bool Dx12RenderDevice::Resize(UINT width, UINT height)
         return false;
     }
 
+	//DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get());
     barrierDesc_.Transition.pResource = nullptr;
     return CreateRenderTargetView();
 }

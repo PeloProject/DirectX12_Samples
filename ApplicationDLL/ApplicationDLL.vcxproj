@@ -190,6 +190,7 @@
     <ClInclude Include="GameQuadRenderers\NdcGameQuadRendererBase.h" />
     <ClInclude Include="GameQuadRenderers\OpenGlGameQuadRenderer.h" />
     <ClInclude Include="GameQuadRenderers\VulkanGameQuadRenderer.h" />
+    <ClInclude Include="RHI\TextureManager.h" />
     <ClInclude Include="System\GraphicsDevice.h" />
     <ClInclude Include="Renderer\IRenderDevice.h" />
     <ClInclude Include="Renderer\Dx12RenderDevice.h" />
@@ -234,6 +235,7 @@
     <ClCompile Include="GameQuadRenderers\GameQuadRendererFactory.cpp" />
     <ClCompile Include="GameQuadRenderers\OpenGlGameQuadRenderer.cpp" />
     <ClCompile Include="GameQuadRenderers\VulkanGameQuadRenderer.cpp" />
+    <ClCompile Include="RHI\TextureManager.cpp" />
     <ClCompile Include="System\GraphicsDevice.cpp" />
     <ClCompile Include="Renderer\Material.cpp" />
     <ClCompile Include="Math\MathUtil.cpp" />
