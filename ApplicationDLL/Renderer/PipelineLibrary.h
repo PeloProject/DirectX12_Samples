@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d12.h>
 #include <d3dcommon.h>
@@ -108,12 +108,31 @@ private:
         size_t operator()(const PipelineDesc& desc) const;
     };
 
+
+    /// <summary>
+    /// 指定したデバイスと記述に基づいてパイプラインを作成し、結果を出力パラメータに格納する。メソッドはオブジェクトの状態を変更しない（const）。
+    /// </summary>
+    /// <param name="device">パイプライン作成に使用するID3D12Deviceへのポインタ。</param>
+    /// <param name="desc">作成するパイプラインの設定を保持するPipelineDescへの参照。</param>
+    /// <param name="outPipeline">作成されたパイプラインを受け取る出力パラメータ。成功時にstd::shared_ptr<const Pipeline>が格納される。</param>
+    /// <returns>HRESULTで操作結果を示す。成功時は通常S_OKが返り、失敗時は適切なエラーコードが返される。</returns>
     HRESULT CreatePipeline(
         ID3D12Device* device,
         const PipelineDesc& desc,
         std::shared_ptr<const Pipeline>* outPipeline) const;
 
+	/// <summary>
+	/// キャッシュの統計情報を出力します。
+	/// </summary>
+	void DumpCacheStats() const;
+
 private:
     mutable std::mutex mutex_;
     std::unordered_map<PipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> cache_;
+
+	int m_TotalRequestCount = 0;
+	int m_CacheHitCount = 0;
+	int m_CacheMissCount = 0;
+	int m_CreateFailureCount = 0;
+
 };

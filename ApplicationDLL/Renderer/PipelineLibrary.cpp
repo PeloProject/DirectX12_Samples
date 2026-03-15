@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "PipelineLibrary.h"
 
 #include "ShaderCompiler.h"
@@ -137,25 +137,35 @@ HRESULT PipelineLibrary::GetOrCreate(
     const PipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline)
 {
+	m_TotalRequestCount++;
+
     if (device == nullptr || outPipeline == nullptr || desc.inputElements.empty() || desc.rootParameters.empty())
     {
+        DumpCacheStats();
         return E_INVALIDARG;
     }
 
+	// キャッシュからの取得を試みる。見つかった場合は outPipeline に設定して成功を返す。
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = cache_.find(desc);
         if (it != cache_.end())
         {
+			m_CacheHitCount++;
             *outPipeline = it->second;
+            DumpCacheStats();
             return S_OK;
         }
     }
 
+	// キャッシュに存在しない場合は新規作成を試みる。成功した場合はキャッシュに追加して outPipeline に設定する。
+	//m_CacheMissCount++;
     std::shared_ptr<const Pipeline> createdPipeline;
     HRESULT hr = CreatePipeline(device, desc, &createdPipeline);
     if (FAILED(hr))
     {
+		m_CreateFailureCount++;
+        DumpCacheStats();
         return hr;
     }
 
@@ -163,7 +173,24 @@ HRESULT PipelineLibrary::GetOrCreate(
     auto [it, inserted] = cache_.emplace(desc, createdPipeline);
     *outPipeline = it->second;
     (void)inserted;
+    DumpCacheStats();
     return S_OK;
+}
+
+void PipelineLibrary::DumpCacheStats() const
+{
+
+    const size_t total = m_TotalRequestCount;
+    const size_t hits = m_CacheHitCount;
+    const size_t misses = total - hits;
+    const size_t failures = m_CreateFailureCount;
+    const double hitRate = (total > 0) ? (static_cast<double>(hits) / total) * 100.0 : 0.0;
+    OutputDebugStringA("PipelineLibrary Cache Stats:\n");
+    OutputDebugStringA(("  Total Requests: " + std::to_string(total) + "\n").c_str());
+    OutputDebugStringA(("  Cache Hits: " + std::to_string(hits) + "\n").c_str());
+    OutputDebugStringA(("  Cache Misses: " + std::to_string(misses) + "\n").c_str());
+    OutputDebugStringA(("  Create Failures: " + std::to_string(failures) + "\n").c_str());
+    OutputDebugStringA(("  Hit Rate: " + std::to_string(hitRate) + "%\n").c_str());
 }
 
 void PipelineLibrary::Clear()
@@ -172,13 +199,25 @@ void PipelineLibrary::Clear()
     cache_.clear();
 }
 
+
+///=====================================================
+/// <summary>
+/// 指定されたデバイスとパイプライン記述に基づいてグラフィックスパイプラインを作成します。シェーダーのコンパイル、ルートシグネチャの生成、パイプラインステートの構築を行い、成功時に outPipeline に作成したパイプラインを設定します。
+/// </summary>
+/// <param name="device">パイプライン（ルートシグネチャやパイプラインステート）を作成するために使用する ID3D12Device。nullptr ではないことが期待されます。</param>
+/// <param name="desc">パイプラインの設定を表す PipelineDesc。頂点/ピクセルシェーダーのファイル名、エントリポイント、シェーダーモデル、ルートパラメータ、スタティックサンプラー、入力要素、ラスタライザ／ブレンド／デプス設定などを含みます。</param>
+/// <param name="outPipeline">作成されたパイプラインを受け取る出力パラメータ。成功時に std::shared_ptr<const Pipeline> が格納されます。nullptr ではないことが期待されます。</param>
+/// <returns>HRESULT。成功時は S_OK を返します。失敗時はシェーダーコンパイル、ルートシグネチャのシリアライズ、CreateRootSignature やパイプラインステート作成などで発生した HRESULT エラーコードを返します。エラー時にエラーブロブの内容がログ出力される場合があります。</returns>
+///=======================================================
 HRESULT PipelineLibrary::CreatePipeline(
     ID3D12Device* device,
     const PipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline) const
 {
+
     constexpr UINT kCompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 
+    // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
     HRESULT hr = ShaderCompiler::CompileFromFile(
         desc.vertexShaderFile.c_str(),
@@ -191,6 +230,7 @@ HRESULT PipelineLibrary::CreatePipeline(
         return hr;
     }
 
+	// ピクセルシェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderBlob;
     hr = ShaderCompiler::CompileFromFile(
         desc.pixelShaderFile.c_str(),
@@ -203,9 +243,13 @@ HRESULT PipelineLibrary::CreatePipeline(
         return hr;
     }
 
+	// ルートシグネチャの構築
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
+	// ルートパラメータの構築。DescriptorTableSrv タイプのパラメータは D3D12_DESCRIPTOR_RANGE を使用して記述され、
+    // RootParameter の DescriptorTable メンバに関連付けられます。
+    // CBV タイプのパラメータは RootParameter の Descriptor メンバを直接使用して記述されます。
     std::vector<D3D12_DESCRIPTOR_RANGE> descriptorRanges;
     descriptorRanges.reserve(desc.rootParameters.size());
     std::vector<D3D12_ROOT_PARAMETER> rootParameters(desc.rootParameters.size());
@@ -215,6 +259,7 @@ HRESULT PipelineLibrary::CreatePipeline(
         D3D12_ROOT_PARAMETER& target = rootParameters[i];
         target.ShaderVisibility = source.shaderVisibility;
 
+        // シェーダーリソースビューのディスクリプタ設定
         if (source.type == RootParameterType::DescriptorTableSrv)
         {
             D3D12_DESCRIPTOR_RANGE range = {};
@@ -231,6 +276,7 @@ HRESULT PipelineLibrary::CreatePipeline(
         }
         else
         {
+			// 定数バッファビューのディスクリプタ設定
             target.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
             target.Descriptor.ShaderRegister = source.cbvShaderRegister;
             target.Descriptor.RegisterSpace = source.cbvRegisterSpace;
@@ -239,6 +285,8 @@ HRESULT PipelineLibrary::CreatePipeline(
     rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
     rootSignatureDesc.pParameters = rootParameters.data();
 
+	// スタティックサンプラーの構築。D3D12_STATIC_SAMPLER_DESC を使用して記述され、
+    // RootSignatureDesc の pStaticSamplers メンバに関連付けられます。
     std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers(desc.staticSamplers.size());
     for (size_t i = 0; i < desc.staticSamplers.size(); ++i)
     {
@@ -261,6 +309,8 @@ HRESULT PipelineLibrary::CreatePipeline(
     rootSignatureDesc.NumStaticSamplers = static_cast<UINT>(staticSamplers.size());
     rootSignatureDesc.pStaticSamplers = staticSamplers.empty() ? nullptr : staticSamplers.data();
 
+	// ルートシグネチャのシリアライズと作成。D3D12SerializeRootSignature を使用してルートシグネチャをシリアライズし、
+    // その後 ID3D12Device::CreateRootSignature を呼び出してルートシグネチャオブジェクトを作成します。
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> rootSignatureBlob;
     hr = D3D12SerializeRootSignature(
@@ -288,6 +338,7 @@ HRESULT PipelineLibrary::CreatePipeline(
         return hr;
     }
 
+	// グラフィックスパイプラインステートの構築。D3D12_GRAPHICS_PIPELINE_STATE_DESC を使用してパイプラインステート記述
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = {};
     pipelineDesc.pRootSignature = createdPipeline->rootSignature.Get();
     pipelineDesc.VS.BytecodeLength = vertexShaderBlob->GetBufferSize();
