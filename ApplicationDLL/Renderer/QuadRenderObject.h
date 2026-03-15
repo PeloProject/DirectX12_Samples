@@ -30,12 +30,12 @@ struct Vertex
 	Vector2 uv;
 };
 
-class PolygonTest
+class QuadRenderObject
 {
 
 public:
-	PolygonTest();
-	~PolygonTest() {}
+	QuadRenderObject();
+	~QuadRenderObject() {}
 
 	void Render();
 	void SetTransform(float centerX, float centerY, float width, float height);
@@ -43,10 +43,9 @@ private:
 
 	void CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
 	void CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
-	HRESULT CreateGpuResources();
-	HRESULT CreateTextureBuffer();
+	HRESULT CreateMeshResources();
+	HRESULT InitializeMaterial();
 
-	void ApplyTransformations();
 	void ApplyQuadTransform();
 	void UploadVertexBufferData();
 
@@ -78,3 +77,6 @@ private:
 
 	DX12Texture m_TextureTest;
 };
+
+// Legacy alias. Existing callers can migrate to QuadRenderObject incrementally.
+using PolygonTest = QuadRenderObject;

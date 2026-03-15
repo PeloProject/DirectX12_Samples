@@ -10,5 +10,5 @@ public:
     void Render(IRenderDevice* renderDevice) override;
 
 private:
-    PolygonTest quad_;
+    QuadRenderObject quad_;
 };

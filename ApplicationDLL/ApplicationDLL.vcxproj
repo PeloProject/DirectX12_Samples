@@ -179,7 +179,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Editor\PieAutoPublish.h" />
     <ClInclude Include="Editor\PieLoader.h" />
-    <ClInclude Include="Renderer\PolygonTest.h" />
+    <ClInclude Include="Renderer\QuadRenderObject.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="RHI\RHITexture.h" />
     <ClInclude Include="RHI\ShaderCompilerBase.h" />
@@ -226,7 +226,7 @@
     </ClCompile>
     <ClCompile Include="Editor\PieAutoPublish.cpp" />
     <ClCompile Include="Editor\PieLoader.cpp" />
-    <ClCompile Include="Renderer\PolygonTest.cpp" />
+    <ClCompile Include="Renderer\QuadRenderObject.cpp" />
     <ClCompile Include="RHI\RHITexture.cpp" />
     <ClCompile Include="RHI\ShaderCompilerBase.cpp" />
     <ClCompile Include="Renderer\Dx12RenderDevice.cpp" />

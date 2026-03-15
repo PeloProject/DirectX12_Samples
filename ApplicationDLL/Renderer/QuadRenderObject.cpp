@@ -17,7 +17,7 @@ PipelineLibrary& GetPipelineLibrary()
 // @brief コンストラクタ
 // 
 //=========================================================================================
-PolygonTest::PolygonTest()
+QuadRenderObject::QuadRenderObject()
 {
 	ApplyQuadTransform();
 
@@ -30,13 +30,13 @@ PolygonTest::PolygonTest()
 		tex.A = 255;
 	}
 
-	if (CreateGpuResources() != S_OK)
+	if (CreateMeshResources() != S_OK || InitializeMaterial() != S_OK)
 	{
-		throw std::runtime_error("CreateGpuResources is failed.");
+		throw std::runtime_error("QuadRenderObject initialization failed.");
 	}
 }
 
-void PolygonTest::SetTransform(float centerX, float centerY, float width, float height)
+void QuadRenderObject::SetTransform(float centerX, float centerY, float width, float height)
 {
 	m_quadTransform.centerX = centerX;
 	m_quadTransform.centerY = centerY;
@@ -50,7 +50,7 @@ void PolygonTest::SetTransform(float centerX, float centerY, float width, float 
 /// m_quadTransformの中心座標と幅・高さに基づいて、四角形の4頂点の位置とUV座標をm_Verticesに設定するメンバ関数。
 /// </summary>
 ///=========================================================================================
-void PolygonTest::ApplyQuadTransform()
+void QuadRenderObject::ApplyQuadTransform()
 {
 	const float halfWidth = m_quadTransform.width * 0.5f;
 	const float halfHeight = m_quadTransform.height * 0.5f;
@@ -65,7 +65,7 @@ void PolygonTest::ApplyQuadTransform()
 	m_Vertices[3] = { { right, top, 0.0f }, { 1.0f, 0.0f } };
 }
 
-void PolygonTest::UploadVertexBufferData()
+void QuadRenderObject::UploadVertexBufferData()
 {
 	if (m_pVertexBuffer == nullptr)
 	{
@@ -89,7 +89,7 @@ void PolygonTest::UploadVertexBufferData()
 /// <param name="heapProps">D3D12_HEAP_PROPERTIES 構造体。頂点バッファのためのヒープ割り当てのプロパティ（メモリ種類や作成方法など）を指定します。</param>
 /// <param name="resourceDesc">D3D12_RESOURCE_DESC 構造体。作成するリソースのサイズ、フォーマット、使用方法などの記述を指定します。</param>
 ///==========================================================================================
-void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+void QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
 		&heapProps,
@@ -121,7 +121,7 @@ void PolygonTest::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, con
 	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);
 }
 
-void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	HRESULT hr = Dx12RenderDevice::GetDeviceComPtr()->CreateCommittedResource(
 		&heapProps,
@@ -159,7 +159,7 @@ void PolygonTest::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, cons
 	m_IndexBufferView.SizeInBytes = static_cast<UINT>(sizeof(m_Indices[0]) * m_Indices.size());
 }
 
-HRESULT PolygonTest::CreateGpuResources()
+HRESULT QuadRenderObject::CreateMeshResources()
 {
 	D3D12_HEAP_PROPERTIES heapProps = {};
 	heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -188,47 +188,13 @@ HRESULT PolygonTest::CreateGpuResources()
 		return E_FAIL;
 	}
 
-	HRESULT hr = CreateTextureBuffer();
-	if (FAILED(hr))
-	{
-		return hr;
-	}
+	return S_OK;
+}
 
-	Material::MaterialDesc materialDesc = {};
-	materialDesc.pipelineKey.vertexShaderFile = L"BasicVertexShader.hlsl";
-	materialDesc.pipelineKey.vertexEntryPoint = "BasicVS";
-	materialDesc.pipelineKey.vertexShaderModel = "vs_5_0";
-	materialDesc.pipelineKey.pixelShaderFile = L"BasicPixelShader.hlsl";
-	materialDesc.pipelineKey.pixelEntryPoint = "BasicPS";
-	materialDesc.pipelineKey.pixelShaderModel = "ps_5_0";
-	materialDesc.pipelineKey.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	materialDesc.pipelineKey.cullMode = D3D12_CULL_MODE_NONE;
-	materialDesc.pipelineKey.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	materialDesc.pipelineKey.enableDepth = false;
-	materialDesc.pipelineKey.enableBlend = false;
-	materialDesc.inputElements = {
-		{
-			"POSITION",
-			0,
-			DXGI_FORMAT_R32G32B32_FLOAT,
-			0,
-			D3D12_APPEND_ALIGNED_ELEMENT,
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-			0
-		},
-		{
-			"TEXCOORD",
-			0,
-			DXGI_FORMAT_R32G32_FLOAT,
-			0,
-			D3D12_APPEND_ALIGNED_ELEMENT,
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-			0
-		}
-	};
-	materialDesc.textureResource = &m_TextureTest;
-
-	hr = m_material.Initialize(
+HRESULT QuadRenderObject::InitializeMaterial()
+{
+	Material::MaterialDesc materialDesc = Material::CreateBuiltInTexturedQuadDesc(&m_TextureTest);
+	auto hr = m_material.Initialize(
 		Dx12RenderDevice::GetDevice(),
 		GetPipelineLibrary(),
 		materialDesc);
@@ -240,63 +206,7 @@ HRESULT PolygonTest::CreateGpuResources()
 	return hr;
 }
 
-HRESULT PolygonTest::CreateTextureBuffer()
-{
-	D3D12_HEAP_PROPERTIES heapProps = {};
-	heapProps.Type = D3D12_HEAP_TYPE_CUSTOM;
-	heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-	heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
-	heapProps.CreationNodeMask = 0;
-	heapProps.VisibleNodeMask = 0;
-
-	D3D12_RESOURCE_DESC resourceDesc = {};
-	resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	resourceDesc.Width = 256;
-	resourceDesc.Height = 256;
-	resourceDesc.DepthOrArraySize = 1;
-	resourceDesc.SampleDesc.Count = 1;
-	resourceDesc.SampleDesc.Quality = 0;
-	resourceDesc.MipLevels = 1;
-	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
-		&heapProps,
-		D3D12_HEAP_FLAG_NONE,
-		&resourceDesc,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-		nullptr,
-		IID_PPV_ARGS(&m_pTextureBuffer)
-	);
-
-	if (!SUCCEEDED(hr)) {
-		LOG_DEBUG("Texture Buffer Create Error");
-		return hr;
-	}
-
-	hr = m_pTextureBuffer->WriteToSubresource(
-		0,
-		nullptr,
-		m_TextureData.data(),
-		static_cast<UINT>(256 * sizeof(TextureRGBA)),
-		static_cast<UINT>(m_TextureData.size() * sizeof(TextureRGBA))
-	);
-	if (!SUCCEEDED(hr)) {
-		LOG_DEBUG("Texture Data Write Error");
-		return hr;
-	}
-
-	return hr;
-}
-
-void PolygonTest::ApplyTransformations()
-{
-	DirectX::XMFLOAT3* vertexMap = nullptr;
-	(void)vertexMap;
-}
-
-void PolygonTest::Render()
+void QuadRenderObject::Render()
 {
 	if (m_isVertexDirty)
 	{

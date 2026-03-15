@@ -9,11 +9,67 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class PipelineLibrary final
 {
 public:
-    struct PipelineKey
+    enum class RootParameterType : unsigned int
+    {
+        DescriptorTableSrv,
+        ConstantBufferView
+    };
+
+    struct InputElementDesc
+    {
+        std::string semanticName;
+        UINT semanticIndex = 0;
+        DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+        UINT inputSlot = 0;
+        UINT alignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+        D3D12_INPUT_CLASSIFICATION inputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        UINT instanceDataStepRate = 0;
+
+        bool operator==(const InputElementDesc& other) const;
+    };
+
+    struct RootParameterDesc
+    {
+        RootParameterType type = RootParameterType::DescriptorTableSrv;
+        D3D12_SHADER_VISIBILITY shaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        // Descriptor-table SRV parameters.
+        UINT numDescriptors = 1;
+        UINT baseShaderRegister = 0;
+        UINT registerSpace = 0;
+
+        // CBV parameters.
+        UINT cbvShaderRegister = 0;
+        UINT cbvRegisterSpace = 0;
+
+        bool operator==(const RootParameterDesc& other) const;
+    };
+
+    struct StaticSamplerDesc
+    {
+        D3D12_FILTER filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+        D3D12_TEXTURE_ADDRESS_MODE addressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        D3D12_TEXTURE_ADDRESS_MODE addressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        D3D12_TEXTURE_ADDRESS_MODE addressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        UINT shaderRegister = 0;
+        UINT registerSpace = 0;
+        D3D12_SHADER_VISIBILITY shaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        D3D12_COMPARISON_FUNC comparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        D3D12_STATIC_BORDER_COLOR borderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
+        FLOAT mipLODBias = 0.0f;
+        UINT maxAnisotropy = 1;
+        FLOAT minLOD = 0.0f;
+        FLOAT maxLOD = D3D12_FLOAT32_MAX;
+
+        bool operator==(const StaticSamplerDesc& other) const;
+    };
+
+    struct PipelineDesc
     {
         std::wstring vertexShaderFile;
         std::string vertexEntryPoint;
@@ -26,8 +82,11 @@ public:
         D3D12_PRIMITIVE_TOPOLOGY_TYPE topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         bool enableDepth = false;
         bool enableBlend = false;
+        std::vector<InputElementDesc> inputElements;
+        std::vector<RootParameterDesc> rootParameters;
+        std::vector<StaticSamplerDesc> staticSamplers;
 
-        bool operator==(const PipelineKey& other) const;
+        bool operator==(const PipelineDesc& other) const;
     };
 
     struct Pipeline
@@ -38,27 +97,23 @@ public:
 
     HRESULT GetOrCreate(
         ID3D12Device* device,
-        const PipelineKey& key,
-        const D3D12_INPUT_ELEMENT_DESC* inputElements,
-        UINT inputElementCount,
+        const PipelineDesc& desc,
         std::shared_ptr<const Pipeline>* outPipeline);
 
     void Clear();
 
 private:
-    struct PipelineKeyHasher
+    struct PipelineDescHasher
     {
-        size_t operator()(const PipelineKey& key) const;
+        size_t operator()(const PipelineDesc& desc) const;
     };
 
     HRESULT CreatePipeline(
         ID3D12Device* device,
-        const PipelineKey& key,
-        const D3D12_INPUT_ELEMENT_DESC* inputElements,
-        UINT inputElementCount,
+        const PipelineDesc& desc,
         std::shared_ptr<const Pipeline>* outPipeline) const;
 
 private:
     mutable std::mutex mutex_;
-    std::unordered_map<PipelineKey, std::shared_ptr<const Pipeline>, PipelineKeyHasher> cache_;
+    std::unordered_map<PipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> cache_;
 };

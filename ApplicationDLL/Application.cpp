@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "Application.h"
 
-int Application::m_WindowWidth = 400;
-int Application::m_WindowHeight = 300;
+int Application::m_WindowWidth = 800;
+int Application::m_WindowHeight = 600;
 
 void Application::SetWindowSize(int width, int height)
 {

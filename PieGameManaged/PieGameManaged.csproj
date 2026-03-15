@@ -3,6 +3,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>PieGameManaged</AssemblyName>
     <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

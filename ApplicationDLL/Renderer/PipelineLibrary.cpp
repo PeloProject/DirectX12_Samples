@@ -3,6 +3,7 @@
 
 #include "ShaderCompiler.h"
 
+#include <cstring>
 #include <vector>
 
 namespace
@@ -11,9 +12,56 @@ inline void HashCombine(size_t& seed, size_t value)
 {
     seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
+
+inline size_t HashFloat(float value)
+{
+    static_assert(sizeof(float) == sizeof(unsigned int), "Unexpected float size");
+    unsigned int bits = 0;
+    memcpy(&bits, &value, sizeof(float));
+    return std::hash<unsigned int>{}(bits);
+}
 }
 
-bool PipelineLibrary::PipelineKey::operator==(const PipelineKey& other) const
+bool PipelineLibrary::InputElementDesc::operator==(const InputElementDesc& other) const
+{
+    return semanticName == other.semanticName &&
+        semanticIndex == other.semanticIndex &&
+        format == other.format &&
+        inputSlot == other.inputSlot &&
+        alignedByteOffset == other.alignedByteOffset &&
+        inputSlotClass == other.inputSlotClass &&
+        instanceDataStepRate == other.instanceDataStepRate;
+}
+
+bool PipelineLibrary::RootParameterDesc::operator==(const RootParameterDesc& other) const
+{
+    return type == other.type &&
+        shaderVisibility == other.shaderVisibility &&
+        numDescriptors == other.numDescriptors &&
+        baseShaderRegister == other.baseShaderRegister &&
+        registerSpace == other.registerSpace &&
+        cbvShaderRegister == other.cbvShaderRegister &&
+        cbvRegisterSpace == other.cbvRegisterSpace;
+}
+
+bool PipelineLibrary::StaticSamplerDesc::operator==(const StaticSamplerDesc& other) const
+{
+    return filter == other.filter &&
+        addressU == other.addressU &&
+        addressV == other.addressV &&
+        addressW == other.addressW &&
+        shaderRegister == other.shaderRegister &&
+        registerSpace == other.registerSpace &&
+        shaderVisibility == other.shaderVisibility &&
+        comparisonFunc == other.comparisonFunc &&
+        borderColor == other.borderColor &&
+        mipLODBias == other.mipLODBias &&
+        maxAnisotropy == other.maxAnisotropy &&
+        minLOD == other.minLOD &&
+        maxLOD == other.maxLOD;
+}
+
+bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
 {
     return vertexShaderFile == other.vertexShaderFile &&
         vertexEntryPoint == other.vertexEntryPoint &&
@@ -25,41 +73,78 @@ bool PipelineLibrary::PipelineKey::operator==(const PipelineKey& other) const
         cullMode == other.cullMode &&
         topologyType == other.topologyType &&
         enableDepth == other.enableDepth &&
-        enableBlend == other.enableBlend;
+        enableBlend == other.enableBlend &&
+        inputElements == other.inputElements &&
+        rootParameters == other.rootParameters &&
+        staticSamplers == other.staticSamplers;
 }
 
-size_t PipelineLibrary::PipelineKeyHasher::operator()(const PipelineKey& key) const
+size_t PipelineLibrary::PipelineDescHasher::operator()(const PipelineDesc& desc) const
 {
     size_t seed = 0;
-    HashCombine(seed, std::hash<std::wstring>{}(key.vertexShaderFile));
-    HashCombine(seed, std::hash<std::string>{}(key.vertexEntryPoint));
-    HashCombine(seed, std::hash<std::string>{}(key.vertexShaderModel));
-    HashCombine(seed, std::hash<std::wstring>{}(key.pixelShaderFile));
-    HashCombine(seed, std::hash<std::string>{}(key.pixelEntryPoint));
-    HashCombine(seed, std::hash<std::string>{}(key.pixelShaderModel));
-    HashCombine(seed, std::hash<int>{}(static_cast<int>(key.renderTargetFormat)));
-    HashCombine(seed, std::hash<int>{}(static_cast<int>(key.cullMode)));
-    HashCombine(seed, std::hash<int>{}(static_cast<int>(key.topologyType)));
-    HashCombine(seed, std::hash<bool>{}(key.enableDepth));
-    HashCombine(seed, std::hash<bool>{}(key.enableBlend));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexEntryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexShaderModel));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.pixelShaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelEntryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelShaderModel));
+    HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.renderTargetFormat)));
+    HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.cullMode)));
+    HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.topologyType)));
+    HashCombine(seed, std::hash<bool>{}(desc.enableDepth));
+    HashCombine(seed, std::hash<bool>{}(desc.enableBlend));
+    for (const auto& element : desc.inputElements)
+    {
+        HashCombine(seed, std::hash<std::string>{}(element.semanticName));
+        HashCombine(seed, std::hash<UINT>{}(element.semanticIndex));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(element.format)));
+        HashCombine(seed, std::hash<UINT>{}(element.inputSlot));
+        HashCombine(seed, std::hash<UINT>{}(element.alignedByteOffset));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(element.inputSlotClass)));
+        HashCombine(seed, std::hash<UINT>{}(element.instanceDataStepRate));
+    }
+    for (const auto& root : desc.rootParameters)
+    {
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(root.type)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(root.shaderVisibility)));
+        HashCombine(seed, std::hash<UINT>{}(root.numDescriptors));
+        HashCombine(seed, std::hash<UINT>{}(root.baseShaderRegister));
+        HashCombine(seed, std::hash<UINT>{}(root.registerSpace));
+        HashCombine(seed, std::hash<UINT>{}(root.cbvShaderRegister));
+        HashCombine(seed, std::hash<UINT>{}(root.cbvRegisterSpace));
+    }
+    for (const auto& sampler : desc.staticSamplers)
+    {
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.filter)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressU)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressV)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressW)));
+        HashCombine(seed, std::hash<UINT>{}(sampler.shaderRegister));
+        HashCombine(seed, std::hash<UINT>{}(sampler.registerSpace));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.shaderVisibility)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.comparisonFunc)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.borderColor)));
+        HashCombine(seed, HashFloat(sampler.mipLODBias));
+        HashCombine(seed, std::hash<UINT>{}(sampler.maxAnisotropy));
+        HashCombine(seed, HashFloat(sampler.minLOD));
+        HashCombine(seed, HashFloat(sampler.maxLOD));
+    }
     return seed;
 }
 
 HRESULT PipelineLibrary::GetOrCreate(
     ID3D12Device* device,
-    const PipelineKey& key,
-    const D3D12_INPUT_ELEMENT_DESC* inputElements,
-    UINT inputElementCount,
+    const PipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline)
 {
-    if (device == nullptr || inputElements == nullptr || inputElementCount == 0 || outPipeline == nullptr)
+    if (device == nullptr || outPipeline == nullptr || desc.inputElements.empty() || desc.rootParameters.empty())
     {
         return E_INVALIDARG;
     }
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = cache_.find(key);
+        auto it = cache_.find(desc);
         if (it != cache_.end())
         {
             *outPipeline = it->second;
@@ -68,14 +153,14 @@ HRESULT PipelineLibrary::GetOrCreate(
     }
 
     std::shared_ptr<const Pipeline> createdPipeline;
-    HRESULT hr = CreatePipeline(device, key, inputElements, inputElementCount, &createdPipeline);
+    HRESULT hr = CreatePipeline(device, desc, &createdPipeline);
     if (FAILED(hr))
     {
         return hr;
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    auto [it, inserted] = cache_.emplace(key, createdPipeline);
+    auto [it, inserted] = cache_.emplace(desc, createdPipeline);
     *outPipeline = it->second;
     (void)inserted;
     return S_OK;
@@ -89,18 +174,16 @@ void PipelineLibrary::Clear()
 
 HRESULT PipelineLibrary::CreatePipeline(
     ID3D12Device* device,
-    const PipelineKey& key,
-    const D3D12_INPUT_ELEMENT_DESC* inputElements,
-    UINT inputElementCount,
+    const PipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline) const
 {
     constexpr UINT kCompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
     HRESULT hr = ShaderCompiler::CompileFromFile(
-        key.vertexShaderFile.c_str(),
-        key.vertexEntryPoint.c_str(),
-        key.vertexShaderModel.c_str(),
+        desc.vertexShaderFile.c_str(),
+        desc.vertexEntryPoint.c_str(),
+        desc.vertexShaderModel.c_str(),
         kCompileFlags,
         vertexShaderBlob);
     if (FAILED(hr))
@@ -110,9 +193,9 @@ HRESULT PipelineLibrary::CreatePipeline(
 
     Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderBlob;
     hr = ShaderCompiler::CompileFromFile(
-        key.pixelShaderFile.c_str(),
-        key.pixelEntryPoint.c_str(),
-        key.pixelShaderModel.c_str(),
+        desc.pixelShaderFile.c_str(),
+        desc.pixelEntryPoint.c_str(),
+        desc.pixelShaderModel.c_str(),
         kCompileFlags,
         pixelShaderBlob);
     if (FAILED(hr))
@@ -123,33 +206,60 @@ HRESULT PipelineLibrary::CreatePipeline(
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-    D3D12_DESCRIPTOR_RANGE descriptorRange = {};
-    descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    descriptorRange.NumDescriptors = 1;
-    descriptorRange.BaseShaderRegister = 0;
-    descriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    std::vector<D3D12_DESCRIPTOR_RANGE> descriptorRanges;
+    descriptorRanges.reserve(desc.rootParameters.size());
+    std::vector<D3D12_ROOT_PARAMETER> rootParameters(desc.rootParameters.size());
+    for (size_t i = 0; i < desc.rootParameters.size(); ++i)
+    {
+        const auto& source = desc.rootParameters[i];
+        D3D12_ROOT_PARAMETER& target = rootParameters[i];
+        target.ShaderVisibility = source.shaderVisibility;
 
-    D3D12_ROOT_PARAMETER rootParameter = {};
-    rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameter.DescriptorTable.NumDescriptorRanges = 1;
-    rootParameter.DescriptorTable.pDescriptorRanges = &descriptorRange;
-    rootParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        if (source.type == RootParameterType::DescriptorTableSrv)
+        {
+            D3D12_DESCRIPTOR_RANGE range = {};
+            range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            range.NumDescriptors = source.numDescriptors;
+            range.BaseShaderRegister = source.baseShaderRegister;
+            range.RegisterSpace = source.registerSpace;
+            range.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+            descriptorRanges.push_back(range);
 
-    rootSignatureDesc.pParameters = &rootParameter;
-    rootSignatureDesc.NumParameters = 1;
+            target.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            target.DescriptorTable.NumDescriptorRanges = 1;
+            target.DescriptorTable.pDescriptorRanges = &descriptorRanges.back();
+        }
+        else
+        {
+            target.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+            target.Descriptor.ShaderRegister = source.cbvShaderRegister;
+            target.Descriptor.RegisterSpace = source.cbvRegisterSpace;
+        }
+    }
+    rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
+    rootSignatureDesc.pParameters = rootParameters.data();
 
-    D3D12_STATIC_SAMPLER_DESC samplerDesc = {};
-    samplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-    samplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    samplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    samplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-    samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
-    samplerDesc.MinLOD = 0.0f;
-    samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    samplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-    rootSignatureDesc.pStaticSamplers = &samplerDesc;
-    rootSignatureDesc.NumStaticSamplers = 1;
+    std::vector<D3D12_STATIC_SAMPLER_DESC> staticSamplers(desc.staticSamplers.size());
+    for (size_t i = 0; i < desc.staticSamplers.size(); ++i)
+    {
+        const auto& source = desc.staticSamplers[i];
+        D3D12_STATIC_SAMPLER_DESC& target = staticSamplers[i];
+        target.Filter = source.filter;
+        target.AddressU = source.addressU;
+        target.AddressV = source.addressV;
+        target.AddressW = source.addressW;
+        target.MipLODBias = source.mipLODBias;
+        target.MaxAnisotropy = source.maxAnisotropy;
+        target.ComparisonFunc = source.comparisonFunc;
+        target.BorderColor = source.borderColor;
+        target.MinLOD = source.minLOD;
+        target.MaxLOD = source.maxLOD;
+        target.ShaderRegister = source.shaderRegister;
+        target.RegisterSpace = source.registerSpace;
+        target.ShaderVisibility = source.shaderVisibility;
+    }
+    rootSignatureDesc.NumStaticSamplers = static_cast<UINT>(staticSamplers.size());
+    rootSignatureDesc.pStaticSamplers = staticSamplers.empty() ? nullptr : staticSamplers.data();
 
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> rootSignatureBlob;
@@ -186,7 +296,7 @@ HRESULT PipelineLibrary::CreatePipeline(
     pipelineDesc.PS.pShaderBytecode = pixelShaderBlob->GetBufferPointer();
     pipelineDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
     pipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    pipelineDesc.RasterizerState.CullMode = key.cullMode;
+    pipelineDesc.RasterizerState.CullMode = desc.cullMode;
     pipelineDesc.RasterizerState.FrontCounterClockwise = FALSE;
     pipelineDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
     pipelineDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -201,7 +311,7 @@ HRESULT PipelineLibrary::CreatePipeline(
     pipelineDesc.BlendState.IndependentBlendEnable = FALSE;
 
     D3D12_RENDER_TARGET_BLEND_DESC renderTargetBlendDesc = {};
-    renderTargetBlendDesc.BlendEnable = key.enableBlend ? TRUE : FALSE;
+    renderTargetBlendDesc.BlendEnable = desc.enableBlend ? TRUE : FALSE;
     renderTargetBlendDesc.LogicOpEnable = FALSE;
     renderTargetBlendDesc.SrcBlend = D3D12_BLEND_ONE;
     renderTargetBlendDesc.DestBlend = D3D12_BLEND_ZERO;
@@ -213,8 +323,8 @@ HRESULT PipelineLibrary::CreatePipeline(
     renderTargetBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
     pipelineDesc.BlendState.RenderTarget[0] = renderTargetBlendDesc;
 
-    pipelineDesc.DepthStencilState.DepthEnable = key.enableDepth ? TRUE : FALSE;
-    pipelineDesc.DepthStencilState.DepthWriteMask = key.enableDepth ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+    pipelineDesc.DepthStencilState.DepthEnable = desc.enableDepth ? TRUE : FALSE;
+    pipelineDesc.DepthStencilState.DepthWriteMask = desc.enableDepth ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
     pipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
     pipelineDesc.DepthStencilState.StencilEnable = FALSE;
     pipelineDesc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
@@ -225,18 +335,26 @@ HRESULT PipelineLibrary::CreatePipeline(
     pipelineDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
     pipelineDesc.DepthStencilState.BackFace = pipelineDesc.DepthStencilState.FrontFace;
 
-    std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout(inputElementCount);
-    for (UINT i = 0; i < inputElementCount; ++i)
+    std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout(desc.inputElements.size());
+    for (size_t i = 0; i < desc.inputElements.size(); ++i)
     {
-        inputLayout[i] = inputElements[i];
+        const auto& source = desc.inputElements[i];
+        D3D12_INPUT_ELEMENT_DESC& target = inputLayout[i];
+        target.SemanticName = source.semanticName.c_str();
+        target.SemanticIndex = source.semanticIndex;
+        target.Format = source.format;
+        target.InputSlot = source.inputSlot;
+        target.AlignedByteOffset = source.alignedByteOffset;
+        target.InputSlotClass = source.inputSlotClass;
+        target.InstanceDataStepRate = source.instanceDataStepRate;
     }
 
     pipelineDesc.InputLayout.pInputElementDescs = inputLayout.data();
     pipelineDesc.InputLayout.NumElements = static_cast<UINT>(inputLayout.size());
     pipelineDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-    pipelineDesc.PrimitiveTopologyType = key.topologyType;
+    pipelineDesc.PrimitiveTopologyType = desc.topologyType;
     pipelineDesc.NumRenderTargets = 1;
-    pipelineDesc.RTVFormats[0] = key.renderTargetFormat;
+    pipelineDesc.RTVFormats[0] = desc.renderTargetFormat;
     pipelineDesc.SampleDesc.Count = 1;
     pipelineDesc.SampleDesc.Quality = 0;
 

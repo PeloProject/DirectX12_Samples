@@ -3,30 +3,70 @@
 #include "Material.h"
 #include "DX12Texture.h"
 
+Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc(RHITexture* textureResource)
+{
+    MaterialDesc desc = {};
+    desc.pipelineDesc.vertexShaderFile = L"BasicVertexShader.hlsl";
+    desc.pipelineDesc.vertexEntryPoint = "BasicVS";
+    desc.pipelineDesc.vertexShaderModel = "vs_5_0";
+    desc.pipelineDesc.pixelShaderFile = L"BasicPixelShader.hlsl";
+    desc.pipelineDesc.pixelEntryPoint = "BasicPS";
+    desc.pipelineDesc.pixelShaderModel = "ps_5_0";
+    desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.pipelineDesc.cullMode = D3D12_CULL_MODE_NONE;
+    desc.pipelineDesc.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    desc.pipelineDesc.enableDepth = false;
+    desc.pipelineDesc.enableBlend = false;
+    desc.pipelineDesc.inputElements = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+    };
+    desc.pipelineDesc.rootParameters = {
+        { PipelineLibrary::RootParameterType::DescriptorTableSrv, D3D12_SHADER_VISIBILITY_PIXEL, 1, 0, 0, 0, 0 }
+    };
+    desc.pipelineDesc.staticSamplers = {
+        {
+            D3D12_FILTER_MIN_MAG_MIP_POINT,
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            0,
+            0,
+            D3D12_SHADER_VISIBILITY_PIXEL,
+            D3D12_COMPARISON_FUNC_NEVER,
+            D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE,
+            0.0f,
+            1,
+            0.0f,
+            D3D12_FLOAT32_MAX
+        }
+    };
+    desc.parameterBlock.textureBindings = {
+        { 0, textureResource }
+    };
+    return desc;
+}
+
 HRESULT Material::Initialize(
     ID3D12Device* device,
     PipelineLibrary& pipelineLibrary,
     const MaterialDesc& desc)
 {
-    if (device == nullptr || desc.textureResource == nullptr || desc.inputElements.empty())
+    if (device == nullptr)
     {
         return E_INVALIDARG;
     }
 
     HRESULT hr = pipelineLibrary.GetOrCreate(
         device,
-        desc.pipelineKey,
-        desc.inputElements.data(),
-        static_cast<UINT>(desc.inputElements.size()),
+        desc.pipelineDesc,
         &pipeline_);
     if (FAILED(hr))
     {
         return hr;
     }
 
-
-	// テクスチャの取得
-	m_pTexture = desc.textureResource;
+    parameterBlock_ = desc.parameterBlock;
 
     return S_OK;
 }
@@ -49,10 +89,41 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
         return;
     }
 
-    auto textureHeap = DescriptorHeapManager::Get().GetGlobalTextureHeapAddress();
-	auto handle = DescriptorHeapManager::Get().GetGPUHandle(static_cast<DX12Texture*>(m_pTexture)->GetDescriptorIndex());
     commandList->SetPipelineState(pipeline_->pipelineState.Get());
     commandList->SetGraphicsRootSignature(pipeline_->rootSignature.Get());
-    commandList->SetDescriptorHeaps(1, textureHeap);
-    commandList->SetGraphicsRootDescriptorTable(0, handle);
+
+    bool hasTextureBinding = false;
+    for (const auto& binding : parameterBlock_.textureBindings)
+    {
+        if (binding.textureResource != nullptr)
+        {
+            hasTextureBinding = true;
+            break;
+        }
+    }
+
+    if (hasTextureBinding)
+    {
+        auto textureHeap = DescriptorHeapManager::Get().GetGlobalTextureHeapAddress();
+        commandList->SetDescriptorHeaps(1, textureHeap);
+    }
+
+    for (const auto& binding : parameterBlock_.textureBindings)
+    {
+        if (binding.textureResource == nullptr)
+        {
+            continue;
+        }
+        auto handle = DescriptorHeapManager::Get().GetGPUHandle(static_cast<DX12Texture*>(binding.textureResource)->GetDescriptorIndex());
+        commandList->SetGraphicsRootDescriptorTable(binding.rootParameterIndex, handle);
+    }
+
+    for (const auto& binding : parameterBlock_.constantBufferBindings)
+    {
+        if (binding.gpuVirtualAddress == 0)
+        {
+            continue;
+        }
+        commandList->SetGraphicsRootConstantBufferView(binding.rootParameterIndex, binding.gpuVirtualAddress);
+    }
 }

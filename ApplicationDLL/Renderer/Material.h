@@ -11,12 +11,31 @@
 class Material final
 {
 public:
+    struct MaterialParameterBlock
+    {
+        struct TextureBinding
+        {
+            UINT rootParameterIndex = 0;
+            RHITexture* textureResource = nullptr;
+        };
+
+        struct ConstantBufferBinding
+        {
+            UINT rootParameterIndex = 0;
+            D3D12_GPU_VIRTUAL_ADDRESS gpuVirtualAddress = 0;
+        };
+
+        std::vector<TextureBinding> textureBindings;
+        std::vector<ConstantBufferBinding> constantBufferBindings;
+    };
+
     struct MaterialDesc
     {
-        PipelineLibrary::PipelineKey pipelineKey;
-        std::vector<D3D12_INPUT_ELEMENT_DESC> inputElements;
-        RHITexture* textureResource = nullptr;
+        PipelineLibrary::PipelineDesc pipelineDesc;
+        MaterialParameterBlock parameterBlock;
     };
+
+    static MaterialDesc CreateBuiltInTexturedQuadDesc(RHITexture* textureResource);
 
     HRESULT Initialize(
         ID3D12Device* device,
@@ -27,12 +46,15 @@ public:
 
     void SetTexture(RHITexture* texture)
     {
-        m_pTexture = texture;
+        if (parameterBlock_.textureBindings.empty())
+        {
+            parameterBlock_.textureBindings.push_back({ 0, texture });
+            return;
+        }
+        parameterBlock_.textureBindings[0].textureResource = texture;
 	}   
 
 private:
     std::shared_ptr<const PipelineLibrary::Pipeline> pipeline_;
-    //Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> textureHeap_;
-
-	RHITexture* m_pTexture = nullptr;
+    MaterialParameterBlock parameterBlock_;
 };

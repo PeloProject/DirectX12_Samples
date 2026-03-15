@@ -165,7 +165,7 @@
     <ClInclude Include="RHI\ShaderCompilerBase.h">
       <Filter>ヘッダー ファイル\RHI</Filter>
     </ClInclude>
-    <ClInclude Include="Renderer\PolygonTest.h">
+    <ClInclude Include="Renderer\QuadRenderObject.h">
       <Filter>ヘッダー ファイル\Renderer</Filter>
     </ClInclude>
     <ClInclude Include="Renderer\VulkanRenderDevice.h">
@@ -284,7 +284,7 @@
     <ClCompile Include="Renderer\Material.cpp">
       <Filter>ソース ファイル\Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="Renderer\PolygonTest.cpp">
+    <ClCompile Include="Renderer\QuadRenderObject.cpp">
       <Filter>ソース ファイル\Renderer</Filter>
     </ClCompile>
     <ClCompile Include="Renderer\RenderDeviceFactory.cpp">
