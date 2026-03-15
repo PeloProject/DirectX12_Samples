@@ -1,17 +1,29 @@
 ﻿#include "pch.h"
 #include "DX12Texture.h"
-#include "DescriptorHeapManager.h"
-#include "Source/Dx12RenderDevice.h"
 #include "RHI/TextureManager.h"
 
 DX12Texture::DX12Texture()
 {
-	descriptorIndex = TextureManager::Get().CreateTextureResource(m_pTextureBuffer, L"C:/Users/shinji/Documents/Projects/DirectX12_Samples/Assets/Texture/textest.png");
-
 }
 
-
-void DX12Texture::LoadTexture()
+bool DX12Texture::LoadFromFile(const wchar_t* filePath)
 {
+	if (filePath == nullptr)
+	{
+		return false;
+	}
 
+	const UINT newDescriptorIndex = TextureManager::Get().CreateTextureResource(m_pTextureBuffer, filePath, &m_Metadata);
+	if (newDescriptorIndex == static_cast<UINT>(-1))
+	{
+		return false;
+	}
+
+	descriptorIndex = newDescriptorIndex;
+	return true;
+}
+
+bool DX12Texture::LoadFromFile(const std::wstring& filePath)
+{
+	return LoadFromFile(filePath.c_str());
 }

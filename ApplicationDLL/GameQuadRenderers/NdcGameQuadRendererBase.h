@@ -24,6 +24,16 @@ public:
         renderDevice->DrawQuadNdc(centerX_, centerY_, width_, height_);
     }
 
+    void SetTextureHandle(TextureHandle textureHandle) override
+    {
+        (void)textureHandle;
+    }
+
+    void SetMaterialName(const std::string& materialName) override
+    {
+        (void)materialName;
+    }
+
 private:
     float centerX_ = 0.0f;
     float centerY_ = 0.0f;

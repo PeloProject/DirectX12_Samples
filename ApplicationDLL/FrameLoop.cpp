@@ -5,6 +5,7 @@
 #include "AppRuntime.h"
 #include "PieAutoPublish.h"
 #include "PieLoader.h"
+#include "RHI/TextureAssetManager.h"
 #include "WinHandleRAII.h"
 
 #include "SceneManager.h"
@@ -50,6 +51,7 @@ void DestroyAllGameQuads()
 {
     RuntimeStateRef().g_gameQuads.clear();
     RuntimeStateRef().g_nextGameQuadHandle = 1;
+    TextureAssetManager::Get().Clear();
 }
 
 
@@ -119,6 +121,38 @@ void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float cent
     }
 
     it->second->SetTransform(centerX, centerY, width, height);
+}
+
+void AppRuntime::SetGameQuadTextureHandle(uint32_t handle, TextureHandle textureHandle)
+{
+    const auto it = RuntimeStateRef().g_gameQuads.find(handle);
+    if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr)
+    {
+        return;
+    }
+
+    it->second->SetTextureHandle(textureHandle);
+}
+
+void AppRuntime::SetGameQuadMaterial(uint32_t handle, const char* materialName)
+{
+    const auto it = RuntimeStateRef().g_gameQuads.find(handle);
+    if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr || materialName == nullptr)
+    {
+        return;
+    }
+
+    it->second->SetMaterialName(materialName);
+}
+
+TextureHandle AppRuntime::AcquireTextureHandle(const char* texturePath)
+{
+    return TextureAssetManager::Get().AcquireTexture(texturePath);
+}
+
+void AppRuntime::ReleaseTextureHandle(TextureHandle textureHandle)
+{
+    TextureAssetManager::Get().ReleaseTexture(textureHandle);
 }
 
 ///==========================================================
@@ -317,4 +351,3 @@ uint32_t AppRuntime::GetRendererBackend() const
 {
     return static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
 }
-

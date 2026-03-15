@@ -6,6 +6,16 @@ void Dx12GameQuadRenderer::SetTransform(float centerX, float centerY, float widt
     quad_.SetTransform(centerX, centerY, width, height);
 }
 
+void Dx12GameQuadRenderer::SetTextureHandle(TextureHandle textureHandle)
+{
+    quad_.SetTextureHandle(textureHandle);
+}
+
+void Dx12GameQuadRenderer::SetMaterialName(const std::string& materialName)
+{
+    quad_.SetMaterialName(materialName);
+}
+
 void Dx12GameQuadRenderer::Render(IRenderDevice* renderDevice)
 {
     (void)renderDevice;

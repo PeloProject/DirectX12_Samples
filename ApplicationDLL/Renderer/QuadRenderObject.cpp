@@ -2,6 +2,7 @@
 #include "PolygonTest.h"
 #include "Source/Dx12RenderDevice.h"
 #include <algorithm>
+#include <string>
 
 namespace
 {
@@ -20,6 +21,7 @@ PipelineLibrary& GetPipelineLibrary()
 QuadRenderObject::QuadRenderObject()
 {
 	ApplyQuadTransform();
+	m_TextureTest.LoadFromFile(L"textest.png");
 
 	m_TextureData.resize(256 * 256);
 	for (auto& tex : m_TextureData)
@@ -43,6 +45,31 @@ void QuadRenderObject::SetTransform(float centerX, float centerY, float width, f
 	m_quadTransform.width = (std::max)(width, 0.01f);
 	m_quadTransform.height = (std::max)(height, 0.01f);
 	m_isVertexDirty = true;
+}
+
+void QuadRenderObject::SetTextureHandle(TextureHandle textureHandle)
+{
+	textureAsset_ = TextureAssetManager::Get().GetTexture(textureHandle);
+	if (textureAsset_ == nullptr)
+	{
+		return;
+	}
+
+	m_material.SetTexture(textureAsset_.get());
+}
+
+void QuadRenderObject::SetMaterialName(const std::string& materialName)
+{
+	if (materialName.empty())
+	{
+		return;
+	}
+
+	// Current built-in path only supports unlit textured quads.
+	if (materialName == "BuiltInMaterials::UnlitTexture")
+	{
+		materialName_ = materialName;
+	}
 }
 
 ///=========================================================================================

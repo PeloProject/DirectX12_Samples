@@ -82,6 +82,26 @@ extern "C" __declspec(dllexport) void SetGameQuadTransform(uint32_t handle, floa
     Runtime().SetGameQuadTransform(handle, centerX, centerY, width, height);
 }
 
+extern "C" __declspec(dllexport) uint32_t AcquireTextureHandle(const char* texturePath)
+{
+    return Runtime().AcquireTextureHandle(texturePath);
+}
+
+extern "C" __declspec(dllexport) void ReleaseTextureHandle(uint32_t textureHandle)
+{
+    Runtime().ReleaseTextureHandle(textureHandle);
+}
+
+extern "C" __declspec(dllexport) void SetGameQuadTextureHandle(uint32_t handle, uint32_t textureHandle)
+{
+    Runtime().SetGameQuadTextureHandle(handle, textureHandle);
+}
+
+extern "C" __declspec(dllexport) void SetGameQuadMaterial(uint32_t handle, const char* materialName)
+{
+    Runtime().SetGameQuadMaterial(handle, materialName);
+}
+
 extern "C" __declspec(dllexport) void MessageLoopIteration()
 {
     Runtime().MessageLoopIteration();

@@ -1,11 +1,13 @@
 ﻿#pragma once
 #include "MathUtil.h"
+#include "RHI/TextureAssetManager.h"
 #include "Source/Material.h"
 #include "Source/PipelineLibrary.h"
 #include "DX12Texture.h"
 #include <d3d12.h>
 
 #include <memory>
+#include <string>
 
 using namespace WL;
 using Microsoft::WRL::ComPtr;
@@ -39,6 +41,8 @@ public:
 
 	void Render();
 	void SetTransform(float centerX, float centerY, float width, float height);
+	void SetTextureHandle(TextureHandle textureHandle);
+	void SetMaterialName(const std::string& materialName);
 private:
 
 	void CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
@@ -76,6 +80,8 @@ private:
 	std::vector<short> m_Indices;
 
 	DX12Texture m_TextureTest;
+	std::shared_ptr<DX12Texture> textureAsset_;
+	std::string materialName_ = "BuiltInMaterials::UnlitTexture";
 };
 
 // Legacy alias. Existing callers can migrate to QuadRenderObject incrementally.

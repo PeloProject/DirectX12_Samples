@@ -1,5 +1,7 @@
 internal sealed class SpriteRenderSystem
 {
+    private readonly TextureAssetManager _textureAssetManager = new TextureAssetManager();
+
     public void Initialize(GameScene scene)
     {
         foreach (Entity entity in scene.Entities)
@@ -24,6 +26,30 @@ internal sealed class SpriteRenderSystem
                 continue;
             }
 
+            if (!string.IsNullOrWhiteSpace(spriteRenderer.Material) &&
+                !string.Equals(spriteRenderer.Material, spriteRenderer.AppliedMaterial, System.StringComparison.Ordinal))
+            {
+                NativeMethods.SetGameQuadMaterial(spriteRenderer.NativeQuadHandle, spriteRenderer.Material);
+                spriteRenderer.AppliedMaterial = spriteRenderer.Material;
+            }
+
+            if (!string.IsNullOrWhiteSpace(spriteRenderer.Texture) &&
+                !string.Equals(spriteRenderer.Texture, spriteRenderer.AppliedTexture, System.StringComparison.Ordinal))
+            {
+                if (spriteRenderer.TextureHandle.IsValid)
+                {
+                    _textureAssetManager.Release(spriteRenderer.TextureHandle);
+                    spriteRenderer.TextureHandle = TextureHandle.Invalid;
+                }
+
+                spriteRenderer.TextureHandle = _textureAssetManager.Acquire(spriteRenderer.Texture);
+                if (spriteRenderer.TextureHandle.IsValid)
+                {
+                    NativeMethods.SetGameQuadTextureHandle(spriteRenderer.NativeQuadHandle, spriteRenderer.TextureHandle.Value);
+                }
+                spriteRenderer.AppliedTexture = spriteRenderer.Texture;
+            }
+
             NativeMethods.SetGameQuadTransform(
                 spriteRenderer.NativeQuadHandle,
                 entity.Transform.CenterX,
@@ -45,7 +71,16 @@ internal sealed class SpriteRenderSystem
 
             NativeMethods.DestroyGameQuad(spriteRenderer.NativeQuadHandle);
             spriteRenderer.NativeQuadHandle = 0;
+            spriteRenderer.AppliedTexture = string.Empty;
+            spriteRenderer.AppliedMaterial = string.Empty;
+            if (spriteRenderer.TextureHandle.IsValid)
+            {
+                _textureAssetManager.Release(spriteRenderer.TextureHandle);
+            }
+            spriteRenderer.TextureHandle = TextureHandle.Invalid;
         }
+
+        _textureAssetManager.Clear();
     }
 
     private static void EnsureNativeSprite(Entity entity)

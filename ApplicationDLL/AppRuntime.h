@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Source/IRenderDevice.h"
+#include "RHI/TextureAssetManager.h"
 #include "Source/RendererBackend.h"
 #include "GameQuad.h"
 #include "PlayInEditor.h"
@@ -77,6 +78,10 @@ public:
     uint32_t CreateGameQuad();
     void DestroyGameQuad(uint32_t handle);
     void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
+    void SetGameQuadTextureHandle(uint32_t handle, TextureHandle textureHandle);
+    void SetGameQuadMaterial(uint32_t handle, const char* materialName);
+    TextureHandle AcquireTextureHandle(const char* texturePath);
+    void ReleaseTextureHandle(TextureHandle textureHandle);
     BOOL SetRendererBackend(uint32_t backend);
     uint32_t GetRendererBackend() const;
     bool ApplyPendingRendererSwitch();

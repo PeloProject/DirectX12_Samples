@@ -24,6 +24,24 @@ namespace
             renderer_->SetTransform(centerX, centerY, width, height);
         }
 
+        void SetTextureHandle(TextureHandle textureHandle) override
+        {
+            if (renderer_ == nullptr)
+            {
+                return;
+            }
+            renderer_->SetTextureHandle(textureHandle);
+        }
+
+        void SetMaterialName(const std::string& materialName) override
+        {
+            if (renderer_ == nullptr)
+            {
+                return;
+            }
+            renderer_->SetMaterialName(materialName);
+        }
+
         ///===================================================
         /// @brief 描画
         /// @param renderDevice 

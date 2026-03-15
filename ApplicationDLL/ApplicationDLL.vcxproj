@@ -171,6 +171,7 @@
     <ClInclude Include="AppRuntime.h" />
     <ClInclude Include="RHI\DescriptorHeapManager.h" />
     <ClInclude Include="RHI\DX12Texture.h" />
+    <ClInclude Include="RHI\TextureAssetManager.h" />
     <ClInclude Include="FrameLoop.h" />
     <ClInclude Include="Renderer\GameQuad.h" />
     <ClInclude Include="Application.h" />
@@ -215,6 +216,7 @@
     <ClCompile Include="RHI\DescriptorHeapManager.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="RHI\DX12Texture.cpp" />
+    <ClCompile Include="RHI\TextureAssetManager.cpp" />
     <ClCompile Include="FrameLoop.cpp" />
     <ClCompile Include="Renderer\GameQuad.cpp" />
     <ClCompile Include="RHI\OpenGLShaderCompiler.cpp" />
