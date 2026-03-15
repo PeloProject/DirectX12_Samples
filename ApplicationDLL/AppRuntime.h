@@ -3,7 +3,7 @@
 #include "Source/IRenderDevice.h"
 #include "RHI/TextureAssetManager.h"
 #include "Source/RendererBackend.h"
-#include "GameQuad.h"
+#include "Renderer/SpriteRenderObject.h"
 #include "PlayInEditor.h"
 
 #include <Windows.h>
@@ -49,8 +49,8 @@ struct RuntimeState
     float g_pieHotReloadCheckTimer = 0.0f;
     float g_pieManagedPublishCheckTimer = 0.0f;
     float g_gameClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    std::unordered_map<uint32_t, std::unique_ptr<IGameQuad>> g_gameQuads;
-    uint32_t g_nextGameQuadHandle = 1;
+    std::unordered_map<uint32_t, std::unique_ptr<ISpriteRenderObject>> g_spriteRenderers;
+    uint32_t g_nextSpriteRendererHandle = 1;
     RendererBackend g_displayRendererBackend = RendererBackend::DirectX12;
     RendererBackend g_rendererBackend = RendererBackend::DirectX12;
     bool g_rendererBackendLocked = false;
@@ -75,11 +75,11 @@ public:
 
 
     void SetGameClearColor(float r, float g, float b, float a);
-    uint32_t CreateGameQuad();
-    void DestroyGameQuad(uint32_t handle);
-    void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height);
-    void SetGameQuadTextureHandle(uint32_t handle, TextureHandle textureHandle);
-    void SetGameQuadMaterial(uint32_t handle, const char* materialName);
+    uint32_t CreateSpriteRenderer();
+    void DestroySpriteRenderer(uint32_t handle);
+    void SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height);
+    void SetSpriteRendererTexture(uint32_t handle, TextureHandle textureHandle);
+    void SetSpriteRendererMaterial(uint32_t handle, const char* materialName);
     TextureHandle AcquireTextureHandle(const char* texturePath);
     void ReleaseTextureHandle(TextureHandle textureHandle);
     BOOL SetRendererBackend(uint32_t backend);

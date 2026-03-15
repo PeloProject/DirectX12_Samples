@@ -1,10 +1,10 @@
 #pragma once
 
-#include "IGameQuadRenderer.h"
+#include "ISpriteRendererBackend.h"
 
 #include <algorithm>
 
-class NdcGameQuadRendererBase : public IGameQuadRenderer
+class NdcSpriteRendererBackendBase : public ISpriteRendererBackend
 {
 public:
     void SetTransform(float centerX, float centerY, float width, float height) override

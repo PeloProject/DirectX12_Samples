@@ -35,14 +35,18 @@
 2. 生成された `PieGameManaged.dll` を `ApplicationDLLHost.exe` と同じフォルダへ配置
 3. `ApplicationDLLHost` 起動後、PIE ボタンで開始/停止
 
-## Added API: Quad transform (for PolygonTest)
-- `CreateGameQuad() -> uint32_t`
-  - Creates a `PolygonTest` instance and returns its handle. Returns `0` on failure.
-- `DestroyGameQuad(uint32_t handle)`
-  - Destroys the `PolygonTest` instance for the handle.
-- `SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)`
-  - Updates transform in NDC space for the specified quad instance.
+## Added API: SpriteRenderer transform
+- `CreateSpriteRenderer() -> uint32_t`
+  - Creates a native sprite renderer instance and returns its handle. Returns `0` on failure.
+- `DestroySpriteRenderer(uint32_t handle)`
+  - Destroys the sprite renderer instance for the handle.
+- `SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height)`
+  - Updates transform in NDC space for the specified sprite renderer instance.
   - `width`/`height` values are clamped to a minimum of `0.01f` on native side.
+- `SetSpriteRendererTexture(uint32_t handle, uint32_t textureHandle)`
+  - Applies the texture handle to the sprite renderer instance.
+- `SetSpriteRendererMaterial(uint32_t handle, const char* materialName)`
+  - Applies the material name to the sprite renderer instance.
 
 ## Hot Reload (PieGameManaged)
 - While PIE is running, `ApplicationDLL` checks the source `PieGameManaged.dll` timestamp every 0.5 seconds.

@@ -1,4 +1,4 @@
-internal sealed class TransformComponent
+internal sealed class Transform
 {
     public float CenterX { get; set; }
 

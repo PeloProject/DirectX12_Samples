@@ -66,7 +66,7 @@ void PlayInEditor::StopImmediate()
     {
         RuntimeStateRef().g_pieGameStop();
     }
-    DestroyAllGameQuads();
+    DestroyAllSpriteRenderers();
     m_IsRunning = false;
     RuntimeStateRef().g_pieHotReloadCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
@@ -146,10 +146,10 @@ void PlayInEditor::StartImmediate()
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTime = initialSourceWriteTime;
         RuntimeStateRef().g_pieManagedLastPublishedSourceWriteTimeValid = true;
     }
-    const size_t totalQuadCount = RuntimeStateRef().g_gameQuads.size();
-    if (totalQuadCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
+    const size_t totalSpriteRendererCount = RuntimeStateRef().g_spriteRenderers.size();
+    if (totalSpriteRendererCount == 0 && RuntimeStateRef().g_pieGameStatus == statusBeforeStart)
     {
-        RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no quads (no native error reported)";
+        RuntimeStateRef().g_pieGameStatus = "PIE running (C#) - GameStart created no SpriteRenderer instances (no native error reported)";
         return;
     }
     if (RuntimeStateRef().g_pieGameStatus == statusBeforeStart)

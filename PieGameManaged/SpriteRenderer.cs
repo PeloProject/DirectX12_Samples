@@ -1,10 +1,10 @@
-internal sealed class SpriteRendererComponent
+internal sealed class SpriteRenderer : Component
 {
     public string Material { get; set; } = BuiltInMaterials.UnlitTexture;
 
     public string Texture { get; set; } = string.Empty;
 
-    internal uint NativeQuadHandle { get; set; }
+    internal uint NativeSpriteRendererHandle { get; set; }
 
     internal string AppliedTexture { get; set; } = string.Empty;
 

@@ -67,19 +67,19 @@ extern "C" __declspec(dllexport) void SetGameClearColor(float r, float g, float 
     Runtime().SetGameClearColor(r, g, b, a);
 }
 
-extern "C" __declspec(dllexport) uint32_t CreateGameQuad()
+extern "C" __declspec(dllexport) uint32_t CreateSpriteRenderer()
 {
-    return Runtime().CreateGameQuad();
+    return Runtime().CreateSpriteRenderer();
 }
 
-extern "C" __declspec(dllexport) void DestroyGameQuad(uint32_t handle)
+extern "C" __declspec(dllexport) void DestroySpriteRenderer(uint32_t handle)
 {
-    Runtime().DestroyGameQuad(handle);
+    Runtime().DestroySpriteRenderer(handle);
 }
 
-extern "C" __declspec(dllexport) void SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)
+extern "C" __declspec(dllexport) void SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height)
 {
-    Runtime().SetGameQuadTransform(handle, centerX, centerY, width, height);
+    Runtime().SetSpriteRendererTransform(handle, centerX, centerY, width, height);
 }
 
 extern "C" __declspec(dllexport) uint32_t AcquireTextureHandle(const char* texturePath)
@@ -92,14 +92,14 @@ extern "C" __declspec(dllexport) void ReleaseTextureHandle(uint32_t textureHandl
     Runtime().ReleaseTextureHandle(textureHandle);
 }
 
-extern "C" __declspec(dllexport) void SetGameQuadTextureHandle(uint32_t handle, uint32_t textureHandle)
+extern "C" __declspec(dllexport) void SetSpriteRendererTexture(uint32_t handle, uint32_t textureHandle)
 {
-    Runtime().SetGameQuadTextureHandle(handle, textureHandle);
+    Runtime().SetSpriteRendererTexture(handle, textureHandle);
 }
 
-extern "C" __declspec(dllexport) void SetGameQuadMaterial(uint32_t handle, const char* materialName)
+extern "C" __declspec(dllexport) void SetSpriteRendererMaterial(uint32_t handle, const char* materialName)
 {
-    Runtime().SetGameQuadMaterial(handle, materialName);
+    Runtime().SetSpriteRendererMaterial(handle, materialName);
 }
 
 extern "C" __declspec(dllexport) void MessageLoopIteration()

@@ -1,4 +1,4 @@
 ﻿#pragma once
 
-void RenderGameQuads();
-void DestroyAllGameQuads();
+void RenderSpriteRenderers();
+void DestroyAllSpriteRenderers();

@@ -1,16 +1,16 @@
 #include "pch.h"
-#include "GameQuad.h"
+#include "SpriteRenderObject.h"
 
-#include "Source/GameQuadRenderers/GameQuadRendererFactory.h"
+#include "SpriteRenderers/SpriteRendererBackendFactory.h"
 
 #include <memory>
 
 namespace
 {
-    class GameQuadAdapter final : public IGameQuad
+    class SpriteRenderObjectAdapter final : public ISpriteRenderObject
     {
     public:
-        explicit GameQuadAdapter(std::unique_ptr<IGameQuadRenderer> renderer)
+        explicit SpriteRenderObjectAdapter(std::unique_ptr<ISpriteRendererBackend> renderer)
             : renderer_(std::move(renderer))
         {
         }
@@ -56,16 +56,16 @@ namespace
         }
 
     private:
-        std::unique_ptr<IGameQuadRenderer> renderer_;
+        std::unique_ptr<ISpriteRendererBackend> renderer_;
     };
 }
 
-std::unique_ptr<IGameQuad> CreateGameQuadForBackend(RendererBackend backend)
+std::unique_ptr<ISpriteRenderObject> CreateSpriteRenderObjectForBackend(RendererBackend backend)
 {
-    std::unique_ptr<IGameQuadRenderer> renderer = CreateGameQuadRenderer(backend);
+    std::unique_ptr<ISpriteRendererBackend> renderer = CreateSpriteRendererBackend(backend);
     if (renderer == nullptr)
     {
         return nullptr;
     }
-    return std::make_unique<GameQuadAdapter>(std::move(renderer));
+    return std::make_unique<SpriteRenderObjectAdapter>(std::move(renderer));
 }

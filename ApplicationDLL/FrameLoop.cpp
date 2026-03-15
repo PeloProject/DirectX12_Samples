@@ -35,22 +35,22 @@ namespace
     }
 }
 
-void RenderGameQuads()
+void RenderSpriteRenderers()
 {
     RuntimeState& state = RuntimeStateRef();
-    for (auto& quadEntry : state.g_gameQuads)
+    for (auto& spriteRendererEntry : state.g_spriteRenderers)
     {
-        if (quadEntry.second != nullptr)
+        if (spriteRendererEntry.second != nullptr)
         {
-            quadEntry.second->Render(state.g_renderDevice.get());
+            spriteRendererEntry.second->Render(state.g_renderDevice.get());
         }
     }
 }
 
-void DestroyAllGameQuads()
+void DestroyAllSpriteRenderers()
 {
-    RuntimeStateRef().g_gameQuads.clear();
-    RuntimeStateRef().g_nextGameQuadHandle = 1;
+    RuntimeStateRef().g_spriteRenderers.clear();
+    RuntimeStateRef().g_nextSpriteRendererHandle = 1;
     TextureAssetManager::Get().Clear();
 }
 
@@ -69,53 +69,53 @@ void AppRuntime::SetGameClearColor(float r, float g, float b, float a)
 
 ///=====================================================
 /// <summary>
-/// 新しいゲーム用クアッド（IGameQuad）を作成して内部状態に登録します。成功すると一意のハンドルを返し、失敗時は0を返します。作成時にトランスフォームを設定し、状態文字列（g_pieGameStatus）を更新します。
+/// 新しい SpriteRenderer を作成して内部状態に登録します。成功すると一意のハンドルを返し、失敗時は0を返します。作成時にトランスフォームを設定し、状態文字列（g_pieGameStatus）を更新します。
 /// </summary>
-/// <returns>作成されたゲームクアッドのハンドル（uint32_t）。作成に失敗した場合は0を返します。</returns>
+/// <returns>作成された SpriteRenderer のハンドル（uint32_t）。作成に失敗した場合は0を返します。</returns>
 ///=====================================================
-uint32_t AppRuntime::CreateGameQuad()
+uint32_t AppRuntime::CreateSpriteRenderer()
 {
     try
     {
-        const uint32_t handle = RuntimeStateRef().g_nextGameQuadHandle++;
-        std::unique_ptr<IGameQuad> quad = CreateGameQuadForBackend(RuntimeStateRef().g_rendererBackend);
-        if (quad == nullptr)
+        const uint32_t handle = RuntimeStateRef().g_nextSpriteRendererHandle++;
+        std::unique_ptr<ISpriteRenderObject> spriteRenderer = CreateSpriteRenderObjectForBackend(RuntimeStateRef().g_rendererBackend);
+        if (spriteRenderer == nullptr)
         {
-            RuntimeStateRef().g_pieGameStatus = "CreateGameQuad failed: unsupported backend";
+            RuntimeStateRef().g_pieGameStatus = "CreateSpriteRenderer failed: unsupported backend";
             return 0;
         }
 
-        quad->SetTransform(0.0f, 0.0f, 0.8f, 1.4f);
-        RuntimeStateRef().g_gameQuads[handle] = std::move(quad);
-        RuntimeStateRef().g_pieGameStatus = "Game quad created. handle=" + std::to_string(handle);
+        spriteRenderer->SetTransform(0.0f, 0.0f, 0.8f, 1.4f);
+        RuntimeStateRef().g_spriteRenderers[handle] = std::move(spriteRenderer);
+        RuntimeStateRef().g_pieGameStatus = "SpriteRenderer created. handle=" + std::to_string(handle);
         return handle;
     }
     catch (const std::exception& ex)
     {
-        RuntimeStateRef().g_pieGameStatus = std::string("CreateGameQuad failed: ") + ex.what();
+        RuntimeStateRef().g_pieGameStatus = std::string("CreateSpriteRenderer failed: ") + ex.what();
         return 0;
     }
     catch (...)
     {
-        RuntimeStateRef().g_pieGameStatus = "CreateGameQuad failed: unknown error";
+        RuntimeStateRef().g_pieGameStatus = "CreateSpriteRenderer failed: unknown error";
         return 0;
     }
 }
 
-void AppRuntime::DestroyGameQuad(uint32_t handle)
+void AppRuntime::DestroySpriteRenderer(uint32_t handle)
 {
     if (handle == 0)
     {
         return;
     }
 
-    RuntimeStateRef().g_gameQuads.erase(handle);
+    RuntimeStateRef().g_spriteRenderers.erase(handle);
 }
 
-void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float centerY, float width, float height)
+void AppRuntime::SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height)
 {
-    const auto it = RuntimeStateRef().g_gameQuads.find(handle);
-    if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr)
+    const auto it = RuntimeStateRef().g_spriteRenderers.find(handle);
+    if (it == RuntimeStateRef().g_spriteRenderers.end() || it->second == nullptr)
     {
         return;
     }
@@ -123,10 +123,10 @@ void AppRuntime::SetGameQuadTransform(uint32_t handle, float centerX, float cent
     it->second->SetTransform(centerX, centerY, width, height);
 }
 
-void AppRuntime::SetGameQuadTextureHandle(uint32_t handle, TextureHandle textureHandle)
+void AppRuntime::SetSpriteRendererTexture(uint32_t handle, TextureHandle textureHandle)
 {
-    const auto it = RuntimeStateRef().g_gameQuads.find(handle);
-    if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr)
+    const auto it = RuntimeStateRef().g_spriteRenderers.find(handle);
+    if (it == RuntimeStateRef().g_spriteRenderers.end() || it->second == nullptr)
     {
         return;
     }
@@ -134,10 +134,10 @@ void AppRuntime::SetGameQuadTextureHandle(uint32_t handle, TextureHandle texture
     it->second->SetTextureHandle(textureHandle);
 }
 
-void AppRuntime::SetGameQuadMaterial(uint32_t handle, const char* materialName)
+void AppRuntime::SetSpriteRendererMaterial(uint32_t handle, const char* materialName)
 {
-    const auto it = RuntimeStateRef().g_gameQuads.find(handle);
-    if (it == RuntimeStateRef().g_gameQuads.end() || it->second == nullptr || materialName == nullptr)
+    const auto it = RuntimeStateRef().g_spriteRenderers.find(handle);
+    if (it == RuntimeStateRef().g_spriteRenderers.end() || it->second == nullptr || materialName == nullptr)
     {
         return;
     }
@@ -210,7 +210,7 @@ void AppRuntime::MessageLoopIteration()
     {
         BeginSceneRenderToTexture();
         SceneManager::GetInstance().Render();
-        RenderGameQuads();
+        RenderSpriteRenderers();
         EndSceneRenderToTexture();
 
         if (RuntimeStateRef().g_renderDevice != nullptr)
@@ -226,7 +226,7 @@ void AppRuntime::MessageLoopIteration()
     if (isNonDxBackend)
     {
         SceneManager::GetInstance().Render();
-        RenderGameQuads();
+        RenderSpriteRenderers();
 
         if (RuntimeStateRef().g_imguiInitialized && RuntimeStateRef().g_renderDevice != nullptr)
         {
@@ -251,7 +251,7 @@ void AppRuntime::MessageLoopIteration()
         uiState.moduleSourceText = moduleSourceText.c_str();
         uiState.pieGameModulePath = RuntimeStateRef().g_pieGameModulePath.c_str();
         uiState.pieManagedLastPublishLogPath = RuntimeStateRef().g_pieManagedLastPublishLogPath.c_str();
-        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_gameQuads.size());
+        uiState.activeQuadCount = static_cast<int>(RuntimeStateRef().g_spriteRenderers.size());
 
         EditorUiCallbacks uiCallbacks = {};
         uiCallbacks.startPie = &StartPie;

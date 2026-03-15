@@ -173,7 +173,7 @@
     <ClInclude Include="RHI\DX12Texture.h" />
     <ClInclude Include="RHI\TextureAssetManager.h" />
     <ClInclude Include="FrameLoop.h" />
-    <ClInclude Include="Renderer\GameQuad.h" />
+    <ClInclude Include="Renderer\SpriteRenderObject.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="RHI\OpenGLShaderCompiler.h" />
@@ -185,12 +185,12 @@
     <ClInclude Include="RHI\RHITexture.h" />
     <ClInclude Include="RHI\ShaderCompilerBase.h" />
     <ClInclude Include="Editor\EditorUi.h" />
-    <ClInclude Include="GameQuadRenderers\Dx12GameQuadRenderer.h" />
-    <ClInclude Include="GameQuadRenderers\GameQuadRendererFactory.h" />
-    <ClInclude Include="GameQuadRenderers\IGameQuadRenderer.h" />
-    <ClInclude Include="GameQuadRenderers\NdcGameQuadRendererBase.h" />
-    <ClInclude Include="GameQuadRenderers\OpenGlGameQuadRenderer.h" />
-    <ClInclude Include="GameQuadRenderers\VulkanGameQuadRenderer.h" />
+    <ClInclude Include="SpriteRenderers\Dx12SpriteRendererBackend.h" />
+    <ClInclude Include="SpriteRenderers\SpriteRendererBackendFactory.h" />
+    <ClInclude Include="SpriteRenderers\ISpriteRendererBackend.h" />
+    <ClInclude Include="SpriteRenderers\NdcSpriteRendererBackendBase.h" />
+    <ClInclude Include="SpriteRenderers\OpenGlSpriteRendererBackend.h" />
+    <ClInclude Include="SpriteRenderers\VulkanSpriteRendererBackend.h" />
     <ClInclude Include="RHI\TextureManager.h" />
     <ClInclude Include="System\GraphicsDevice.h" />
     <ClInclude Include="Renderer\IRenderDevice.h" />
@@ -218,7 +218,7 @@
     <ClCompile Include="RHI\DX12Texture.cpp" />
     <ClCompile Include="RHI\TextureAssetManager.cpp" />
     <ClCompile Include="FrameLoop.cpp" />
-    <ClCompile Include="Renderer\GameQuad.cpp" />
+    <ClCompile Include="Renderer\SpriteRenderObject.cpp" />
     <ClCompile Include="RHI\OpenGLShaderCompiler.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -233,10 +233,10 @@
     <ClCompile Include="RHI\ShaderCompilerBase.cpp" />
     <ClCompile Include="Renderer\Dx12RenderDevice.cpp" />
     <ClCompile Include="Editor\EditorUi.cpp" />
-    <ClCompile Include="GameQuadRenderers\Dx12GameQuadRenderer.cpp" />
-    <ClCompile Include="GameQuadRenderers\GameQuadRendererFactory.cpp" />
-    <ClCompile Include="GameQuadRenderers\OpenGlGameQuadRenderer.cpp" />
-    <ClCompile Include="GameQuadRenderers\VulkanGameQuadRenderer.cpp" />
+    <ClCompile Include="SpriteRenderers\Dx12SpriteRendererBackend.cpp" />
+    <ClCompile Include="SpriteRenderers\SpriteRendererBackendFactory.cpp" />
+    <ClCompile Include="SpriteRenderers\OpenGlSpriteRendererBackend.cpp" />
+    <ClCompile Include="SpriteRenderers\VulkanSpriteRendererBackend.cpp" />
     <ClCompile Include="RHI\TextureManager.cpp" />
     <ClCompile Include="System\GraphicsDevice.cpp" />
     <ClCompile Include="Renderer\Material.cpp" />

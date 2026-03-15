@@ -106,7 +106,9 @@ namespace
             if (entry.path().filename() == L"PieGameManaged.dll")
             {
                 const auto parentName = entry.path().parent_path().filename().wstring();
-                if (parentName == L"native" || parentName == L"publish")
+                const auto grandParentName = entry.path().parent_path().parent_path().filename().wstring();
+                if (parentName == L"native" || parentName == L"publish" ||
+                    (parentName == L"win-x64" && grandParentName.rfind(L"net", 0) == 0))
                 {
                     candidates.push_back(entry.path());
                 }
@@ -163,6 +165,8 @@ bool EnsurePieGameModuleLoaded()
         }
     }
 
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"PieGameManaged.dll");
+    candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Release" / L"net8.0" / L"win-x64" / L"PieGameManaged.dll");
     candidates.push_back(moduleDir / L"native" / L"PieGameManaged.dll");
     candidates.push_back(moduleDir / L"publish" / L"PieGameManaged.dll");
     candidates.push_back(moduleDir / L".." / L".." / L".." / L".." / L"PieGameManaged" / L"bin" / L"Debug" / L"net8.0" / L"win-x64" / L"native" / L"PieGameManaged.dll");
@@ -259,7 +263,7 @@ bool ReloadPieGameModuleNow(const char* successStatus, const char* failureStatus
     {
         RuntimeStateRef().g_pieGameStop();
     }
-    DestroyAllGameQuads();
+    DestroyAllSpriteRenderers();
     AppRuntime::Get().GetPlayInEditor().StopImmediate();
 
     UnloadPieGameModule();
@@ -299,7 +303,7 @@ bool ReloadPieGameModuleFromPath(const std::filesystem::path& modulePath, const 
     {
         oldStop();
     }
-    DestroyAllGameQuads();
+    DestroyAllSpriteRenderers();
 
     ScopedModule oldModuleHolder(oldModule);
 
