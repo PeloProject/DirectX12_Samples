@@ -61,14 +61,17 @@ bool PipelineLibrary::StaticSamplerDesc::operator==(const StaticSamplerDesc& oth
         maxLOD == other.maxLOD;
 }
 
+bool PipelineLibrary::ShaderProgramDesc::operator==(const ShaderProgramDesc& other) const
+{
+    return shaderFile == other.shaderFile &&
+        entryPoint == other.entryPoint &&
+        shaderModel == other.shaderModel;
+}
+
 bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
 {
-    return vertexShaderFile == other.vertexShaderFile &&
-        vertexEntryPoint == other.vertexEntryPoint &&
-        vertexShaderModel == other.vertexShaderModel &&
-        pixelShaderFile == other.pixelShaderFile &&
-        pixelEntryPoint == other.pixelEntryPoint &&
-        pixelShaderModel == other.pixelShaderModel &&
+    return vertexShader == other.vertexShader &&
+        pixelShader == other.pixelShader &&
         renderTargetFormat == other.renderTargetFormat &&
         cullMode == other.cullMode &&
         topologyType == other.topologyType &&
@@ -82,12 +85,12 @@ bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
 size_t PipelineLibrary::PipelineDescHasher::operator()(const PipelineDesc& desc) const
 {
     size_t seed = 0;
-    HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShaderFile));
-    HashCombine(seed, std::hash<std::string>{}(desc.vertexEntryPoint));
-    HashCombine(seed, std::hash<std::string>{}(desc.vertexShaderModel));
-    HashCombine(seed, std::hash<std::wstring>{}(desc.pixelShaderFile));
-    HashCombine(seed, std::hash<std::string>{}(desc.pixelEntryPoint));
-    HashCombine(seed, std::hash<std::string>{}(desc.pixelShaderModel));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShader.shaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.entryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.shaderModel));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.pixelShader.shaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.entryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.shaderModel));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.renderTargetFormat)));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.cullMode)));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.topologyType)));
@@ -220,9 +223,9 @@ HRESULT PipelineLibrary::CreatePipeline(
     // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
     HRESULT hr = ShaderCompiler::CompileFromFile(
-        desc.vertexShaderFile.c_str(),
-        desc.vertexEntryPoint.c_str(),
-        desc.vertexShaderModel.c_str(),
+        desc.vertexShader.shaderFile.c_str(),
+        desc.vertexShader.entryPoint.c_str(),
+        desc.vertexShader.shaderModel.c_str(),
         kCompileFlags,
         vertexShaderBlob);
     if (FAILED(hr))
@@ -233,9 +236,9 @@ HRESULT PipelineLibrary::CreatePipeline(
 	// ピクセルシェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderBlob;
     hr = ShaderCompiler::CompileFromFile(
-        desc.pixelShaderFile.c_str(),
-        desc.pixelEntryPoint.c_str(),
-        desc.pixelShaderModel.c_str(),
+        desc.pixelShader.shaderFile.c_str(),
+        desc.pixelShader.entryPoint.c_str(),
+        desc.pixelShader.shaderModel.c_str(),
         kCompileFlags,
         pixelShaderBlob);
     if (FAILED(hr))
@@ -448,12 +451,12 @@ std::string PipelineLibrary::DescribePipelineDesc(const PipelineDesc& desc) cons
     };
 
     std::string description;
-    description += "Vertex Shader: " + WStringToString(desc.vertexShaderFile) + "\n";
-    description += "Vertex Entry Point: " + desc.vertexEntryPoint + "\n";
-    description += "Vertex Shader Model: " + desc.vertexShaderModel + "\n";
-    description += "Pixel Shader: " + WStringToString(desc.pixelShaderFile) + "\n";
-    description += "Pixel Entry Point: " + desc.pixelEntryPoint + "\n";
-    description += "Pixel Shader Model: " + desc.pixelShaderModel + "\n";
+    description += "Vertex Shader: " + WStringToString(desc.vertexShader.shaderFile) + "\n";
+    description += "Vertex Entry Point: " + desc.vertexShader.entryPoint + "\n";
+    description += "Vertex Shader Model: " + desc.vertexShader.shaderModel + "\n";
+    description += "Pixel Shader: " + WStringToString(desc.pixelShader.shaderFile) + "\n";
+    description += "Pixel Entry Point: " + desc.pixelShader.entryPoint + "\n";
+    description += "Pixel Shader Model: " + desc.pixelShader.shaderModel + "\n";
 
     return description;
 }

@@ -69,14 +69,23 @@ public:
         bool operator==(const StaticSamplerDesc& other) const;
     };
 
+    /// <summary>
+    /// シェーダープログラムの情報を保持する構造体。
+    /// </summary>
+    struct ShaderProgramDesc
+    {
+        std::wstring shaderFile;
+        std::string entryPoint;
+        std::string shaderModel;
+
+        bool operator==(const ShaderProgramDesc& other) const;
+    };
+
     struct PipelineDesc
     {
-        std::wstring vertexShaderFile;
-        std::string vertexEntryPoint;
-        std::string vertexShaderModel;
-        std::wstring pixelShaderFile;
-        std::string pixelEntryPoint;
-        std::string pixelShaderModel;
+		ShaderProgramDesc vertexShader;
+		ShaderProgramDesc pixelShader;
+       
         DXGI_FORMAT renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         D3D12_CULL_MODE cullMode = D3D12_CULL_MODE_NONE;
         D3D12_PRIMITIVE_TOPOLOGY_TYPE topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
