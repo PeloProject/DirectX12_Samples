@@ -215,7 +215,7 @@ HRESULT PipelineLibrary::CreatePipeline(
     std::shared_ptr<const Pipeline>* outPipeline) const
 {
 
-    constexpr UINT kCompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+    const UINT kCompileFlags = GetShaderCompileFlags();
 
     // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
@@ -421,6 +421,16 @@ HRESULT PipelineLibrary::CreatePipeline(
 
     *outPipeline = createdPipeline;
     return S_OK;
+}
+
+UINT PipelineLibrary::GetShaderCompileFlags() const
+{
+
+#if Defined(DEBUG) || Defined(_DEBUG)
+	return D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+	return 0;
+#endif
 }
 
 ///====================================================

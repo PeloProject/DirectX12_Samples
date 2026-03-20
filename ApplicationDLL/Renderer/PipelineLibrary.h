@@ -127,7 +127,7 @@ private:
 	void DumpCacheStats() const;
 
 private:
-
+    UINT GetShaderCompileFlags() const;
 	std::string DescribePipelineDesc(const PipelineDesc& desc) const;
 
     mutable std::mutex mutex_;
