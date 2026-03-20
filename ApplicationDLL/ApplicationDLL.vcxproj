@@ -169,6 +169,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AppRuntime.h" />
+    <ClInclude Include="Renderer\ShaderCache.h" />
     <ClInclude Include="RHI\DescriptorHeapManager.h" />
     <ClInclude Include="RHI\DX12Texture.h" />
     <ClInclude Include="RHI\TextureAssetManager.h" />
@@ -213,6 +214,7 @@
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp" />
     <ClCompile Include="Application.cpp" />
+    <ClCompile Include="Renderer\ShaderCache.cpp" />
     <ClCompile Include="RHI\DescriptorHeapManager.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="RHI\DX12Texture.cpp" />

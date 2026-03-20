@@ -6,12 +6,12 @@
 Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc(RHITexture* textureResource)
 {
     MaterialDesc desc = {};
-    desc.pipelineDesc.vertexShader.shaderFile = L"BasicVertexShader.hlsl";
-    desc.pipelineDesc.vertexShader.entryPoint = "BasicVS";
-    desc.pipelineDesc.vertexShader.shaderModel = "vs_5_0";
-    desc.pipelineDesc.pixelShader.shaderFile = L"BasicPixelShader.hlsl";
-    desc.pipelineDesc.pixelShader.entryPoint = "BasicPS";
-    desc.pipelineDesc.pixelShader.shaderModel = "ps_5_0";
+    desc.pipelineDesc.vertexShader.m_ShaderFile = L"BasicVertexShader.hlsl";
+    desc.pipelineDesc.vertexShader.m_EntryPoint = "BasicVS";
+    desc.pipelineDesc.vertexShader.m_ShaderModel = "vs_5_0";
+    desc.pipelineDesc.pixelShader.m_ShaderFile = L"BasicPixelShader.hlsl";
+    desc.pipelineDesc.pixelShader.m_EntryPoint = "BasicPS";
+    desc.pipelineDesc.pixelShader.m_ShaderModel = "ps_5_0";
     desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.pipelineDesc.cullMode = D3D12_CULL_MODE_NONE;
     desc.pipelineDesc.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;

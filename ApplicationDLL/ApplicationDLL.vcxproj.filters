@@ -183,6 +183,9 @@
     <ClInclude Include="RHI\TextureAssetManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="Renderer\ShaderCache.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -322,6 +325,9 @@
     </ClCompile>
     <ClCompile Include="RHI\TextureAssetManager.cpp">
       <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderer\ShaderCache.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

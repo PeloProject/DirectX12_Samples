@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ShaderCache.h"
+
 class PipelineLibrary final
 {
 public:
@@ -69,22 +71,10 @@ public:
         bool operator==(const StaticSamplerDesc& other) const;
     };
 
-    /// <summary>
-    /// シェーダープログラムの情報を保持する構造体。
-    /// </summary>
-    struct ShaderProgramDesc
-    {
-        std::wstring shaderFile;
-        std::string entryPoint;
-        std::string shaderModel;
-
-        bool operator==(const ShaderProgramDesc& other) const;
-    };
-
     struct PipelineDesc
     {
-		ShaderProgramDesc vertexShader;
-		ShaderProgramDesc pixelShader;
+		ShaderCache::ShaderProgramDesc vertexShader;
+        ShaderCache::ShaderProgramDesc pixelShader;
        
         DXGI_FORMAT renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         D3D12_CULL_MODE cullMode = D3D12_CULL_MODE_NONE;

@@ -2,6 +2,7 @@
 #include "PipelineLibrary.h"
 
 #include "ShaderCompiler.h"
+#include "ShaderCache.h"
 
 #include <cstring>
 #include <vector>
@@ -61,12 +62,7 @@ bool PipelineLibrary::StaticSamplerDesc::operator==(const StaticSamplerDesc& oth
         maxLOD == other.maxLOD;
 }
 
-bool PipelineLibrary::ShaderProgramDesc::operator==(const ShaderProgramDesc& other) const
-{
-    return shaderFile == other.shaderFile &&
-        entryPoint == other.entryPoint &&
-        shaderModel == other.shaderModel;
-}
+
 
 bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
 {
@@ -85,12 +81,12 @@ bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
 size_t PipelineLibrary::PipelineDescHasher::operator()(const PipelineDesc& desc) const
 {
     size_t seed = 0;
-    HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShader.shaderFile));
-    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.entryPoint));
-    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.shaderModel));
-    HashCombine(seed, std::hash<std::wstring>{}(desc.pixelShader.shaderFile));
-    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.entryPoint));
-    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.shaderModel));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShader.m_ShaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.m_EntryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.vertexShader.m_ShaderModel));
+    HashCombine(seed, std::hash<std::wstring>{}(desc.pixelShader.m_ShaderFile));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.m_EntryPoint));
+    HashCombine(seed, std::hash<std::string>{}(desc.pixelShader.m_ShaderModel));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.renderTargetFormat)));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.cullMode)));
     HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.topologyType)));
@@ -222,29 +218,27 @@ HRESULT PipelineLibrary::CreatePipeline(
 
     // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
-    HRESULT hr = ShaderCompiler::CompileFromFile(
-        desc.vertexShader.shaderFile.c_str(),
-        desc.vertexShader.entryPoint.c_str(),
-        desc.vertexShader.shaderModel.c_str(),
-        kCompileFlags,
-        vertexShaderBlob);
-    if (FAILED(hr))
+    bool isError = ShaderCache::GetorCreate(
+        desc.vertexShader,
+        &vertexShaderBlob);
+
+    if (isError || vertexShaderBlob == nullptr)
     {
-        return hr;
-    }
+        return E_FAIL;
+    };
+
 
 	// ピクセルシェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderBlob;
-    hr = ShaderCompiler::CompileFromFile(
-        desc.pixelShader.shaderFile.c_str(),
-        desc.pixelShader.entryPoint.c_str(),
-        desc.pixelShader.shaderModel.c_str(),
-        kCompileFlags,
-        pixelShaderBlob);
-    if (FAILED(hr))
+    isError = ShaderCache::GetorCreate(
+        desc.pixelShader,
+        &pixelShaderBlob);
+
+    if (isError || pixelShaderBlob == nullptr)
     {
-        return hr;
-    }
+        return E_FAIL;
+    };
+
 
 	// ルートシグネチャの構築
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
@@ -316,7 +310,7 @@ HRESULT PipelineLibrary::CreatePipeline(
     // その後 ID3D12Device::CreateRootSignature を呼び出してルートシグネチャオブジェクトを作成します。
     Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
     Microsoft::WRL::ComPtr<ID3DBlob> rootSignatureBlob;
-    hr = D3D12SerializeRootSignature(
+    HRESULT hr = D3D12SerializeRootSignature(
         &rootSignatureDesc,
         D3D_ROOT_SIGNATURE_VERSION_1,
         rootSignatureBlob.GetAddressOf(),
@@ -429,7 +423,7 @@ HRESULT PipelineLibrary::CreatePipeline(
 UINT PipelineLibrary::GetShaderCompileFlags() const
 {
 
-#if Defined(DEBUG) || Defined(_DEBUG)
+#if _DEBUG
 	return D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
 	return 0;
@@ -446,17 +440,45 @@ UINT PipelineLibrary::GetShaderCompileFlags() const
 std::string PipelineLibrary::DescribePipelineDesc(const PipelineDesc& desc) const
 {
     auto WStringToString = [](const std::wstring& w) -> std::string {
-        // 簡易変換（ASCII / 基本ラテン文字が想定されるなら十分）
-        return std::string(w.begin(), w.end());
+        if (w.empty())
+        {
+            return {};
+        }
+
+        const int requiredSize = WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            w.c_str(),
+            static_cast<int>(w.size()),
+            nullptr,
+            0,
+            nullptr,
+            nullptr);
+        if (requiredSize <= 0)
+        {
+            return {};
+        }
+
+        std::string result(static_cast<size_t>(requiredSize), '\0');
+        WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            w.c_str(),
+            static_cast<int>(w.size()),
+            result.data(),
+            requiredSize,
+            nullptr,
+            nullptr);
+        return result;
     };
 
     std::string description;
-    description += "Vertex Shader: " + WStringToString(desc.vertexShader.shaderFile) + "\n";
-    description += "Vertex Entry Point: " + desc.vertexShader.entryPoint + "\n";
-    description += "Vertex Shader Model: " + desc.vertexShader.shaderModel + "\n";
-    description += "Pixel Shader: " + WStringToString(desc.pixelShader.shaderFile) + "\n";
-    description += "Pixel Entry Point: " + desc.pixelShader.entryPoint + "\n";
-    description += "Pixel Shader Model: " + desc.pixelShader.shaderModel + "\n";
+    description += "Vertex Shader: " + WStringToString(desc.vertexShader.m_ShaderFile) + "\n";
+    description += "Vertex Entry Point: " + desc.vertexShader.m_EntryPoint + "\n";
+    description += "Vertex Shader Model: " + desc.vertexShader.m_ShaderModel + "\n";
+    description += "Pixel Shader: " + WStringToString(desc.pixelShader.m_ShaderFile) + "\n";
+    description += "Pixel Entry Point: " + desc.pixelShader.m_EntryPoint + "\n";
+    description += "Pixel Shader Model: " + desc.pixelShader.m_ShaderModel + "\n";
 
     return description;
 }
