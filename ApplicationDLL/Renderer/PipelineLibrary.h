@@ -127,6 +127,9 @@ private:
 	void DumpCacheStats() const;
 
 private:
+
+	std::string DescribePipelineDesc(const PipelineDesc& desc) const;
+
     mutable std::mutex mutex_;
     std::unordered_map<PipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> cache_;
 

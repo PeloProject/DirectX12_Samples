@@ -415,9 +415,35 @@ HRESULT PipelineLibrary::CreatePipeline(
     if (FAILED(hr))
     {
         LOG_DEBUG("CreateGraphicsPipelineState failed. hr=0x%08X", static_cast<unsigned int>(hr));
+        DescribePipelineDesc(desc);;
         return hr;
     }
 
     *outPipeline = createdPipeline;
     return S_OK;
+}
+
+///====================================================
+/// <summary>
+/// パイプラインの説明を生成
+/// </summary>
+/// <param name="desc"></param>
+/// <returns></returns>
+///====================================================
+std::string PipelineLibrary::DescribePipelineDesc(const PipelineDesc& desc) const
+{
+    auto WStringToString = [](const std::wstring& w) -> std::string {
+        // 簡易変換（ASCII / 基本ラテン文字が想定されるなら十分）
+        return std::string(w.begin(), w.end());
+    };
+
+    std::string description;
+    description += "Vertex Shader: " + WStringToString(desc.vertexShaderFile) + "\n";
+    description += "Vertex Entry Point: " + desc.vertexEntryPoint + "\n";
+    description += "Vertex Shader Model: " + desc.vertexShaderModel + "\n";
+    description += "Pixel Shader: " + WStringToString(desc.pixelShaderFile) + "\n";
+    description += "Pixel Entry Point: " + desc.pixelEntryPoint + "\n";
+    description += "Pixel Shader Model: " + desc.pixelShaderModel + "\n";
+
+    return description;
 }
