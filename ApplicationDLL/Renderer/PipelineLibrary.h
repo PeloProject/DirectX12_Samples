@@ -12,15 +12,11 @@
 #include <vector>
 
 #include "ShaderCache.h"
+#include "RootSignatureCache.h"
 
 class PipelineLibrary final
 {
 public:
-    enum class RootParameterType : unsigned int
-    {
-        DescriptorTableSrv,
-        ConstantBufferView
-    };
 
     struct InputElementDesc
     {
@@ -35,42 +31,6 @@ public:
         bool operator==(const InputElementDesc& other) const;
     };
 
-    struct RootParameterDesc
-    {
-        RootParameterType type = RootParameterType::DescriptorTableSrv;
-        D3D12_SHADER_VISIBILITY shaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-        // Descriptor-table SRV parameters.
-        UINT numDescriptors = 1;
-        UINT baseShaderRegister = 0;
-        UINT registerSpace = 0;
-
-        // CBV parameters.
-        UINT cbvShaderRegister = 0;
-        UINT cbvRegisterSpace = 0;
-
-        bool operator==(const RootParameterDesc& other) const;
-    };
-
-    struct StaticSamplerDesc
-    {
-        D3D12_FILTER filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        D3D12_TEXTURE_ADDRESS_MODE addressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        D3D12_TEXTURE_ADDRESS_MODE addressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        D3D12_TEXTURE_ADDRESS_MODE addressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-        UINT shaderRegister = 0;
-        UINT registerSpace = 0;
-        D3D12_SHADER_VISIBILITY shaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-        D3D12_COMPARISON_FUNC comparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-        D3D12_STATIC_BORDER_COLOR borderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
-        FLOAT mipLODBias = 0.0f;
-        UINT maxAnisotropy = 1;
-        FLOAT minLOD = 0.0f;
-        FLOAT maxLOD = D3D12_FLOAT32_MAX;
-
-        bool operator==(const StaticSamplerDesc& other) const;
-    };
-
     struct PipelineDesc
     {
 		ShaderCache::ShaderProgramDesc vertexShader;
@@ -82,9 +42,7 @@ public:
         bool enableDepth = false;
         bool enableBlend = false;
         std::vector<InputElementDesc> inputElements;
-        std::vector<RootParameterDesc> rootParameters;
-        std::vector<StaticSamplerDesc> staticSamplers;
-
+        RootSignatureCache::RootSignatureDesc rootSignatureDesc;
         bool operator==(const PipelineDesc& other) const;
     };
 

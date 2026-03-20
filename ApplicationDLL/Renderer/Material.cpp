@@ -21,25 +21,38 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc(RHITexture* textu
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
     };
-    desc.pipelineDesc.rootParameters = {
-        { PipelineLibrary::RootParameterType::DescriptorTableSrv, D3D12_SHADER_VISIBILITY_PIXEL, 1, 0, 0, 0, 0 }
-    };
-    desc.pipelineDesc.staticSamplers = {
+    desc.pipelineDesc.rootSignatureDesc = {
+        
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
         {
-            D3D12_FILTER_MIN_MAG_MIP_POINT,
-            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            D3D12_TEXTURE_ADDRESS_MODE_WRAP,
-            0,
-            0,
-            D3D12_SHADER_VISIBILITY_PIXEL,
-            D3D12_COMPARISON_FUNC_NEVER,
-            D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE,
-            0.0f,
-            1,
-            0.0f,
-            D3D12_FLOAT32_MAX
+            {
+                RootSignatureCache::RootParameterType::DescriptorTableSrv,
+                D3D12_SHADER_VISIBILITY_PIXEL,
+                1,
+                0,
+                0,
+                0,
+                0
+            }
+        },
+        {
+            {
+                D3D12_FILTER_MIN_MAG_MIP_POINT,
+                D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+                0,
+                0,
+                D3D12_SHADER_VISIBILITY_PIXEL,
+                D3D12_COMPARISON_FUNC_NEVER,
+                D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE,
+                0.0f,
+                1,
+                0.0f,
+                D3D12_FLOAT32_MAX
+            }
         }
+        
     };
     desc.parameterBlock.textureBindings = {
         { 0, textureResource }

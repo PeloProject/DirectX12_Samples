@@ -186,6 +186,9 @@
     <ClInclude Include="Renderer\ShaderCache.h">
       <Filter>ヘッダー ファイル\Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="Renderer\RootSignatureCache.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -327,6 +330,9 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="Renderer\ShaderCache.cpp">
+      <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderer\RootSignatureCache.cpp">
       <Filter>ソース ファイル\Renderer</Filter>
     </ClCompile>
   </ItemGroup>
