@@ -31,7 +31,7 @@ public:
         bool operator==(const InputElementDesc& other) const;
     };
 
-    struct PipelineDesc
+    struct GraphicsPipelineDesc
     {
 		ShaderCache::ShaderProgramDesc vertexShader;
         ShaderCache::ShaderProgramDesc pixelShader;
@@ -43,7 +43,7 @@ public:
         bool enableBlend = false;
         std::vector<InputElementDesc> inputElements;
         RootSignatureCache::RootSignatureDesc rootSignatureDesc;
-        bool operator==(const PipelineDesc& other) const;
+        bool operator==(const GraphicsPipelineDesc& other) const;
     };
 
     struct Pipeline
@@ -54,7 +54,7 @@ public:
 
     HRESULT GetOrCreate(
         ID3D12Device* device,
-        const PipelineDesc& desc,
+        const GraphicsPipelineDesc& desc,
         std::shared_ptr<const Pipeline>* outPipeline);
 
     void Clear();
@@ -62,7 +62,7 @@ public:
 private:
     struct PipelineDescHasher
     {
-        size_t operator()(const PipelineDesc& desc) const;
+        size_t operator()(const GraphicsPipelineDesc& desc) const;
     };
 
 
@@ -75,7 +75,7 @@ private:
     /// <returns>HRESULTで操作結果を示す。成功時は通常S_OKが返り、失敗時は適切なエラーコードが返される。</returns>
     HRESULT CreatePipeline(
         ID3D12Device* device,
-        const PipelineDesc& desc,
+        const GraphicsPipelineDesc& desc,
         std::shared_ptr<const Pipeline>* outPipeline) const;
 
 	/// <summary>
@@ -84,11 +84,11 @@ private:
 	void DumpCacheStats() const;
 
 private:
-    UINT GetShaderCompileFlags() const;
-	std::string DescribePipelineDesc(const PipelineDesc& desc) const;
+
+	std::string DescribePipelineDesc(const GraphicsPipelineDesc& desc) const;
 
     mutable std::mutex mutex_;
-    std::unordered_map<PipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> cache_;
+    std::unordered_map<GraphicsPipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> m_Cache;
 
 	int m_TotalRequestCount = 0;
 	int m_CacheHitCount = 0;

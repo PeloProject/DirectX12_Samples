@@ -13,7 +13,7 @@ inline void HashCombine(size_t& seed, size_t value)
 }
 
 std::mutex ShaderCache::m_mutex;
-std::unordered_map<ShaderCache::ShaderProgramDesc, ComPtr<ID3DBlob>, ShaderCache::ShaderProgramDescHasher> ShaderCache::m_Cache;
+std::unordered_map<ShaderCache::ShaderProgramDesc, std::shared_ptr<ShaderCache::ShaderCacheEntry>, ShaderCache::ShaderProgramDescHasher> ShaderCache::m_Cache;
 
 /// <summary>
 /// ShaderProgramDesc の等価比較演算子。メンバ変数 m_ShaderFile、m_EntryPoint、m_ShaderModel、m_CompileFlags の全てが等しい場合に true を返します。
@@ -55,33 +55,75 @@ bool ShaderCache::GetorCreate(
     {
         return false;
     }
+
+    std::shared_ptr<ShaderCache::ShaderCacheEntry> entry;
+	bool isCreator = false;
     {
-		std::lock_guard<std::mutex> lock(m_mutex);
+		std::unique_lock<std::mutex> lock(m_mutex);
 		auto it = m_Cache.find(desc);
-		if (it != m_Cache.end())
+        if (it == m_Cache.end())
         {
-            *outShaderBlob = it->second;
-            return true;
+            // キャッシュに存在しない場合は、シェーダーをコンパイルしてキャッシュに保存します。
+            // まず、ShaderCacheEntry を作成してキャッシュに追加し、
+            // その後ロックを解放してシェーダーのコンパイルを行います。
+            // これにより、他のスレッドが同じシェーダーを要求した場合に、コンパイル中であることを認識できるようになります。
+            entry = std::make_shared<ShaderCache::ShaderCacheEntry>();
+            entry->m_State = ShaderEntryState::InFlight;
+            m_Cache[desc] = entry;
+            isCreator = true;
+        }
+		else
+        {
+            entry = it->second;
+			if (entry->m_State == ShaderEntryState::InFlight)
+            {
+                // 別のスレッドが同じシェーダーをコンパイル中の場合は、コンパイルが完了するまで待機します。
+                entry->m_Condition.wait(lock, [&entry = entry] { return entry->m_State != ShaderEntryState::InFlight; });
+            }
+
+            if (entry->m_State == ShaderEntryState::Failed)
+            {
+                // コンパイルに失敗している場合は、失敗を返します。
+                return false;
+            }
         }
     }
 
-	ComPtr<ID3DBlob> compiledBlob;
-    HRESULT hr = ShaderCompiler::CompileFromFile(
-        desc.m_ShaderFile.c_str(),
-        desc.m_EntryPoint.c_str(),
-        desc.m_ShaderModel.c_str(),
-        desc.m_CompileFlags,
-		compiledBlob);
-	if (FAILED(hr))
+
+    if (isCreator)
     {
-        return false;
+        HRESULT hr = ShaderCompiler::CompileFromFile(
+            desc.m_ShaderFile.c_str(),
+            desc.m_EntryPoint.c_str(),
+            desc.m_ShaderModel.c_str(),
+            desc.m_CompileFlags,
+            entry->m_ShaderBlob);
+
+		// コンパイルの結果に基づいてエントリの状態を更新します。
+        // ロックを取得して状態を更新し、コンパイルに失敗した場合はエントリの状態を Failed に設定します。
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (FAILED(hr))
+            {
+                entry->m_State = ShaderEntryState::Failed;
+            }
+            else
+            {
+                entry->m_State = ShaderEntryState::Success;
+            }
+        }
+
+		// コンパイルが完了したことを待機しているスレッドに通知します。
+		entry->m_Condition.notify_all();
+
+        if (FAILED(hr))
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+			m_Cache.erase(desc); // コンパイルに失敗したエントリをキャッシュから削除します。
+            return false;
+        }
     }
 
-    {
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_Cache[desc] = compiledBlob;
-    }
-
-	*outShaderBlob = compiledBlob;
-	return false; // 仮の実装
+	*outShaderBlob = entry->m_ShaderBlob;
+	return true;
 }

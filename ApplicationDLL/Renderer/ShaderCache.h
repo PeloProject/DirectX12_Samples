@@ -9,6 +9,14 @@
 class ShaderCache final
 {
 public:
+
+    enum class ShaderEntryState
+    {
+		InFlight,
+		Success,
+		Failed,
+	};
+
     /// <summary>
     /// シェーダープログラムの情報を保持する構造体。
     /// </summary>
@@ -22,10 +30,20 @@ public:
         bool operator==(const ShaderProgramDesc& other) const;
     };
 
+    /// <summary>
+    /// ShaderProgramDesc の内容に基づいてハッシュ値を計算する関数オブジェクトの呼び出し演算子。
+    /// </summary>
     struct ShaderProgramDescHasher
     {
         size_t operator()(const ShaderProgramDesc& desc) const noexcept;
     };
+
+    struct ShaderCacheEntry
+    {
+        ShaderEntryState m_State = ShaderEntryState::InFlight;
+        Microsoft::WRL::ComPtr<ID3DBlob> m_ShaderBlob;
+		std::condition_variable m_Condition;
+	};
 
     static bool GetorCreate(
         const ShaderProgramDesc& desc,
@@ -33,7 +51,7 @@ public:
 
 private:
     static std::mutex m_mutex;
-	static std::unordered_map<ShaderProgramDesc, Microsoft::WRL::ComPtr<ID3DBlob>, ShaderProgramDescHasher> m_Cache;
+	static std::unordered_map<ShaderProgramDesc, std::shared_ptr<ShaderCacheEntry>, ShaderProgramDescHasher> m_Cache;
 
 
 };

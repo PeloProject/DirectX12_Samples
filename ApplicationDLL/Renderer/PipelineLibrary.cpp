@@ -37,7 +37,7 @@ bool PipelineLibrary::InputElementDesc::operator==(const InputElementDesc& other
 
 
 
-bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
+bool PipelineLibrary::GraphicsPipelineDesc::operator==(const GraphicsPipelineDesc& other) const
 {
     return vertexShader == other.vertexShader &&
         pixelShader == other.pixelShader &&
@@ -50,7 +50,7 @@ bool PipelineLibrary::PipelineDesc::operator==(const PipelineDesc& other) const
         rootSignatureDesc == other.rootSignatureDesc;
 }
 
-size_t PipelineLibrary::PipelineDescHasher::operator()(const PipelineDesc& desc) const
+size_t PipelineLibrary::PipelineDescHasher::operator()(const GraphicsPipelineDesc& desc) const
 {
     size_t seed = 0;
     HashCombine(seed, std::hash<std::wstring>{}(desc.vertexShader.m_ShaderFile));
@@ -108,7 +108,7 @@ size_t PipelineLibrary::PipelineDescHasher::operator()(const PipelineDesc& desc)
 
 HRESULT PipelineLibrary::GetOrCreate(
     ID3D12Device* device,
-    const PipelineDesc& desc,
+    const GraphicsPipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline)
 {
 	m_TotalRequestCount++;
@@ -122,8 +122,8 @@ HRESULT PipelineLibrary::GetOrCreate(
 	// キャッシュからの取得を試みる。見つかった場合は outPipeline に設定して成功を返す。
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = cache_.find(desc);
-        if (it != cache_.end())
+        auto it = m_Cache.find(desc);
+        if (it != m_Cache.end())
         {
 			m_CacheHitCount++;
             *outPipeline = it->second;
@@ -144,7 +144,7 @@ HRESULT PipelineLibrary::GetOrCreate(
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    auto [it, inserted] = cache_.emplace(desc, createdPipeline);
+    auto [it, inserted] = m_Cache.emplace(desc, createdPipeline);
     *outPipeline = it->second;
     (void)inserted;
     DumpCacheStats();
@@ -170,7 +170,7 @@ void PipelineLibrary::DumpCacheStats() const
 void PipelineLibrary::Clear()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    cache_.clear();
+    m_Cache.clear();
 }
 
 
@@ -185,19 +185,16 @@ void PipelineLibrary::Clear()
 ///=======================================================
 HRESULT PipelineLibrary::CreatePipeline(
     ID3D12Device* device,
-    const PipelineDesc& desc,
+    const GraphicsPipelineDesc& desc,
     std::shared_ptr<const Pipeline>* outPipeline) const
 {
-
-    const UINT kCompileFlags = GetShaderCompileFlags();
-
     // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
-    bool isError = ShaderCache::GetorCreate(
+    bool isSuccess = ShaderCache::GetorCreate(
         desc.vertexShader,
         &vertexShaderBlob);
 
-    if (isError || vertexShaderBlob == nullptr)
+    if (!isSuccess || vertexShaderBlob == nullptr)
     {
         return E_FAIL;
     };
@@ -205,17 +202,17 @@ HRESULT PipelineLibrary::CreatePipeline(
 
 	// ピクセルシェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> pixelShaderBlob;
-    isError = ShaderCache::GetorCreate(
+    isSuccess = ShaderCache::GetorCreate(
         desc.pixelShader,
         &pixelShaderBlob);
 
-    if (isError || pixelShaderBlob == nullptr)
+    if (!isSuccess || pixelShaderBlob == nullptr)
     {
         return E_FAIL;
     };
 
+	// ルートシグネチャの生成
     auto createdPipeline = std::make_shared<Pipeline>();
-
     RootSignatureCache::GetOrCreate(
         device,
         desc.rootSignatureDesc,
@@ -306,16 +303,6 @@ HRESULT PipelineLibrary::CreatePipeline(
     return S_OK;
 }
 
-UINT PipelineLibrary::GetShaderCompileFlags() const
-{
-
-#if _DEBUG
-	return D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-	return 0;
-#endif
-}
-
 ///====================================================
 /// <summary>
 /// パイプラインの説明を生成
@@ -323,7 +310,7 @@ UINT PipelineLibrary::GetShaderCompileFlags() const
 /// <param name="desc"></param>
 /// <returns></returns>
 ///====================================================
-std::string PipelineLibrary::DescribePipelineDesc(const PipelineDesc& desc) const
+std::string PipelineLibrary::DescribePipelineDesc(const GraphicsPipelineDesc& desc) const
 {
     auto WStringToString = [](const std::wstring& w) -> std::string {
         if (w.empty())

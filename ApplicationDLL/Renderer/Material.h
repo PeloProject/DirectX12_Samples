@@ -31,7 +31,7 @@ public:
 
     struct MaterialDesc
     {
-        PipelineLibrary::PipelineDesc pipelineDesc;
+        PipelineLibrary::GraphicsPipelineDesc pipelineDesc;
         MaterialParameterBlock parameterBlock;
     };
 
