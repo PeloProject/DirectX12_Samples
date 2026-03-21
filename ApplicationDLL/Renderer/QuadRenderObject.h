@@ -75,11 +75,8 @@ private:
 	D3D12_VERTEX_BUFFER_VIEW	m_VertexBufferView = {};
 	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
 
-	std::vector<TextureRGBA> m_TextureData;
-
 	std::vector<short> m_Indices;
 
-	DX12Texture m_TextureTest;
 	std::shared_ptr<DX12Texture> textureAsset_;
 	std::string materialName_ = "BuiltInMaterials::UnlitTexture";
 };

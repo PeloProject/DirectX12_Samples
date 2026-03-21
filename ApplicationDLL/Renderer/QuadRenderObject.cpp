@@ -21,16 +21,6 @@ PipelineLibrary& GetPipelineLibrary()
 QuadRenderObject::QuadRenderObject()
 {
 	ApplyQuadTransform();
-	m_TextureTest.LoadFromFile(L"textest.png");
-
-	m_TextureData.resize(256 * 256);
-	for (auto& tex : m_TextureData)
-	{
-		tex.R = rand() % 256;
-		tex.G = rand() % 256;
-		tex.B = rand() % 256;
-		tex.A = 255;
-	}
 
 	if (CreateMeshResources() != S_OK || InitializeMaterial() != S_OK)
 	{
@@ -58,6 +48,12 @@ void QuadRenderObject::SetTextureHandle(TextureHandle textureHandle)
 	m_material.SetTexture(textureAsset_.get());
 }
 
+///=========================================================================================
+/// <summary>
+/// マテリアル名を設定します。
+/// </summary>
+/// <param name="materialName"></param>
+///=========================================================================================
 void QuadRenderObject::SetMaterialName(const std::string& materialName)
 {
 	if (materialName.empty())
@@ -218,13 +214,16 @@ HRESULT QuadRenderObject::CreateMeshResources()
 	return S_OK;
 }
 
+//=========================================================================================
+/// <summary>
+/// マテリアルの初期化を行います。
+/// </summary>
+/// <returns></returns>
+//=========================================================================================
 HRESULT QuadRenderObject::InitializeMaterial()
 {
-	Material::MaterialDesc materialDesc = Material::CreateBuiltInTexturedQuadDesc(&m_TextureTest);
-	auto hr = m_material.Initialize(
-		Dx12RenderDevice::GetDevice(),
-		GetPipelineLibrary(),
-		materialDesc);
+	Material::MaterialDesc materialDesc = Material::CreateBuiltInTexturedQuadDesc();
+	auto hr = m_material.Initialize(Dx12RenderDevice::GetDevice(),GetPipelineLibrary(),	materialDesc);
 	if (FAILED(hr))
 	{
 		return hr;

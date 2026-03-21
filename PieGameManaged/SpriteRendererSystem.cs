@@ -4,19 +4,32 @@ internal sealed class SpriteRendererSystem
 {
     private readonly TextureAssetManager _textureAssetManager = new TextureAssetManager();
 
+    ///=============================================================================================================================
+    /// <summary>
+    /// 初期化します。シーン内の全てのゲームオブジェクトをループして、スプライトレンダラーコンポーネントを持つものを探し、ネイティブのスプライトレンダラーを作成します。
+    /// </summary>
+    /// <param name="scene"></param>
+    ///=============================================================================================================================
     public void Initialize(Scene scene)
     {
         foreach (GameObject gameObject in scene.GameObjects)
         {
             foreach (SpriteRenderer spriteRenderer in gameObject.GetComponents<SpriteRenderer>())
             {
-                EnsureNativeSpriteRenderer(spriteRenderer);
+                CreateNativeSpriteRenderer(spriteRenderer);
             }
         }
     }
 
+    ///=============================================================================================================================
+    /// <summary>
+    /// スプライトレンダラーの状態をネイティブ側と同期します。非アクティブなゲームオブジェクトやスプライトレンダラーはネイティブ側のスプライトレンダラーを破棄します。
+    /// </summary>
+    /// <param name="scene"></param>
+    ///=============================================================================================================================
     public void Sync(Scene scene)
     {
+        // シーン状の全てのゲームオブジェクトをループして、スプライトレンダラーコンポーネントを持つものを探します。
         foreach (GameObject gameObject in scene.GameObjects)
         {
             IReadOnlyList<SpriteRenderer> spriteRenderers = gameObject.GetComponents<SpriteRenderer>();
@@ -27,27 +40,32 @@ internal sealed class SpriteRendererSystem
 
             foreach (SpriteRenderer spriteRenderer in spriteRenderers)
             {
+                // ゲームオブジェクトが非アクティブであるか、スプライトレンダラーが無効である場合は、ネイティブのスプライトレンダラーを破棄します。
                 if (!gameObject.ActiveSelf || !spriteRenderer.Enabled)
                 {
                     DestroyNativeSpriteRenderer(spriteRenderer);
                     continue;
                 }
 
-                EnsureNativeSpriteRenderer(spriteRenderer);
+                // ネイティブのスプライトレンダラーが存在しない場合は作成します。
                 if (spriteRenderer.NativeSpriteRendererHandle == 0)
                 {
-                    continue;
+                    CreateNativeSpriteRenderer(spriteRenderer);
+                    if (spriteRenderer.NativeSpriteRendererHandle == 0)
+                    {
+                        continue;
+                    }
                 }
 
-                if (!string.IsNullOrWhiteSpace(spriteRenderer.Material) &&
-                    !string.Equals(spriteRenderer.Material, spriteRenderer.AppliedMaterial, System.StringComparison.Ordinal))
+                // マテリアルが変更されている場合はネイティブ側に反映します。
+                if (IsValidMaterial(spriteRenderer))
                 {
                     NativeMethods.SetSpriteRendererMaterial(spriteRenderer.NativeSpriteRendererHandle, spriteRenderer.Material);
                     spriteRenderer.AppliedMaterial = spriteRenderer.Material;
                 }
 
-                if (!string.IsNullOrWhiteSpace(spriteRenderer.Texture) &&
-                    !string.Equals(spriteRenderer.Texture, spriteRenderer.AppliedTexture, System.StringComparison.Ordinal))
+                // テクスチャが変更されている場合は、古いテクスチャを解放してから新しいテクスチャをネイティブ側に反映します。
+                if (IsValidTexture(spriteRenderer))
                 {
                     if (spriteRenderer.TextureHandle.IsValid)
                     {
@@ -63,6 +81,7 @@ internal sealed class SpriteRendererSystem
                     spriteRenderer.AppliedTexture = spriteRenderer.Texture;
                 }
 
+                // ゲームオブジェクトのトランスフォームが変更されているかどうかを判断するためのロジックはここでは省略していますが、必要に応じて追加できます。
                 NativeMethods.SetSpriteRendererTransform(
                     spriteRenderer.NativeSpriteRendererHandle,
                     gameObject.Transform.CenterX,
@@ -73,6 +92,12 @@ internal sealed class SpriteRendererSystem
         }
     }
 
+    ///=============================================================================================================================
+    /// <summary>
+    /// 破棄するシーン内の全てのスプライトレンダラーのネイティブリソースを解放します。
+    /// </summary>
+    /// <param name="scene"></param>
+    ///=============================================================================================================================
     public void Release(Scene scene)
     {
         foreach (GameObject gameObject in scene.GameObjects)
@@ -86,7 +111,53 @@ internal sealed class SpriteRendererSystem
         _textureAssetManager.Clear();
     }
 
-    private static void EnsureNativeSpriteRenderer(SpriteRenderer spriteRenderer)
+    ///=============================================================================================================================
+    /// <summary>
+    /// テクスチャが有効かどうかを判断します。テクスチャがnull、空白、またはすでに適用されているテクスチャと同じ場合は無効とみなします。
+    /// </summary>
+    /// <param name="spriteRenderer"></param>
+    /// <returns></returns>
+    ///=============================================================================================================================
+    private bool IsValidTexture(SpriteRenderer spriteRenderer)
+    {
+        if (string.IsNullOrWhiteSpace(spriteRenderer.Texture))
+        {
+            return false;
+        }
+        if (string.Equals(spriteRenderer.Texture, spriteRenderer.AppliedTexture, System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    ///=============================================================================================================================
+    /// <summary>
+    /// マテリアルが有効かどうかを判断します。マテリアルがnull、空白、またはすでに適用されているマテリアルと同じ場合は無効とみなします。
+    /// </summary>
+    /// <param name="spriteRenderer"></param>
+    /// <returns></returns>
+    ///=============================================================================================================================
+    private bool IsValidMaterial(SpriteRenderer spriteRenderer)
+    {
+        if (string.IsNullOrWhiteSpace(spriteRenderer.Material))
+        {
+            return false;
+        }
+        if(string.Equals(spriteRenderer.Material, spriteRenderer.AppliedMaterial, System.StringComparison.Ordinal))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    ///=============================================================================================================================
+    /// <summary>
+    /// ネイティブのスプライトレンダラーを作成します。すでにネイティブのスプライトレンダラーが存在する場合は何もしません。
+    /// </summary>
+    /// <param name="spriteRenderer"></param>
+    ///=============================================================================================================================
+    private static void CreateNativeSpriteRenderer(SpriteRenderer spriteRenderer)
     {
         if (spriteRenderer.NativeSpriteRendererHandle != 0)
         {
@@ -96,6 +167,12 @@ internal sealed class SpriteRendererSystem
         spriteRenderer.NativeSpriteRendererHandle = NativeMethods.CreateSpriteRenderer();
     }
 
+    ///=============================================================================================================================
+    /// <summary>
+    /// スプライトレンダラーのネイティブリソースを解放します。ネイティブのスプライトレンダラーが存在しない場合は何もしません。
+    /// </summary>
+    /// <param name="spriteRenderer"></param>
+    ///=============================================================================================================================
     private void DestroyNativeSpriteRenderer(SpriteRenderer spriteRenderer)
     {
         if (spriteRenderer.NativeSpriteRendererHandle == 0)

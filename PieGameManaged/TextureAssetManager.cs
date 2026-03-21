@@ -5,6 +5,11 @@ internal sealed class TextureAssetManager
     private readonly Dictionary<string, TextureHandle> _handlesByPath = new Dictionary<string, TextureHandle>(System.StringComparer.Ordinal);
     private readonly Dictionary<TextureHandle, int> _refCounts = new Dictionary<TextureHandle, int>();
 
+    /// <summary>
+    /// テクスチャハンドルを取得します。
+    /// </summary>
+    /// <param name="texturePath"></param>
+    /// <returns></returns>
     public TextureHandle Acquire(string texturePath)
     {
         if (string.IsNullOrWhiteSpace(texturePath))

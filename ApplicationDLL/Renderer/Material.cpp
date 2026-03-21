@@ -3,7 +3,12 @@
 #include "Material.h"
 #include "DX12Texture.h"
 
-Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc(RHITexture* textureResource)
+/// <summary>
+/// ディスクリプタテーブルを使用して単純なテクスチャ付きクアッドを描画するための組み込みマテリアルの説明を作成します。
+/// </summary>
+/// <param name="textureResource"></param>
+/// <returns></returns>
+Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc()
 {
     MaterialDesc desc = {};
     desc.pipelineDesc.vertexShader.m_ShaderFile = L"BasicVertexShader.hlsl";
@@ -54,26 +59,27 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc(RHITexture* textu
         }
         
     };
-    desc.parameterBlock.textureBindings = {
-        { 0, textureResource }
-    };
+    //desc.parameterBlock.textureBindings = {
+    //    { 0, textureResource }
+    //};
     return desc;
 }
 
-HRESULT Material::Initialize(
-    ID3D12Device* device,
-    PipelineLibrary& pipelineLibrary,
-    const MaterialDesc& desc)
+/// <summary>
+/// 初期から化します。
+/// </summary>
+/// <param name="device"></param>
+/// <param name="pipelineLibrary"></param>
+/// <param name="desc"></param>
+/// <returns></returns>
+HRESULT Material::Initialize(ID3D12Device* device, PipelineLibrary& pipelineLibrary, const MaterialDesc& desc)
 {
     if (device == nullptr)
     {
         return E_INVALIDARG;
     }
 
-    HRESULT hr = pipelineLibrary.GetOrCreateGraphics(
-        device,
-        desc.pipelineDesc,
-        &pipeline_);
+    HRESULT hr = pipelineLibrary.GetOrCreateGraphics(device, desc.pipelineDesc, &pipeline_);
     if (FAILED(hr))
     {
         return hr;
@@ -102,9 +108,13 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
         return;
     }
 
+	// パイプラインステートをコマンドリストにセットします。
     commandList->SetPipelineState(pipeline_->pipelineState.Get());
+
+	// ルートシグネチャをコマンドリストにセットします。
     commandList->SetGraphicsRootSignature(pipeline_->rootSignature.Get());
 
+	// テクスチャバインディングが存在するかどうかを確認します。
     bool hasTextureBinding = false;
     for (const auto& binding : parameterBlock_.textureBindings)
     {
@@ -115,22 +125,26 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
         }
     }
 
+	// テクスチャバインディングが存在する場合、グローバルなテクスチャ用ディスクリプタヒープをコマンドリストにセットします。
     if (hasTextureBinding)
     {
         auto textureHeap = DescriptorHeapManager::Get().GetGlobalTextureHeapAddress();
         commandList->SetDescriptorHeaps(1, textureHeap);
     }
 
+	// 各テクスチャバインディングに対して、SRV ディスクリプタテーブルをコマンドリストにセットします。
     for (const auto& binding : parameterBlock_.textureBindings)
     {
         if (binding.textureResource == nullptr)
         {
             continue;
         }
-        auto handle = DescriptorHeapManager::Get().GetGPUHandle(static_cast<DX12Texture*>(binding.textureResource)->GetDescriptorIndex());
+        auto gpuHandleIndex = static_cast<DX12Texture*>(binding.textureResource)->GetDescriptorIndex();
+        auto handle = DescriptorHeapManager::Get().GetGPUHandle(gpuHandleIndex);
         commandList->SetGraphicsRootDescriptorTable(binding.rootParameterIndex, handle);
     }
 
+	// 各定数バッファバインディングに対して、定数バッファビューをコマンドリストにセットします。
     for (const auto& binding : parameterBlock_.constantBufferBindings)
     {
         if (binding.gpuVirtualAddress == 0)

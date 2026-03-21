@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "PipelineLibrary.h"
 #include "RHITexture.h"
@@ -11,6 +11,9 @@
 class Material final
 {
 public:
+    /// <summary>
+	/// マテリアルのパラメータブロックは、マテリアルが使用するテクスチャや定数バッファなどのリソースバインディングを定義します。
+    /// </summary>
     struct MaterialParameterBlock
     {
         struct TextureBinding
@@ -35,7 +38,7 @@ public:
         MaterialParameterBlock parameterBlock;
     };
 
-    static MaterialDesc CreateBuiltInTexturedQuadDesc(RHITexture* textureResource);
+    static MaterialDesc CreateBuiltInTexturedQuadDesc();
 
     HRESULT Initialize(
         ID3D12Device* device,
@@ -44,6 +47,11 @@ public:
 
     void Bind(ID3D12GraphicsCommandList* commandList) const;
 
+    /// <summary>
+	/// マテリアルのテクスチャーを更新します。
+    /// parameterBlock_ の最初のテクスチャバインディングを新しいテクスチャーリソースで上書きします。
+    /// </summary>
+    /// <param name="texture"></param>
     void SetTexture(RHITexture* texture)
     {
         if (parameterBlock_.textureBindings.empty())

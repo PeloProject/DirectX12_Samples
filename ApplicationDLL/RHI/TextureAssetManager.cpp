@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "TextureAssetManager.h"
 
 TextureAssetManager& TextureAssetManager::Get()
@@ -7,6 +7,15 @@ TextureAssetManager& TextureAssetManager::Get()
     return instance;
 }
 
+///==========================================================
+/// <summary>
+/// テクスチャーの取得と参照カウントの管理を行います。
+/// 既に同じパスのテクスチャーが存在する場合はそのハンドルを返し、
+/// 存在しない場合は新たにテクスチャーを読み込んでハンドルを生成します。
+/// </summary>
+/// <param name="texturePath"></param>
+/// <returns></returns>
+///==========================================================
 TextureHandle TextureAssetManager::AcquireTexture(const char* texturePath)
 {
     if (texturePath == nullptr || texturePath[0] == '\0')
@@ -17,6 +26,8 @@ TextureHandle TextureAssetManager::AcquireTexture(const char* texturePath)
     std::lock_guard<std::mutex> lock(mutex_);
     const std::string path(texturePath);
     const auto it = handlesByPath_.find(path);
+
+	// 既に同じパスのテクスチャーが存在する場合は、そのハンドルを返し、参照カウントを増やします。
     if (it != handlesByPath_.end())
     {
         auto textureIt = texturesByHandle_.find(it->second);
@@ -27,13 +38,15 @@ TextureHandle TextureAssetManager::AcquireTexture(const char* texturePath)
         return it->second;
     }
 
+	// 同じパスのテクスチャーが存在しない場合は、新たにテクスチャーを読み込んでハンドルを生成します。
     auto texture = std::make_shared<DX12Texture>();
     if (!texture->LoadFromFile(std::wstring(path.begin(), path.end())))
     {
         return 0;
     }
 
-    const TextureHandle handle = nextHandle_++;
+	// 新しいテクスチャーエントリーを作成してマップに追加します。
+    const TextureHandle handle = m_NextHandle++;
     handlesByPath_.emplace(path, handle);
     TextureEntry entry = {};
     entry.path = path;
@@ -89,5 +102,5 @@ void TextureAssetManager::Clear()
     std::lock_guard<std::mutex> lock(mutex_);
     handlesByPath_.clear();
     texturesByHandle_.clear();
-    nextHandle_ = 1;
+    m_NextHandle = 1;
 }

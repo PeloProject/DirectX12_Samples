@@ -80,7 +80,14 @@ public:
     void SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height);
     void SetSpriteRendererTexture(uint32_t handle, TextureHandle textureHandle);
     void SetSpriteRendererMaterial(uint32_t handle, const char* materialName);
+
+    /// <summary>
+	/// テクスチャパスを指定してテクスチャハンドルを取得します。テクスチャがまだロードされていない場合は、非同期にロードが開始されます。
+    /// </summary>
+    /// <param name="texturePath"></param>
+    /// <returns></returns>
     TextureHandle AcquireTextureHandle(const char* texturePath);
+
     void ReleaseTextureHandle(TextureHandle textureHandle);
     BOOL SetRendererBackend(uint32_t backend);
     uint32_t GetRendererBackend() const;

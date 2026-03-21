@@ -7,6 +7,11 @@ internal static class GameEntry
     private static Scene? _scene = null;
     private static SpriteRendererSystem? _spriteRendererSystem;
 
+    ///========================================================================================
+    /// <summary>
+    /// ゲーム開始時に呼び出されるエントリポイント。ゲームの初期化処理をここで行う。
+    /// </summary>
+    ///========================================================================================
     [UnmanagedCallersOnly(EntryPoint = "GameStart", CallConvs = new[] { typeof(CallConvCdecl) })]
     public static void GameStart()
     {
@@ -19,6 +24,12 @@ internal static class GameEntry
         _spriteRendererSystem.Sync(_scene);
     }
 
+    ///========================================================================================
+    /// <summary>
+    /// ゲームの各フレームで呼び出されるエントリポイント。ゲームの更新処理をここで行う。
+    /// </summary>
+    /// <param name="deltaSeconds"></param>
+    ///========================================================================================
     [UnmanagedCallersOnly(EntryPoint = "GameTick", CallConvs = new[] { typeof(CallConvCdecl) })]
     public static void GameTick(float deltaSeconds)
     {
@@ -31,6 +42,11 @@ internal static class GameEntry
         _spriteRendererSystem.Sync(_scene);
     }
 
+    ///========================================================================================
+    /// <summary>
+    /// ゲーム終了時に呼び出されるエントリポイント。ゲームのクリーンアップ処理をここで行う。
+    /// </summary>
+    ///========================================================================================
     [UnmanagedCallersOnly(EntryPoint = "GameStop", CallConvs = new[] { typeof(CallConvCdecl) })]
     public static void GameStop()
     {
@@ -45,13 +61,21 @@ internal static class GameEntry
         _scene = null;
     }
 
+    ///========================================================================================
+    /// <summary>
+    /// シーンを作成するヘルパーメソッド。ゲームオブジェクトやコンポーネントの初期化をここで行う。
+    /// </summary>
+    /// <returns></returns>
+    ///========================================================================================
     private static Scene CreateScene()
     {
         var scene = new Scene();
+
+        // プレイヤーオブジェクトの作成
         GameObject player = scene.CreateGameObject("Player");
         SpriteRenderer spriteRenderer = player.AddComponent<SpriteRenderer>();
         spriteRenderer.Material = BuiltInMaterials.UnlitTexture;
-        spriteRenderer.Texture = "player.png";
+        spriteRenderer.Texture = "textest.png";
         player.AddComponent<PlayerPulseController>();
 
         return scene;

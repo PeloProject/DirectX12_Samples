@@ -37,5 +37,5 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<std::string, TextureHandle> handlesByPath_;
     std::unordered_map<TextureHandle, TextureEntry> texturesByHandle_;
-    TextureHandle nextHandle_ = 1;
+    TextureHandle m_NextHandle = 1;
 };
