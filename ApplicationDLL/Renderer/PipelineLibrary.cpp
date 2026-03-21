@@ -106,10 +106,20 @@ size_t PipelineLibrary::PipelineDescHasher::operator()(const GraphicsPipelineDes
     return seed;
 }
 
-HRESULT PipelineLibrary::GetOrCreate(
+
+///=====================================================
+/// <summary>
+/// グラフィックスパイプラインをキャッシュから取得するか、存在しない場合は新規作成してキャッシュに保存します。
+/// </summary>
+/// <param name="device"></param>
+/// <param name="desc"></param>
+/// <param name="outPipeline"></param>
+/// <returns></returns>
+///=====================================================
+HRESULT PipelineLibrary::GetOrCreateGraphics(
     ID3D12Device* device,
     const GraphicsPipelineDesc& desc,
-    std::shared_ptr<const Pipeline>* outPipeline)
+    std::shared_ptr<const GraphicsPipeline>* outPipeline)
 {
 	m_TotalRequestCount++;
 
@@ -122,8 +132,8 @@ HRESULT PipelineLibrary::GetOrCreate(
 	// キャッシュからの取得を試みる。見つかった場合は outPipeline に設定して成功を返す。
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = m_Cache.find(desc);
-        if (it != m_Cache.end())
+        auto it = m_GraphicsCache.find(desc);
+        if (it != m_GraphicsCache.end())
         {
 			m_CacheHitCount++;
             *outPipeline = it->second;
@@ -134,8 +144,8 @@ HRESULT PipelineLibrary::GetOrCreate(
 
 	// キャッシュに存在しない場合は新規作成を試みる。成功した場合はキャッシュに追加して outPipeline に設定する。
 	//m_CacheMissCount++;
-    std::shared_ptr<const Pipeline> createdPipeline;
-    HRESULT hr = CreatePipeline(device, desc, &createdPipeline);
+    std::shared_ptr<const GraphicsPipeline> createdPipeline;
+    HRESULT hr = CreateGraphicsPipeline(device, desc, &createdPipeline);
     if (FAILED(hr))
     {
 		m_CreateFailureCount++;
@@ -144,13 +154,17 @@ HRESULT PipelineLibrary::GetOrCreate(
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    auto [it, inserted] = m_Cache.emplace(desc, createdPipeline);
+    auto [it, inserted] = m_GraphicsCache.emplace(desc, createdPipeline);
     *outPipeline = it->second;
     (void)inserted;
     DumpCacheStats();
     return S_OK;
 }
 
+
+/// <summary>
+/// キャッシュの統計情報を出力します。総リクエスト数、キャッシュヒット数、キャッシュミス数、作成失敗数、およびヒット率を含む統計情報をデバッグ出力に表示します。
+/// </summary>
 void PipelineLibrary::DumpCacheStats() const
 {
 
@@ -170,23 +184,25 @@ void PipelineLibrary::DumpCacheStats() const
 void PipelineLibrary::Clear()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    m_Cache.clear();
+    m_GraphicsCache.clear();
 }
 
 
 ///=====================================================
 /// <summary>
-/// 指定されたデバイスとパイプライン記述に基づいてグラフィックスパイプラインを作成します。シェーダーのコンパイル、ルートシグネチャの生成、パイプラインステートの構築を行い、成功時に outPipeline に作成したパイプラインを設定します。
+/// 指定されたデバイスとパイプライン記述に基づいてグラフィックスパイプラインを作成します。
+/// シェーダーのコンパイル、ルートシグネチャの生成、パイプラインステートの構築を行い、
+/// 成功時に outPipeline に作成したパイプラインを設定します。
 /// </summary>
-/// <param name="device">パイプライン（ルートシグネチャやパイプラインステート）を作成するために使用する ID3D12Device。nullptr ではないことが期待されます。</param>
-/// <param name="desc">パイプラインの設定を表す PipelineDesc。頂点/ピクセルシェーダーのファイル名、エントリポイント、シェーダーモデル、ルートパラメータ、スタティックサンプラー、入力要素、ラスタライザ／ブレンド／デプス設定などを含みます。</param>
-/// <param name="outPipeline">作成されたパイプラインを受け取る出力パラメータ。成功時に std::shared_ptr<const Pipeline> が格納されます。nullptr ではないことが期待されます。</param>
-/// <returns>HRESULT。成功時は S_OK を返します。失敗時はシェーダーコンパイル、ルートシグネチャのシリアライズ、CreateRootSignature やパイプラインステート作成などで発生した HRESULT エラーコードを返します。エラー時にエラーブロブの内容がログ出力される場合があります。</returns>
+/// <param name="device"></param>
+/// <param name="desc"></param>
+/// <param name="outPipeline"></param>
+/// <returns></returns>
 ///=======================================================
-HRESULT PipelineLibrary::CreatePipeline(
+HRESULT PipelineLibrary::CreateGraphicsPipeline(
     ID3D12Device* device,
     const GraphicsPipelineDesc& desc,
-    std::shared_ptr<const Pipeline>* outPipeline) const
+    std::shared_ptr<const GraphicsPipeline>* outPipeline) const
 {
     // 頂点シェーダーのコンパイル
     Microsoft::WRL::ComPtr<ID3DBlob> vertexShaderBlob;
@@ -212,11 +228,16 @@ HRESULT PipelineLibrary::CreatePipeline(
     };
 
 	// ルートシグネチャの生成
-    auto createdPipeline = std::make_shared<Pipeline>();
-    RootSignatureCache::GetOrCreate(
+    auto createdPipeline = std::make_shared<GraphicsPipeline>();
+    isSuccess = RootSignatureCache::GetOrCreate(
         device,
         desc.rootSignatureDesc,
 		&createdPipeline->rootSignature);
+
+    if (!isSuccess || createdPipeline->rootSignature == nullptr)
+    {
+        return E_FAIL;
+    };
 
 	// グラフィックスパイプラインステートの構築。D3D12_GRAPHICS_PIPELINE_STATE_DESC を使用してパイプラインステート記述
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = {};
@@ -295,7 +316,7 @@ HRESULT PipelineLibrary::CreatePipeline(
     if (FAILED(hr))
     {
         LOG_DEBUG("CreateGraphicsPipelineState failed. hr=0x%08X", static_cast<unsigned int>(hr));
-        DescribePipelineDesc(desc);;
+        DescribePipelineDesc(desc);
         return hr;
     }
 
@@ -310,7 +331,7 @@ HRESULT PipelineLibrary::CreatePipeline(
 /// <param name="desc"></param>
 /// <returns></returns>
 ///====================================================
-std::string PipelineLibrary::DescribePipelineDesc(const GraphicsPipelineDesc& desc) const
+void PipelineLibrary::DescribePipelineDesc(const GraphicsPipelineDesc& desc) const
 {
     auto WStringToString = [](const std::wstring& w) -> std::string {
         if (w.empty())
@@ -353,5 +374,13 @@ std::string PipelineLibrary::DescribePipelineDesc(const GraphicsPipelineDesc& de
     description += "Pixel Entry Point: " + desc.pixelShader.m_EntryPoint + "\n";
     description += "Pixel Shader Model: " + desc.pixelShader.m_ShaderModel + "\n";
 
-    return description;
+    LOG_DEBUG(description.c_str());
+}
+
+HRESULT PipelineLibrary::GetOrCreateCompute(
+    ID3D12Device* device,
+    const ComputePipelineDesc& desc,
+    std::shared_ptr<const ComputePipeline>* outPipeline)
+{
+	return E_NOTIMPL;
 }

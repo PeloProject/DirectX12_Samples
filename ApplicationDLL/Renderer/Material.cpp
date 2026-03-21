@@ -70,7 +70,7 @@ HRESULT Material::Initialize(
         return E_INVALIDARG;
     }
 
-    HRESULT hr = pipelineLibrary.GetOrCreate(
+    HRESULT hr = pipelineLibrary.GetOrCreateGraphics(
         device,
         desc.pipelineDesc,
         &pipeline_);

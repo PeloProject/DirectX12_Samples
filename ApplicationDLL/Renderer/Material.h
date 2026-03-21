@@ -55,6 +55,6 @@ public:
 	}   
 
 private:
-    std::shared_ptr<const PipelineLibrary::Pipeline> pipeline_;
+    std::shared_ptr<const PipelineLibrary::GraphicsPipeline> pipeline_;
     MaterialParameterBlock parameterBlock_;
 };

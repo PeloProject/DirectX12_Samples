@@ -14,6 +14,13 @@ namespace
     {
         seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
+    inline size_t HashFloat(float value)
+    {
+        static_assert(sizeof(float) == sizeof(unsigned int), "Unexpected float size");
+        unsigned int bits = 0;
+        memcpy(&bits, &value, sizeof(float));
+        return std::hash<unsigned int>{}(bits);
+    }
 }
 
 bool RootSignatureCache::RootSignatureParameter::operator==(const RootSignatureParameter& other) const
@@ -55,6 +62,7 @@ bool RootSignatureCache::RootSignatureDesc::operator==(const RootSignatureDesc& 
 size_t RootSignatureCache::RootSignatureDescHasher::operator()(const RootSignatureCache::RootSignatureDesc& desc) const noexcept
 {
     size_t seed = 0;
+    HashCombine(seed, std::hash<int>{}(static_cast<int>(desc.flags)));
     for (const auto& root : desc.rootSignatureParameters)
     {
         HashCombine(seed, std::hash<int>{}(static_cast<int>(root.type)));
@@ -65,6 +73,24 @@ size_t RootSignatureCache::RootSignatureDescHasher::operator()(const RootSignatu
         HashCombine(seed, std::hash<UINT>{}(root.cbvShaderRegister));
         HashCombine(seed, std::hash<UINT>{}(root.cbvRegisterSpace));
     }
+
+    for (const auto& sampler : desc.staticSamplers)
+    {
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.filter)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressU)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressV)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.addressW)));
+        HashCombine(seed, std::hash<UINT>{}(sampler.shaderRegister));
+        HashCombine(seed, std::hash<UINT>{}(sampler.registerSpace));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.shaderVisibility)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.comparisonFunc)));
+        HashCombine(seed, std::hash<int>{}(static_cast<int>(sampler.borderColor)));
+        HashCombine(seed, HashFloat(sampler.mipLODBias));
+        HashCombine(seed, std::hash<UINT>{}(sampler.maxAnisotropy));
+        HashCombine(seed, HashFloat(sampler.minLOD));
+        HashCombine(seed, HashFloat(sampler.maxLOD));
+    }
+
     return seed;
 }
 
@@ -92,7 +118,7 @@ bool RootSignatureCache::GetOrCreate(
 
     // ルートシグネチャの構築
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-    rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    rootSignatureDesc.Flags = desc.flags;
 
     // ルートパラメータの構築。DescriptorTableSrv タイプのパラメータは D3D12_DESCRIPTOR_RANGE を使用して記述され、
     // RootParameter の DescriptorTable メンバに関連付けられます。
@@ -171,7 +197,7 @@ bool RootSignatureCache::GetOrCreate(
         {
             LOG_DEBUG("Root Signature Serialize Error: %s", static_cast<const char*>(errorBlob->GetBufferPointer()));
         }
-        return hr;
+        return false;
     }
 
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
@@ -180,10 +206,6 @@ bool RootSignatureCache::GetOrCreate(
         rootSignatureBlob->GetBufferPointer(),
         rootSignatureBlob->GetBufferSize(),
         IID_PPV_ARGS(rootSignature.GetAddressOf()));
-    if (FAILED(hr))
-    {
-        return hr;
-    }
     if (FAILED(hr))
     {
         return false;
@@ -195,5 +217,5 @@ bool RootSignatureCache::GetOrCreate(
     }
 
     *outRootSignature = rootSignature;
-    return false; // 仮の戻り値。実際の実装では適切な値を返してください。
+    return true;
 }

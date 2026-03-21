@@ -46,16 +46,34 @@ public:
         bool operator==(const GraphicsPipelineDesc& other) const;
     };
 
-    struct Pipeline
+    struct ComputePipelineDesc
+    {
+		ShaderCache::ShaderProgramDesc computeShader;
+        RootSignatureCache::RootSignatureDesc rootSignatureDesc;
+ 
+    };
+
+    struct GraphicsPipeline
     {
         Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
     };
 
-    HRESULT GetOrCreate(
+    struct ComputePipeline
+    {
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
+    };
+
+    HRESULT GetOrCreateGraphics(
         ID3D12Device* device,
         const GraphicsPipelineDesc& desc,
-        std::shared_ptr<const Pipeline>* outPipeline);
+        std::shared_ptr<const GraphicsPipeline>* outPipeline);
+
+    HRESULT GetOrCreateCompute(
+        ID3D12Device* device,
+        const ComputePipelineDesc& desc,
+        std::shared_ptr<const ComputePipeline>* outPipeline);
 
     void Clear();
 
@@ -67,16 +85,13 @@ private:
 
 
     /// <summary>
-    /// 指定したデバイスと記述に基づいてパイプラインを作成し、結果を出力パラメータに格納する。メソッドはオブジェクトの状態を変更しない（const）。
+    /// 指定したデバイスと記述に基づいてパイプラインを作成し、
+    /// 結果を出力パラメータに格納する。メソッドはオブジェクトの状態を変更しない（const）。
     /// </summary>
-    /// <param name="device">パイプライン作成に使用するID3D12Deviceへのポインタ。</param>
-    /// <param name="desc">作成するパイプラインの設定を保持するPipelineDescへの参照。</param>
-    /// <param name="outPipeline">作成されたパイプラインを受け取る出力パラメータ。成功時にstd::shared_ptr<const Pipeline>が格納される。</param>
-    /// <returns>HRESULTで操作結果を示す。成功時は通常S_OKが返り、失敗時は適切なエラーコードが返される。</returns>
-    HRESULT CreatePipeline(
+    HRESULT CreateGraphicsPipeline(
         ID3D12Device* device,
         const GraphicsPipelineDesc& desc,
-        std::shared_ptr<const Pipeline>* outPipeline) const;
+        std::shared_ptr<const GraphicsPipeline>* outPipeline) const;
 
 	/// <summary>
 	/// キャッシュの統計情報を出力します。
@@ -85,10 +100,10 @@ private:
 
 private:
 
-	std::string DescribePipelineDesc(const GraphicsPipelineDesc& desc) const;
+	void DescribePipelineDesc(const GraphicsPipelineDesc& desc) const;
 
     mutable std::mutex mutex_;
-    std::unordered_map<GraphicsPipelineDesc, std::shared_ptr<const Pipeline>, PipelineDescHasher> m_Cache;
+    std::unordered_map<GraphicsPipelineDesc, std::shared_ptr<const GraphicsPipeline>, PipelineDescHasher> m_GraphicsCache;
 
 	int m_TotalRequestCount = 0;
 	int m_CacheHitCount = 0;
