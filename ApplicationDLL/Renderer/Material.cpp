@@ -17,7 +17,7 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc()
     desc.pipelineDesc.pixelShader.m_ShaderFile = L"BasicPixelShader.hlsl";
     desc.pipelineDesc.pixelShader.m_EntryPoint = "BasicPS";
     desc.pipelineDesc.pixelShader.m_ShaderModel = "ps_5_0";
-    desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     desc.pipelineDesc.cullMode = D3D12_CULL_MODE_NONE;
     desc.pipelineDesc.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     desc.pipelineDesc.enableDepth = false;
@@ -65,13 +65,15 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc()
     return desc;
 }
 
+///=====================================================
 /// <summary>
-/// 初期から化します。
+/// 初期化します。
 /// </summary>
 /// <param name="device"></param>
 /// <param name="pipelineLibrary"></param>
 /// <param name="desc"></param>
 /// <returns></returns>
+///=====================================================
 HRESULT Material::Initialize(ID3D12Device* device, PipelineLibrary& pipelineLibrary, const MaterialDesc& desc)
 {
     if (device == nullptr)
@@ -79,17 +81,18 @@ HRESULT Material::Initialize(ID3D12Device* device, PipelineLibrary& pipelineLibr
         return E_INVALIDARG;
     }
 
-    HRESULT hr = pipelineLibrary.GetOrCreateGraphics(device, desc.pipelineDesc, &pipeline_);
+    HRESULT hr = pipelineLibrary.GetOrCreateGraphics(device, desc.pipelineDesc, &m_pPipeline);
     if (FAILED(hr))
     {
         return hr;
     }
 
-    parameterBlock_ = desc.parameterBlock;
+    m_ParameterBlock = desc.parameterBlock;
 
     return S_OK;
 }
 
+///=====================================================
 /// <summary>
 /// マテリアルを指定したコマンドリストにバインドします。
 /// commandList および内部の pipeline_ が有効な場合に、パイプラインステートとルートシグネチャを設定し、
@@ -100,23 +103,23 @@ HRESULT Material::Initialize(ID3D12Device* device, PipelineLibrary& pipelineLibr
 /// ID3D12GraphicsCommandList へのポインタ。nullptr の場合、
 /// このメソッドは即座にリターンして何も行いません。
 /// </param>
+///=====================================================
 void Material::Bind(ID3D12GraphicsCommandList* commandList) const
 {
-
-    if (commandList == nullptr || pipeline_ == nullptr)
+    if (commandList == nullptr || m_pPipeline == nullptr)
     {
         return;
     }
 
 	// パイプラインステートをコマンドリストにセットします。
-    commandList->SetPipelineState(pipeline_->pipelineState.Get());
+    commandList->SetPipelineState(m_pPipeline->pipelineState.Get());
 
 	// ルートシグネチャをコマンドリストにセットします。
-    commandList->SetGraphicsRootSignature(pipeline_->rootSignature.Get());
+    commandList->SetGraphicsRootSignature(m_pPipeline->rootSignature.Get());
 
 	// テクスチャバインディングが存在するかどうかを確認します。
     bool hasTextureBinding = false;
-    for (const auto& binding : parameterBlock_.textureBindings)
+    for (const auto& binding : m_ParameterBlock.textureBindings)
     {
         if (binding.textureResource != nullptr)
         {
@@ -133,7 +136,7 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
     }
 
 	// 各テクスチャバインディングに対して、SRV ディスクリプタテーブルをコマンドリストにセットします。
-    for (const auto& binding : parameterBlock_.textureBindings)
+    for (const auto& binding : m_ParameterBlock.textureBindings)
     {
         if (binding.textureResource == nullptr)
         {
@@ -145,7 +148,7 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
     }
 
 	// 各定数バッファバインディングに対して、定数バッファビューをコマンドリストにセットします。
-    for (const auto& binding : parameterBlock_.constantBufferBindings)
+    for (const auto& binding : m_ParameterBlock.constantBufferBindings)
     {
         if (binding.gpuVirtualAddress == 0)
         {
@@ -153,4 +156,21 @@ void Material::Bind(ID3D12GraphicsCommandList* commandList) const
         }
         commandList->SetGraphicsRootConstantBufferView(binding.rootParameterIndex, binding.gpuVirtualAddress);
     }
+}
+
+///=====================================================
+/// <summary>
+/// マテリアルのテクスチャーを更新します。
+/// parameterBlock_ の最初のテクスチャバインディングを新しいテクスチャーリソースで上書きします。
+/// </summary>
+/// <param name="texture"></param>
+///=====================================================
+void Material::SetTexture(RHITexture* texture)
+{
+    if (m_ParameterBlock.textureBindings.empty())
+    {
+        m_ParameterBlock.textureBindings.push_back({ 0, texture });
+        return;
+    }
+    m_ParameterBlock.textureBindings[0].textureResource = texture;
 }

@@ -12,7 +12,8 @@ class Material final
 {
 public:
     /// <summary>
-	/// マテリアルのパラメータブロックは、マテリアルが使用するテクスチャや定数バッファなどのリソースバインディングを定義します。
+	/// マテリアルのパラメータブロックは、
+    /// マテリアルが使用するテクスチャや定数バッファなどのリソースバインディングを定義します。
     /// </summary>
     struct MaterialParameterBlock
     {
@@ -40,10 +41,7 @@ public:
 
     static MaterialDesc CreateBuiltInTexturedQuadDesc();
 
-    HRESULT Initialize(
-        ID3D12Device* device,
-        PipelineLibrary& pipelineLibrary,
-        const MaterialDesc& desc);
+    HRESULT Initialize(ID3D12Device* device, PipelineLibrary& pipelineLibrary, const MaterialDesc& desc);
 
     void Bind(ID3D12GraphicsCommandList* commandList) const;
 
@@ -52,17 +50,9 @@ public:
     /// parameterBlock_ の最初のテクスチャバインディングを新しいテクスチャーリソースで上書きします。
     /// </summary>
     /// <param name="texture"></param>
-    void SetTexture(RHITexture* texture)
-    {
-        if (parameterBlock_.textureBindings.empty())
-        {
-            parameterBlock_.textureBindings.push_back({ 0, texture });
-            return;
-        }
-        parameterBlock_.textureBindings[0].textureResource = texture;
-	}   
+    void SetTexture(RHITexture* texture);
 
 private:
-    std::shared_ptr<const PipelineLibrary::GraphicsPipeline> pipeline_;
-    MaterialParameterBlock parameterBlock_;
+    std::shared_ptr<const PipelineLibrary::GraphicsPipeline> m_pPipeline;
+    MaterialParameterBlock m_ParameterBlock;
 };

@@ -182,6 +182,12 @@ void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps,
 	m_IndexBufferView.SizeInBytes = static_cast<UINT>(sizeof(m_Indices[0]) * m_Indices.size());
 }
 
+///=========================================================================================
+/// <summary>
+/// メッシュリソースの作成
+/// </summary>
+/// <returns></returns>
+///=========================================================================================
 HRESULT QuadRenderObject::CreateMeshResources()
 {
 	D3D12_HEAP_PROPERTIES heapProps = {};
@@ -232,6 +238,11 @@ HRESULT QuadRenderObject::InitializeMaterial()
 	return hr;
 }
 
+//=========================================================================================
+/// <summary>
+/// 描画
+/// </summary>
+//=========================================================================================
 void QuadRenderObject::Render()
 {
 	if (m_isVertexDirty)
@@ -247,6 +258,9 @@ void QuadRenderObject::Render()
 		return;
 	}
 
+	// マテリアルをコマンドリストにバインドして、描画コマンドを発行します。
+	m_material.Bind(commandList);
+
 	D3D12_VIEWPORT viewport = {};
 	viewport.Width = static_cast<FLOAT>(Application::GetWindowWidth());
 	viewport.Height = static_cast<FLOAT>(Application::GetWindowHeight());
@@ -255,14 +269,13 @@ void QuadRenderObject::Render()
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
 
-	ComPtr<ID3D12GraphicsCommandList> m_pCommandList = commandList;
-	m_material.Bind(m_pCommandList.Get());
-
-	m_pCommandList->RSSetViewports(1, &viewport);
+	// ビューポートとシザー矩形を設定し、プリミティブトポロジー、頂点バッファ、
+	// インデックスバッファをコマンドリストにセットして、DrawIndexedInstanced を呼び出して四角形を描画します。
+	commandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(viewport.Width), static_cast<LONG>(viewport.Height) };
-	m_pCommandList->RSSetScissorRects(1, &scissorRect);
-	m_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_pCommandList->IASetVertexBuffers(0, 1, &m_VertexBufferView);
-	m_pCommandList->IASetIndexBuffer(&m_IndexBufferView);
-	m_pCommandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+	commandList->RSSetScissorRects(1, &scissorRect);
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	commandList->IASetVertexBuffers(0, 1, &m_VertexBufferView);
+	commandList->IASetIndexBuffer(&m_IndexBufferView);
+	commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 }
