@@ -20,6 +20,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QSettings>
 #include <QShowEvent>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -32,6 +33,7 @@
 namespace
 {
     constexpr auto kAssetMimeType = "application/x-editor-asset-path";
+    constexpr auto kLayoutVersion = 1;
 
     struct SampleAssetEntry
     {
@@ -225,6 +227,7 @@ bool MainWindow::initialize(RuntimeBridge* runtime)
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    saveLayout();
     if (dockManager_ != nullptr)
     {
         dockManager_->deleteLater();
@@ -328,6 +331,8 @@ void MainWindow::buildUi()
     dockManager_->addDockWidget(ads::RightDockWidgetArea, detailsDock_, viewportArea);
     ads::CDockAreaWidget* contentArea = dockManager_->addDockWidget(ads::BottomDockWidgetArea, contentDock_, viewportArea);
     dockManager_->addDockWidget(ads::BottomDockWidgetArea, logDock_, contentArea);
+
+    restoreLayout();
 }
 
 void MainWindow::buildMenu()
@@ -724,4 +729,43 @@ ads::CDockWidget* MainWindow::createDockWidget(const QString& title, const QStri
         dock->resize(minimumSize);
     }
     return dock;
+}
+
+void MainWindow::restoreLayout()
+{
+    if (dockManager_ == nullptr)
+    {
+        return;
+    }
+
+    QCoreApplication::setOrganizationName(QStringLiteral("DirectX12Samples"));
+    QCoreApplication::setApplicationName(QStringLiteral("Editor"));
+    QSettings settings;
+
+    const QByteArray geometry = settings.value(QStringLiteral("MainWindow/Geometry")).toByteArray();
+    if (!geometry.isEmpty())
+    {
+        restoreGeometry(geometry);
+    }
+
+    const QByteArray dockState = settings.value(QStringLiteral("MainWindow/AdsState")).toByteArray();
+    if (!dockState.isEmpty())
+    {
+        dockManager_->restoreState(dockState, kLayoutVersion);
+    }
+}
+
+void MainWindow::saveLayout() const
+{
+    if (dockManager_ == nullptr)
+    {
+        return;
+    }
+
+    QCoreApplication::setOrganizationName(QStringLiteral("DirectX12Samples"));
+    QCoreApplication::setApplicationName(QStringLiteral("Editor"));
+    QSettings settings;
+    settings.setValue(QStringLiteral("MainWindow/Geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("MainWindow/AdsState"), dockManager_->saveState(kLayoutVersion));
+    settings.sync();
 }

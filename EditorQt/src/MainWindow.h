@@ -82,6 +82,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    void restoreLayout();
+    void saveLayout() const;
     void buildUi();
     void buildMenu();
     void connectSignals();

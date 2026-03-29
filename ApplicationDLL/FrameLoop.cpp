@@ -208,14 +208,24 @@ void AppRuntime::MessageLoopIteration()
 
     if (activeRenderBackend == RendererBackend::DirectX12)
     {
-        BeginSceneRenderToTexture();
-        SceneManager::GetInstance().Render();
-        RenderSpriteRenderers();
-        EndSceneRenderToTexture();
-
-        if (RuntimeStateRef().g_renderDevice != nullptr)
+        if (RuntimeStateRef().g_imguiInitialized)
         {
+            BeginSceneRenderToTexture();
+            SceneManager::GetInstance().Render();
+            RenderSpriteRenderers();
+            EndSceneRenderToTexture();
+
+            if (RuntimeStateRef().g_renderDevice != nullptr)
+            {
+                RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
+            }
+        }
+        else if (RuntimeStateRef().g_renderDevice != nullptr)
+        {
+            // When no editor UI is active, render directly into the swapchain backbuffer.
             RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
+            SceneManager::GetInstance().Render();
+            RenderSpriteRenderers();
         }
     }
     else if (RuntimeStateRef().g_renderDevice != nullptr)
