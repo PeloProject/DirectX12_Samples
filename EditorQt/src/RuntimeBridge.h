@@ -28,7 +28,7 @@ public:
     RuntimeBridge();
     ~RuntimeBridge();
 
-    bool load(const QString& baseDir);
+    bool load(const QString& baseDir, const QString& instanceTag = QString());
     bool isLoaded() const;
 
     bool createNativeWindow(bool enableEditorUi = false);
@@ -60,6 +60,7 @@ private:
     QString fromUtf8(const char* text) const;
     void unload();
     void setLastError(const QString& message);
+    QString makeModuleCopyPath(const QString& baseDir, const QString& instanceTag) const;
 
 private:
 #ifdef _WIN32
@@ -90,4 +91,6 @@ private:
     GetHwndFn getNativeWindowHandle_ = nullptr;
 #endif
     QString lastError_;
+    QString loadedModulePath_;
+    QString copiedModulePath_;
 };

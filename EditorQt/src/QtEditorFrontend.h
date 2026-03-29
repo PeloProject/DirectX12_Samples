@@ -2,6 +2,8 @@
 
 #include "IEditorFrontend.h"
 
+#include <QPointer>
+
 class QApplication;
 class MainWindow;
 
@@ -21,5 +23,5 @@ public:
 private:
     QApplication& app_;
     RuntimeBridge* runtime_ = nullptr;
-    MainWindow* window_ = nullptr;
+    QPointer<MainWindow> window_;
 };

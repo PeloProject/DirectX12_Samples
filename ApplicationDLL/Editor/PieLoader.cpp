@@ -13,6 +13,20 @@
 
 namespace
 {
+    PieNativeApiTable BuildPieNativeApiTable()
+    {
+        PieNativeApiTable table = {};
+        table.setGameClearColor = &SetGameClearColor;
+        table.createSpriteRenderer = &CreateSpriteRenderer;
+        table.destroySpriteRenderer = &DestroySpriteRenderer;
+        table.setSpriteRendererTransform = &SetSpriteRendererTransform;
+        table.acquireTextureHandle = &AcquireTextureHandle;
+        table.releaseTextureHandle = &ReleaseTextureHandle;
+        table.setSpriteRendererTexture = &SetSpriteRendererTexture;
+        table.setSpriteRendererMaterial = &SetSpriteRendererMaterial;
+        return table;
+    }
+
     bool TryLoadPieGameModuleAtPath(const std::filesystem::path& modulePath)
     {
         std::error_code ec;
@@ -61,6 +75,7 @@ namespace
         PieGameStartFn startFn = reinterpret_cast<PieGameStartFn>(GetProcAddress(module.Get(), "GameStart"));
         PieGameTickFn tickFn = reinterpret_cast<PieGameTickFn>(GetProcAddress(module.Get(), "GameTick"));
         PieGameStopFn stopFn = reinterpret_cast<PieGameStopFn>(GetProcAddress(module.Get(), "GameStop"));
+        PieSetNativeApiFn setNativeApiFn = reinterpret_cast<PieSetNativeApiFn>(GetProcAddress(module.Get(), "SetNativeApi"));
         if (startFn == nullptr || tickFn == nullptr || stopFn == nullptr)
         {
             std::string missing = "Missing export:";
@@ -69,6 +84,12 @@ namespace
             if (stopFn == nullptr) missing += " GameStop";
             RuntimeStateRef().g_pieGameLastLoadError = missing + " from " + hotReloadDllPath.u8string();
             return false;
+        }
+
+        if (setNativeApiFn != nullptr)
+        {
+            const PieNativeApiTable apiTable = BuildPieNativeApiTable();
+            setNativeApiFn(&apiTable);
         }
 
         RuntimeStateRef().g_pieGameModule = module.Release();

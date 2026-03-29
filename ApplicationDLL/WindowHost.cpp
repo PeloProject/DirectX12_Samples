@@ -16,6 +16,16 @@ namespace
 {
     void ConfigureD3D12DebugFilters();
 
+    LPCTSTR GetWindowClassName()
+    {
+        RuntimeState& state = RuntimeStateRef();
+        if (state.g_windowClassName.empty())
+        {
+            state.g_windowClassName = L"NativeWindowClass_" + std::to_wstring(reinterpret_cast<uintptr_t>(&Runtime()));
+        }
+        return state.g_windowClassName.c_str();
+    }
+
     bool InitializeImGui()
     {
         if (!RuntimeStateRef().g_editorUiEnabled)
@@ -109,7 +119,7 @@ namespace
         const bool wasVisible = IsWindowVisible(oldHwnd) != FALSE;
 
         HINSTANCE hInstance = GetModuleHandle(NULL);
-        LPCTSTR className = _T("NativeWindowClass");
+        LPCTSTR className = GetWindowClassName();
         HWND newHwnd = CreateWindow(
             className,
             RuntimeStateRef().g_isStandaloneMode ? _T("PieGameManaged Player") : _T("Native Window"),
@@ -274,7 +284,7 @@ HWND AppRuntime::CreateNativeWindow()
     SetConsoleCP(CP_UTF8);
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    LPCTSTR className = _T("NativeWindowClass");
+    LPCTSTR className = GetWindowClassName();
 
     WNDCLASS wc = {};
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
@@ -284,12 +294,14 @@ HWND AppRuntime::CreateNativeWindow()
     wc.hbrBackground = NULL;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
-    UnregisterClass(className, hInstance);
     if (RegisterClass(&wc) == 0)
     {
         const DWORD registerError = GetLastError();
-        LOG_DEBUG("RegisterClass failed: %lu", registerError);
-        return NULL;
+        if (registerError != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            LOG_DEBUG("RegisterClass failed: %lu", registerError);
+            return NULL;
+        }
     }
 
     RuntimeStateRef().g_rendererBackend = ResolveRendererBackendFromEnvironment(RuntimeStateRef().g_rendererBackend);

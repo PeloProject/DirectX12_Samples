@@ -6,6 +6,7 @@
 #include <QMainWindow>
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 class QAction;
@@ -76,7 +77,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
-    bool initialize(RuntimeBridge* runtime);
+    bool initialize(RuntimeBridge* runtime, const QString& baseDir);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -95,22 +96,29 @@ private:
     int selectedActorIndex() const;
     QString makeSpawnActorName(const QString& assetPath);
     void updateStatus();
-    void attachNativeViewport();
-    void detachNativeViewport();
+    bool initializeSecondaryRuntime(const QString& baseDir);
+    void attachSceneViewport();
+    void detachSceneViewport();
+    void attachGameViewport();
+    void detachGameViewport();
     QString backendName(RendererBackend backend) const;
     ads::CDockWidget* createDockWidget(const QString& title, const QString& objectName, QWidget* content, const QSize& minimumSize);
 
 private:
-    RuntimeBridge* runtime_ = nullptr;
+    bool shuttingDown_ = false;
+    RuntimeBridge* sceneRuntime_ = nullptr;
+    std::unique_ptr<RuntimeBridge> gameRuntime_;
     std::vector<EditorWorldActor> worldActors_;
     int nextSpawnedActorSerial_ = 1;
     QString lastRuntimeError_;
 
     ads::CDockManager* dockManager_ = nullptr;
     QWidget* toolsPanel_ = nullptr;
-    NativeViewportHost* viewportHost_ = nullptr;
+    NativeViewportHost* sceneViewportHost_ = nullptr;
+    NativeViewportHost* gameViewportHost_ = nullptr;
     ads::CDockWidget* toolsDock_ = nullptr;
-    ads::CDockWidget* viewportDock_ = nullptr;
+    ads::CDockWidget* sceneViewportDock_ = nullptr;
+    ads::CDockWidget* gameViewportDock_ = nullptr;
     ads::CDockWidget* outlinerDock_ = nullptr;
     ads::CDockWidget* detailsDock_ = nullptr;
     ads::CDockWidget* contentDock_ = nullptr;

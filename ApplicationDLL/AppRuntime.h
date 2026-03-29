@@ -12,11 +12,26 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 
 using PieGameStartFn = void(__cdecl*)();
 using PieGameTickFn = void(__cdecl*)(float);
 using PieGameStopFn = void(__cdecl*)();
+
+struct PieNativeApiTable
+{
+    void(__cdecl* setGameClearColor)(float, float, float, float) = nullptr;
+    uint32_t(__cdecl* createSpriteRenderer)() = nullptr;
+    void(__cdecl* destroySpriteRenderer)(uint32_t) = nullptr;
+    void(__cdecl* setSpriteRendererTransform)(uint32_t, float, float, float, float) = nullptr;
+    uint32_t(__cdecl* acquireTextureHandle)(const char*) = nullptr;
+    void(__cdecl* releaseTextureHandle)(uint32_t) = nullptr;
+    void(__cdecl* setSpriteRendererTexture)(uint32_t, uint32_t) = nullptr;
+    void(__cdecl* setSpriteRendererMaterial)(uint32_t, const char*) = nullptr;
+};
+
+using PieSetNativeApiFn = void(__cdecl*)(const PieNativeApiTable*);
 
 
 struct RuntimeState
@@ -57,6 +72,7 @@ struct RuntimeState
     bool g_rendererBackendLocked = false;
     bool g_pendingRendererSwitch = false;
     RendererBackend g_pendingRendererBackend = RendererBackend::DirectX12;
+    std::wstring g_windowClassName;
 };
 
 class AppRuntime
@@ -118,6 +134,14 @@ extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
 extern "C" __declspec(dllexport) void SetEditorUiEnabled(BOOL enabled);
 extern "C" __declspec(dllexport) BOOL IsEditorUiEnabled();
+extern "C" __declspec(dllexport) void SetGameClearColor(float r, float g, float b, float a);
+extern "C" __declspec(dllexport) uint32_t CreateSpriteRenderer();
+extern "C" __declspec(dllexport) void DestroySpriteRenderer(uint32_t handle);
+extern "C" __declspec(dllexport) void SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height);
+extern "C" __declspec(dllexport) uint32_t AcquireTextureHandle(const char* texturePath);
+extern "C" __declspec(dllexport) void ReleaseTextureHandle(uint32_t textureHandle);
+extern "C" __declspec(dllexport) void SetSpriteRendererTexture(uint32_t handle, uint32_t textureHandle);
+extern "C" __declspec(dllexport) void SetSpriteRendererMaterial(uint32_t handle, const char* materialName);
 extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend);
 extern "C" __declspec(dllexport) uint32_t GetRendererBackend();
 extern "C" __declspec(dllexport) HWND GetNativeWindowHandle();

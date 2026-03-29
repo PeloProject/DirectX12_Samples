@@ -17,7 +17,7 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc()
     desc.pipelineDesc.pixelShader.m_ShaderFile = L"BasicPixelShader.hlsl";
     desc.pipelineDesc.pixelShader.m_EntryPoint = "BasicPS";
     desc.pipelineDesc.pixelShader.m_ShaderModel = "ps_5_0";
-    desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    desc.pipelineDesc.renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.pipelineDesc.cullMode = D3D12_CULL_MODE_NONE;
     desc.pipelineDesc.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     desc.pipelineDesc.enableDepth = false;

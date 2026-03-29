@@ -218,7 +218,7 @@ namespace
         resourceDesc.Height = height;
         resourceDesc.DepthOrArraySize = 1;
         resourceDesc.MipLevels = 1;
-        resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         resourceDesc.SampleDesc.Count = 1;
         resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -238,13 +238,13 @@ namespace
         }
 
         D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-        rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
         device->CreateRenderTargetView(g_sceneRenderTarget.Get(), &rtvDesc, g_sceneRtvCpuHandle);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Texture2D.MipLevels = 1;
         device->CreateShaderResourceView(g_sceneRenderTarget.Get(), &srvDesc, g_sceneSrvCpuHandle);

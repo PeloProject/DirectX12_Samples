@@ -1,7 +1,9 @@
 #include "RuntimeBridge.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -15,22 +17,49 @@ RuntimeBridge::~RuntimeBridge()
     unload();
 }
 
-bool RuntimeBridge::load(const QString& baseDir)
+bool RuntimeBridge::load(const QString& baseDir, const QString& instanceTag)
 {
 #ifdef _WIN32
     unload();
 
-    const QString dllPath = QDir(baseDir).filePath(QStringLiteral("ApplicationDLL.dll"));
-    if (!QFileInfo::exists(dllPath))
+    const QString sourceDllPath = QDir(baseDir).filePath(QStringLiteral("ApplicationDLL.dll"));
+    if (!QFileInfo::exists(sourceDllPath))
     {
-        setLastError(QStringLiteral("ApplicationDLL.dll was not found: %1").arg(dllPath));
+        setLastError(QStringLiteral("ApplicationDLL.dll was not found: %1").arg(sourceDllPath));
         return false;
+    }
+
+    QString dllPath = sourceDllPath;
+    copiedModulePath_.clear();
+    if (!instanceTag.isEmpty())
+    {
+        copiedModulePath_ = makeModuleCopyPath(baseDir, instanceTag);
+        if (copiedModulePath_.isEmpty())
+        {
+            setLastError(QStringLiteral("Failed to build a copied runtime module path for tag: %1").arg(instanceTag));
+            return false;
+        }
+
+        QFile::remove(copiedModulePath_);
+        if (!QFile::copy(sourceDllPath, copiedModulePath_))
+        {
+            copiedModulePath_.clear();
+            setLastError(QStringLiteral("Failed to create runtime module copy: %1").arg(sourceDllPath));
+            return false;
+        }
+
+        dllPath = copiedModulePath_;
     }
 
     module_ = LoadLibraryW(reinterpret_cast<LPCWSTR>(dllPath.utf16()));
     if (module_ == nullptr)
     {
-        setLastError(QStringLiteral("Failed to load ApplicationDLL.dll."));
+        if (!copiedModulePath_.isEmpty())
+        {
+            QFile::remove(copiedModulePath_);
+            copiedModulePath_.clear();
+        }
+        setLastError(QStringLiteral("Failed to load ApplicationDLL.dll: %1").arg(dllPath));
         return false;
     }
 
@@ -58,9 +87,11 @@ bool RuntimeBridge::load(const QString& baseDir)
     }
 
     lastError_.clear();
+    loadedModulePath_ = dllPath;
     return true;
 #else
     Q_UNUSED(baseDir);
+    Q_UNUSED(instanceTag);
     setLastError(QStringLiteral("RuntimeBridge is currently supported only on Windows."));
     return false;
 #endif
@@ -304,10 +335,28 @@ void RuntimeBridge::unload()
     getRuntimeStatusText_ = nullptr;
     getRuntimeLastErrorText_ = nullptr;
     getNativeWindowHandle_ = nullptr;
+
+    loadedModulePath_.clear();
+    if (!copiedModulePath_.isEmpty())
+    {
+        QFile::remove(copiedModulePath_);
+        copiedModulePath_.clear();
+    }
 #endif
 }
 
 void RuntimeBridge::setLastError(const QString& message)
 {
     lastError_ = message;
+}
+
+QString RuntimeBridge::makeModuleCopyPath(const QString& baseDir, const QString& instanceTag) const
+{
+    const QString sanitizedTag = QString(instanceTag).replace(QRegularExpression(QStringLiteral(R"([^A-Za-z0-9_\-])")), QStringLiteral("_"));
+    if (sanitizedTag.isEmpty())
+    {
+        return QString();
+    }
+
+    return QDir(baseDir).filePath(QStringLiteral("ApplicationDLL.%1.dll").arg(sanitizedTag));
 }

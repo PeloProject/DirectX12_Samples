@@ -44,6 +44,7 @@ int main(int argc, char* argv[])
     }
 
     QApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(true);
     QtEditorFrontend frontend(app);
     frontend.bindRuntimeBridge(&runtime);
     if (!frontend.initialize(baseDir))

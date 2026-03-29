@@ -21,7 +21,7 @@ void QtEditorFrontend::bindRuntimeBridge(RuntimeBridge* runtime)
     runtime_ = runtime;
 }
 
-bool QtEditorFrontend::initialize(const QString&)
+bool QtEditorFrontend::initialize(const QString& baseDir)
 {
     if (runtime_ == nullptr)
     {
@@ -29,7 +29,7 @@ bool QtEditorFrontend::initialize(const QString&)
     }
 
     window_ = new MainWindow();
-    if (!window_->initialize(runtime_))
+    if (!window_->initialize(runtime_, baseDir))
     {
         return false;
     }
@@ -48,9 +48,10 @@ void QtEditorFrontend::shutdown()
     if (window_ != nullptr)
     {
         window_->close();
-        delete window_;
-        window_ = nullptr;
     }
+    app_.closeAllWindows();
+    app_.quit();
+    window_.clear();
 }
 
 void QtEditorFrontend::requestClose()
