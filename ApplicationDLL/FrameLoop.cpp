@@ -351,3 +351,23 @@ uint32_t AppRuntime::GetRendererBackend() const
 {
     return static_cast<uint32_t>(RuntimeStateRef().g_rendererBackend);
 }
+
+void AppRuntime::SetEditorUiEnabled(BOOL enabled)
+{
+    RuntimeStateRef().g_editorUiEnabled = (enabled != FALSE);
+}
+
+BOOL AppRuntime::IsEditorUiEnabled() const
+{
+    return RuntimeStateRef().g_editorUiEnabled ? TRUE : FALSE;
+}
+
+const char* AppRuntime::GetRuntimeStatusText() const
+{
+    return RuntimeStateRef().g_pieGameStatus.c_str();
+}
+
+const char* AppRuntime::GetRuntimeLastErrorText() const
+{
+    return RuntimeStateRef().g_pieGameLastLoadError.c_str();
+}

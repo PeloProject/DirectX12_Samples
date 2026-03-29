@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\build-msvc\EditorQt_autogen\mocs_compilation_Debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\src\MainWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\src\RuntimeBridge.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\build-msvc\EditorQt_autogen\mocs_compilation_Release.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\build-msvc\EditorQt_autogen\mocs_compilation_MinSizeRel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\build-msvc\EditorQt_autogen\mocs_compilation_RelWithDebInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\src\MainWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\src\RuntimeBridge.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\shinji\Documents\Projects\DirectX12_Samples\EditorQt\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{334CF18D-B610-3D80-8930-3950DA294CC4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{C7239D0A-4B21-3897-BDE3-4878BA2A6459}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

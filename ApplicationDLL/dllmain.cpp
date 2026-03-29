@@ -52,6 +52,16 @@ extern "C" __declspec(dllexport) void StopPie()
     Runtime().GetPlayInEditor().RequestStopPie();
 }
 
+extern "C" __declspec(dllexport) void SetEditorUiEnabled(BOOL enabled)
+{
+    Runtime().SetEditorUiEnabled(enabled);
+}
+
+extern "C" __declspec(dllexport) BOOL IsEditorUiEnabled()
+{
+    return Runtime().IsEditorUiEnabled();
+}
+
 extern "C" __declspec(dllexport) void SetStandaloneMode(BOOL enabled)
 {
     Runtime().GetPlayInEditor().SetStandaloneMode(enabled);
@@ -120,4 +130,14 @@ extern "C" __declspec(dllexport) uint32_t GetRendererBackend()
 extern "C" __declspec(dllexport) HWND GetNativeWindowHandle()
 {
     return RuntimeStateRef().g_hwnd;
+}
+
+extern "C" __declspec(dllexport) const char* GetRuntimeStatusText()
+{
+    return Runtime().GetRuntimeStatusText();
+}
+
+extern "C" __declspec(dllexport) const char* GetRuntimeLastErrorText()
+{
+    return Runtime().GetRuntimeLastErrorText();
 }

@@ -24,6 +24,7 @@ struct RuntimeState
     HWND g_hwnd = NULL;
     std::unique_ptr<IRenderDevice> g_renderDevice;
     bool g_imguiInitialized = false;
+    bool g_editorUiEnabled = true;
     PieTickCallback g_pieTickCallback = nullptr;
     bool g_isStandaloneMode = false;
     HMODULE g_pieGameModule = nullptr;
@@ -94,6 +95,10 @@ public:
     bool ApplyPendingRendererSwitch();
 
     void MessageLoopIteration();
+    void SetEditorUiEnabled(BOOL enabled);
+    BOOL IsEditorUiEnabled() const;
+    const char* GetRuntimeStatusText() const;
+    const char* GetRuntimeLastErrorText() const;
 
     LRESULT HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -111,6 +116,10 @@ RuntimeState& RuntimeStateRef();
 
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
+extern "C" __declspec(dllexport) void SetEditorUiEnabled(BOOL enabled);
+extern "C" __declspec(dllexport) BOOL IsEditorUiEnabled();
 extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend);
 extern "C" __declspec(dllexport) uint32_t GetRendererBackend();
 extern "C" __declspec(dllexport) HWND GetNativeWindowHandle();
+extern "C" __declspec(dllexport) const char* GetRuntimeStatusText();
+extern "C" __declspec(dllexport) const char* GetRuntimeLastErrorText();
