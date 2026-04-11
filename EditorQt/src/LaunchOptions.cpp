@@ -1,4 +1,4 @@
-#include "LaunchOptions.h"
+﻿#include "LaunchOptions.h"
 
 #include <QString>
 
@@ -12,6 +12,14 @@ namespace
     }
 }
 
+///=====================================================================
+/// <summary>
+/// 起動オプションの解析
+/// </summary>
+/// <param name="argc"></param>
+/// <param name="argv"></param>
+/// <returns></returns>
+///=====================================================================
 LaunchOptions ParseLaunchOptions(int argc, char* argv[])
 {
     LaunchOptions options;

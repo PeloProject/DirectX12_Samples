@@ -4,9 +4,9 @@
 
 #include <QListWidget>
 #include <QMainWindow>
+#include <QPoint>
 
 #include <functional>
-#include <memory>
 #include <vector>
 
 class QAction;
@@ -19,10 +19,13 @@ class QLabel;
 class QMimeData;
 class QPlainTextEdit;
 class QPushButton;
+class QHideEvent;
+class QMouseEvent;
 class QResizeEvent;
 class QShowEvent;
 class QTimer;
 class QWidget;
+class QWheelEvent;
 
 namespace ads
 {
@@ -46,13 +49,22 @@ public:
 
     void setNativeWindow(HWND hwnd);
     void clearNativeWindow();
+    HWND nativeWindow() const;
     void setAssetDropHandler(std::function<void(const QString&)> handler);
+    void setPanHandler(std::function<void(const QPoint&)> handler);
+    void setZoomHandler(std::function<void(float)> handler);
+    void setOrbitHandler(std::function<void(const QPoint&)> handler);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     void syncNativeWindow();
@@ -60,6 +72,12 @@ private:
 private:
     HWND hwnd_ = nullptr;
     std::function<void(const QString&)> assetDropHandler_;
+    std::function<void(const QPoint&)> panHandler_;
+    std::function<void(float)> zoomHandler_;
+    std::function<void(const QPoint&)> orbitHandler_;
+    bool panning_ = false;
+    bool orbiting_ = false;
+    QPoint lastMousePosition_;
 };
 
 struct EditorWorldActor
@@ -96,18 +114,23 @@ private:
     int selectedActorIndex() const;
     QString makeSpawnActorName(const QString& assetPath);
     void updateStatus();
-    bool initializeSecondaryRuntime(const QString& baseDir);
     void attachSceneViewport();
     void detachSceneViewport();
     void attachGameViewport();
     void detachGameViewport();
+    bool ensureRuntimeBackend(RendererBackend backend, int maxAttempts = 24);
     QString backendName(RendererBackend backend) const;
     ads::CDockWidget* createDockWidget(const QString& title, const QString& objectName, QWidget* content, const QSize& minimumSize);
+    void syncRuntimeCamerasToEditor();
+    void applyMainCameraActorToRuntime();
+    bool selectedActorIsMainCamera() const;
+    static float zoomFromCameraDepth(float z);
+    static float cameraDepthFromZoom(float zoom);
 
 private:
     bool shuttingDown_ = false;
+    bool embedNativeViewports_ = true;
     RuntimeBridge* sceneRuntime_ = nullptr;
-    std::unique_ptr<RuntimeBridge> gameRuntime_;
     std::vector<EditorWorldActor> worldActors_;
     int nextSpawnedActorSerial_ = 1;
     QString lastRuntimeError_;

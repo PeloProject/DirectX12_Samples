@@ -33,12 +33,12 @@ void SceneManager::Update(float deltaTime)
 
 }
 
-void SceneManager::Render()
+void SceneManager::Render(ViewportRenderMode viewportMode)
 {
 	// シーンのレンダリング処理をここに記述
 	if (m_pCurrentScene == nullptr)
 	{
 		return;
 	}
-	m_pCurrentScene->Render();
+	m_pCurrentScene->Render(viewportMode);
 }

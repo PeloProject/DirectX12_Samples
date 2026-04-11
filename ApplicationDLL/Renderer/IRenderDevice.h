@@ -19,6 +19,11 @@ public:
     virtual bool Resize(UINT width, UINT height) = 0;
     virtual void PreRender(const float clearColor[4]) = 0;
     virtual void Render() = 0;
+    virtual bool CreateAdditionalRenderTarget(HWND hwnd, UINT width, UINT height) { (void)hwnd; (void)width; (void)height; return false; }
+    virtual void DestroyAdditionalRenderTarget(HWND hwnd) { (void)hwnd; }
+    virtual bool ResizeRenderTarget(HWND hwnd, UINT width, UINT height) { (void)hwnd; return Resize(width, height); }
+    virtual void PreRenderTarget(HWND hwnd, const float clearColor[4]) { (void)hwnd; PreRender(clearColor); }
+    virtual void RenderTarget(HWND hwnd) { (void)hwnd; Render(); }
     virtual bool PrepareImGuiRenderContext() { return true; }
     virtual bool SupportsEditorUi() const { return true; }
     virtual void SetImGuiDrawData(ImDrawData* drawData) { (void)drawData; }

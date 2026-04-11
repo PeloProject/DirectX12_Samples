@@ -8,9 +8,12 @@
 
 #include <memory>
 #include <string>
+#include <cstdint>
 
 using namespace WL;
 using Microsoft::WRL::ComPtr;
+
+enum class ViewportRenderMode : uint32_t;
 
 /// <summary>
 /// RGBAテクスチャデータの構造体
@@ -39,18 +42,18 @@ public:
 	QuadRenderObject();
 	~QuadRenderObject() {}
 
-	void Render();
+	void Render(ViewportRenderMode viewportMode);
 	void SetTransform(float centerX, float centerY, float width, float height);
 	void SetTextureHandle(TextureHandle textureHandle);
 	void SetMaterialName(const std::string& materialName);
 private:
 
-	void CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
-	void CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
+	HRESULT CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
+	HRESULT CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc);
 	HRESULT CreateMeshResources();
 	HRESULT InitializeMaterial();
 
-	void ApplyQuadTransform();
+	void ApplyQuadTransform(ViewportRenderMode viewportMode);
 	void UploadVertexBufferData();
 
 

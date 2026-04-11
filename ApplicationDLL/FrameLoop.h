@@ -1,4 +1,8 @@
-﻿#pragma once
+#pragma once
 
-void RenderSpriteRenderers();
+#include <cstdint>
+
+enum class ViewportRenderMode : uint32_t;
+
+void RenderSpriteRenderers(ViewportRenderMode viewportMode);
 void DestroyAllSpriteRenderers();

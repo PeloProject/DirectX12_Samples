@@ -33,10 +33,46 @@ struct PieNativeApiTable
 
 using PieSetNativeApiFn = void(__cdecl*)(const PieNativeApiTable*);
 
+enum class ViewportRenderMode : uint32_t
+{
+    Game = 0,
+    Scene = 1,
+};
+
+struct ViewportCamera2D
+{
+    float centerX = 0.0f;
+    float centerY = 0.0f;
+    float zoom = 1.0f;
+    float rotationDegrees = 0.0f;
+};
+
+struct RuntimeTransform
+{
+    float location[3] = { 0.0f, 0.0f, 0.0f };
+    float rotation[3] = { 0.0f, 0.0f, 0.0f };
+    float scale[3] = { 1.0f, 1.0f, 1.0f };
+};
+
+struct RuntimeCameraComponent
+{
+    bool enabled = false;
+    float zoom = 1.0f;
+};
+
+struct RuntimeActor
+{
+    std::string name;
+    RuntimeTransform transform;
+    RuntimeCameraComponent cameraComponent;
+};
 
 struct RuntimeState
 {
     HWND g_hwnd = NULL;
+    HWND g_gameHwnd = NULL;
+    bool g_ownsHwnd = true;
+    bool g_ownsGameHwnd = true;
     std::unique_ptr<IRenderDevice> g_renderDevice;
     bool g_imguiInitialized = false;
     bool g_editorUiEnabled = true;
@@ -72,6 +108,9 @@ struct RuntimeState
     bool g_rendererBackendLocked = false;
     bool g_pendingRendererSwitch = false;
     RendererBackend g_pendingRendererBackend = RendererBackend::DirectX12;
+    ViewportCamera2D g_sceneViewportCamera = { -0.35f, 0.15f, 1.35f, 0.0f };
+    ViewportCamera2D g_gameViewportCamera = { 0.0f, 0.0f, 1.0f, 0.0f };
+    std::vector<RuntimeActor> g_runtimeActors;
     std::wstring g_windowClassName;
 };
 
@@ -84,9 +123,13 @@ public:
 #pragma endregion
 
     HWND CreateNativeWindow();
+    HWND CreateNativeChildWindow(HWND parentHwnd, UINT width, UINT height);
+    HWND CreateGameNativeWindow();
+    HWND CreateGameNativeChildWindow(HWND parentHwnd, UINT width, UINT height);
     void ShowNativeWindow();
     void HideNativeWindow();
     void DestroyNativeWindow();
+    void DestroyGameNativeWindow();
 
     void ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -97,6 +140,12 @@ public:
     void SetSpriteRendererTransform(uint32_t handle, float centerX, float centerY, float width, float height);
     void SetSpriteRendererTexture(uint32_t handle, TextureHandle textureHandle);
     void SetSpriteRendererMaterial(uint32_t handle, const char* materialName);
+    void SetSceneViewportCamera(float centerX, float centerY, float zoom);
+    void GetSceneViewportCamera(float* outCenterX, float* outCenterY, float* outZoom) const;
+    void SetSceneViewportRotation(float rotationDegrees);
+    float GetSceneViewportRotation() const;
+    void SetGameViewportCamera(float centerX, float centerY, float zoom);
+    void GetGameViewportCamera(float* outCenterX, float* outCenterY, float* outZoom) const;
 
     /// <summary>
 	/// テクスチャパスを指定してテクスチャハンドルを取得します。テクスチャがまだロードされていない場合は、非同期にロードが開始されます。
@@ -129,6 +178,18 @@ private:
 
 AppRuntime& Runtime();
 RuntimeState& RuntimeStateRef();
+ViewportRenderMode ResolveViewportRenderMode(HWND hwnd);
+ViewportCamera2D GetViewportCamera(ViewportRenderMode mode);
+void TransformWorldQuadToViewportNdc(
+    ViewportRenderMode mode,
+    float centerX,
+    float centerY,
+    float width,
+    float height,
+    float& outCenterX,
+    float& outCenterY,
+    float& outWidth,
+    float& outHeight);
 
 extern "C" __declspec(dllexport) void StartPie();
 extern "C" __declspec(dllexport) void StopPie();
@@ -142,8 +203,19 @@ extern "C" __declspec(dllexport) uint32_t AcquireTextureHandle(const char* textu
 extern "C" __declspec(dllexport) void ReleaseTextureHandle(uint32_t textureHandle);
 extern "C" __declspec(dllexport) void SetSpriteRendererTexture(uint32_t handle, uint32_t textureHandle);
 extern "C" __declspec(dllexport) void SetSpriteRendererMaterial(uint32_t handle, const char* materialName);
+extern "C" __declspec(dllexport) void SetSceneViewportCamera(float centerX, float centerY, float zoom);
+extern "C" __declspec(dllexport) void GetSceneViewportCamera(float* outCenterX, float* outCenterY, float* outZoom);
+extern "C" __declspec(dllexport) void SetSceneViewportRotation(float rotationDegrees);
+extern "C" __declspec(dllexport) float GetSceneViewportRotation();
+extern "C" __declspec(dllexport) void SetGameViewportCamera(float centerX, float centerY, float zoom);
+extern "C" __declspec(dllexport) void GetGameViewportCamera(float* outCenterX, float* outCenterY, float* outZoom);
 extern "C" __declspec(dllexport) BOOL SetRendererBackend(uint32_t backend);
 extern "C" __declspec(dllexport) uint32_t GetRendererBackend();
 extern "C" __declspec(dllexport) HWND GetNativeWindowHandle();
+extern "C" __declspec(dllexport) HWND CreateNativeChildWindow(HWND parentHwnd, UINT width, UINT height);
+extern "C" __declspec(dllexport) HWND CreateGameNativeWindow();
+extern "C" __declspec(dllexport) HWND CreateGameNativeChildWindow(HWND parentHwnd, UINT width, UINT height);
+extern "C" __declspec(dllexport) void DestroyGameNativeWindow();
+extern "C" __declspec(dllexport) HWND GetGameNativeWindowHandle();
 extern "C" __declspec(dllexport) const char* GetRuntimeStatusText();
 extern "C" __declspec(dllexport) const char* GetRuntimeLastErrorText();

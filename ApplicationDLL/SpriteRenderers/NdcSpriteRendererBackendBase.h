@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ISpriteRendererBackend.h"
+#include "AppRuntime.h"
 
 #include <algorithm>
 
@@ -15,13 +16,27 @@ public:
         height_ = (std::max)(height, 0.01f);
     }
 
-    void Render(IRenderDevice* renderDevice) override
+    void Render(IRenderDevice* renderDevice, ViewportRenderMode viewportMode) override
     {
         if (renderDevice == nullptr)
         {
             return;
         }
-        renderDevice->DrawQuadNdc(centerX_, centerY_, width_, height_);
+        float transformedCenterX = centerX_;
+        float transformedCenterY = centerY_;
+        float transformedWidth = width_;
+        float transformedHeight = height_;
+        TransformWorldQuadToViewportNdc(
+            viewportMode,
+            centerX_,
+            centerY_,
+            width_,
+            height_,
+            transformedCenterX,
+            transformedCenterY,
+            transformedWidth,
+            transformedHeight);
+        renderDevice->DrawQuadNdc(transformedCenterX, transformedCenterY, transformedWidth, transformedHeight);
     }
 
     void SetTextureHandle(TextureHandle textureHandle) override

@@ -22,6 +22,11 @@ extern "C" __declspec(dllexport) HWND CreateNativeWindow()
     return Runtime().CreateNativeWindow();
 }
 
+extern "C" __declspec(dllexport) HWND CreateNativeChildWindow(HWND parentHwnd, UINT width, UINT height)
+{
+    return Runtime().CreateNativeChildWindow(parentHwnd, width, height);
+}
+
 extern "C" __declspec(dllexport) void ShowNativeWindow()
 {
     Runtime().ShowNativeWindow();
@@ -112,6 +117,36 @@ extern "C" __declspec(dllexport) void SetSpriteRendererMaterial(uint32_t handle,
     Runtime().SetSpriteRendererMaterial(handle, materialName);
 }
 
+extern "C" __declspec(dllexport) void SetSceneViewportCamera(float centerX, float centerY, float zoom)
+{
+    Runtime().SetSceneViewportCamera(centerX, centerY, zoom);
+}
+
+extern "C" __declspec(dllexport) void GetSceneViewportCamera(float* outCenterX, float* outCenterY, float* outZoom)
+{
+    Runtime().GetSceneViewportCamera(outCenterX, outCenterY, outZoom);
+}
+
+extern "C" __declspec(dllexport) void SetSceneViewportRotation(float rotationDegrees)
+{
+    Runtime().SetSceneViewportRotation(rotationDegrees);
+}
+
+extern "C" __declspec(dllexport) float GetSceneViewportRotation()
+{
+    return Runtime().GetSceneViewportRotation();
+}
+
+extern "C" __declspec(dllexport) void SetGameViewportCamera(float centerX, float centerY, float zoom)
+{
+    Runtime().SetGameViewportCamera(centerX, centerY, zoom);
+}
+
+extern "C" __declspec(dllexport) void GetGameViewportCamera(float* outCenterX, float* outCenterY, float* outZoom)
+{
+    Runtime().GetGameViewportCamera(outCenterX, outCenterY, outZoom);
+}
+
 extern "C" __declspec(dllexport) void MessageLoopIteration()
 {
     Runtime().MessageLoopIteration();
@@ -130,6 +165,26 @@ extern "C" __declspec(dllexport) uint32_t GetRendererBackend()
 extern "C" __declspec(dllexport) HWND GetNativeWindowHandle()
 {
     return RuntimeStateRef().g_hwnd;
+}
+
+extern "C" __declspec(dllexport) HWND CreateGameNativeWindow()
+{
+    return Runtime().CreateGameNativeWindow();
+}
+
+extern "C" __declspec(dllexport) HWND CreateGameNativeChildWindow(HWND parentHwnd, UINT width, UINT height)
+{
+    return Runtime().CreateGameNativeChildWindow(parentHwnd, width, height);
+}
+
+extern "C" __declspec(dllexport) void DestroyGameNativeWindow()
+{
+    Runtime().DestroyGameNativeWindow();
+}
+
+extern "C" __declspec(dllexport) HWND GetGameNativeWindowHandle()
+{
+    return RuntimeStateRef().g_gameHwnd;
 }
 
 extern "C" __declspec(dllexport) const char* GetRuntimeStatusText()

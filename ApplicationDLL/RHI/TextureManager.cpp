@@ -16,6 +16,13 @@ TextureManager& TextureManager::Get()
 /// </summary>
 UINT TextureManager::CreateTextureResource(ComPtr<ID3D12Resource>& textureBuffer, const wchar_t* filePath, DirectX::TexMetadata* outMetadata)
 {
+    ID3D12Device* device = Dx12RenderDevice::GetDevice();
+    if (device == nullptr)
+    {
+        LOG_DEBUG("LoadTexture: no active DirectX12 device for file: %ls", filePath != nullptr ? filePath : L"(null)");
+        return static_cast<UINT>(-1);
+    }
+
 	const std::filesystem::path resolvedPath = ResolveTexturePath(filePath);
 	if (resolvedPath.empty())
 	{
@@ -54,7 +61,7 @@ UINT TextureManager::CreateTextureResource(ComPtr<ID3D12Resource>& textureBuffer
 	texResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	texResourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-	hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
+	hr = device->CreateCommittedResource(
 		&texHeapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&texResourceDesc,
@@ -89,7 +96,7 @@ UINT TextureManager::CreateTextureResource(ComPtr<ID3D12Resource>& textureBuffer
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.Texture2D.MipLevels = metadata.mipLevels;
 
-	Dx12RenderDevice::GetDevice()->CreateShaderResourceView(
+	device->CreateShaderResourceView(
 		textureBuffer.Get(),
 		&srvDesc,
 		DescriptorHeapManager::Get().GetCPUHandle(handleIndex));

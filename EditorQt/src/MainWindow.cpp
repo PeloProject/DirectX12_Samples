@@ -1,4 +1,4 @@
-#include "MainWindow.h"
+﻿#include "MainWindow.h"
 
 #include <DockAreaWidget.h>
 #include <DockManager.h>
@@ -12,12 +12,14 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QGroupBox>
+#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -25,7 +27,12 @@
 #include <QShowEvent>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWidget>
+
+#include <algorithm>
+#include <chrono>
+#include <thread>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -88,6 +95,7 @@ NativeViewportHost::NativeViewportHost(QWidget* parent)
     setAttribute(Qt::WA_PaintOnScreen, true);
     setMinimumSize(640, 360);
     setAcceptDrops(true);
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 void NativeViewportHost::setNativeWindow(HWND hwnd)
@@ -101,9 +109,29 @@ void NativeViewportHost::clearNativeWindow()
     hwnd_ = nullptr;
 }
 
+HWND NativeViewportHost::nativeWindow() const
+{
+    return hwnd_;
+}
+
 void NativeViewportHost::setAssetDropHandler(std::function<void(const QString&)> handler)
 {
     assetDropHandler_ = std::move(handler);
+}
+
+void NativeViewportHost::setPanHandler(std::function<void(const QPoint&)> handler)
+{
+    panHandler_ = std::move(handler);
+}
+
+void NativeViewportHost::setZoomHandler(std::function<void(float)> handler)
+{
+    zoomHandler_ = std::move(handler);
+}
+
+void NativeViewportHost::setOrbitHandler(std::function<void(const QPoint&)> handler)
+{
+    orbitHandler_ = std::move(handler);
 }
 
 void NativeViewportHost::resizeEvent(QResizeEvent* event)
@@ -116,6 +144,21 @@ void NativeViewportHost::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
     syncNativeWindow();
+}
+
+void NativeViewportHost::hideEvent(QHideEvent* event)
+{
+    QWidget::hideEvent(event);
+#ifdef _WIN32
+    if (hwnd_ != nullptr)
+    {
+        const HWND parentHwnd = reinterpret_cast<HWND>(winId());
+        if (hwnd_ != parentHwnd)
+        {
+            ShowWindow(hwnd_, SW_HIDE);
+        }
+    }
+#endif
 }
 
 void NativeViewportHost::dragEnterEvent(QDragEnterEvent* event)
@@ -148,6 +191,78 @@ void NativeViewportHost::dropEvent(QDropEvent* event)
     QWidget::dropEvent(event);
 }
 
+void NativeViewportHost::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::MiddleButton)
+    {
+        panning_ = true;
+        lastMousePosition_ = event->position().toPoint();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::RightButton)
+    {
+        orbiting_ = true;
+        lastMousePosition_ = event->position().toPoint();
+        event->accept();
+        return;
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void NativeViewportHost::mouseMoveEvent(QMouseEvent* event)
+{
+    if (panning_ && panHandler_ != nullptr)
+    {
+        const QPoint currentPosition = event->position().toPoint();
+        panHandler_(currentPosition - lastMousePosition_);
+        lastMousePosition_ = currentPosition;
+        event->accept();
+        return;
+    }
+    if (orbiting_ && orbitHandler_ != nullptr)
+    {
+        const QPoint currentPosition = event->position().toPoint();
+        orbitHandler_(currentPosition - lastMousePosition_);
+        lastMousePosition_ = currentPosition;
+        event->accept();
+        return;
+    }
+
+    QWidget::mouseMoveEvent(event);
+}
+
+void NativeViewportHost::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::MiddleButton)
+    {
+        panning_ = false;
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::RightButton)
+    {
+        orbiting_ = false;
+        event->accept();
+        return;
+    }
+
+    QWidget::mouseReleaseEvent(event);
+}
+
+void NativeViewportHost::wheelEvent(QWheelEvent* event)
+{
+    if (zoomHandler_ != nullptr && event->angleDelta().y() != 0)
+    {
+        zoomHandler_(event->angleDelta().y() > 0 ? 0.9f : 1.1f);
+        event->accept();
+        return;
+    }
+
+    QWidget::wheelEvent(event);
+}
+
 void NativeViewportHost::syncNativeWindow()
 {
 #ifdef _WIN32
@@ -162,14 +277,40 @@ void NativeViewportHost::syncNativeWindow()
         return;
     }
 
+    if (!isVisible())
+    {
+        if (hwnd_ != parentHwnd)
+        {
+            ShowWindow(hwnd_, SW_HIDE);
+        }
+        return;
+    }
+
+    if (hwnd_ == parentHwnd)
+    {
+        return;
+    }
+
     SetParent(hwnd_, parentHwnd);
     const LONG childStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
     SetWindowLongPtr(hwnd_, GWL_STYLE, childStyle);
-    MoveWindow(hwnd_, 0, 0, width(), height(), TRUE);
-    ShowWindow(hwnd_, SW_SHOW);
+    SetWindowLongPtr(hwnd_, GWL_EXSTYLE, 0);
+    SetWindowPos(
+        hwnd_,
+        HWND_TOP,
+        0,
+        0,
+        width(),
+        height(),
+        SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    UpdateWindow(hwnd_);
 #endif
 }
 
+/// <summary>
+/// 
+/// </summary>
+/// <param name="parent"></param>
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
@@ -184,10 +325,8 @@ MainWindow::MainWindow(QWidget* parent)
         if (sceneRuntime_ != nullptr)
         {
             sceneRuntime_->tick();
-        }
-        if (gameRuntime_ != nullptr)
-        {
-            gameRuntime_->tick();
+            attachSceneViewport();
+            attachGameViewport();
         }
         updateStatus();
     });
@@ -202,16 +341,15 @@ MainWindow::~MainWindow()
     detachGameViewport();
     if (sceneRuntime_ != nullptr)
     {
+        sceneRuntime_->destroyGameNativeWindow();
         sceneRuntime_->destroyNativeWindow();
-    }
-    if (gameRuntime_ != nullptr)
-    {
-        gameRuntime_->destroyNativeWindow();
     }
 }
 
 bool MainWindow::initialize(RuntimeBridge* runtime, const QString& baseDir)
 {
+    Q_UNUSED(baseDir);
+
     sceneRuntime_ = runtime;
     if (sceneRuntime_ == nullptr)
     {
@@ -219,34 +357,41 @@ bool MainWindow::initialize(RuntimeBridge* runtime, const QString& baseDir)
         return false;
     }
 
-    if (!initializeSecondaryRuntime(baseDir))
-    {
-        return false;
-    }
-
     sceneRuntime_->setStandaloneMode(false);
     sceneRuntime_->setEditorUiEnabled(false);
-    if (!sceneRuntime_->createNativeWindow(false))
+    const bool sceneWindowCreated = embedNativeViewports_
+        ? sceneRuntime_->createNativeWindowInParent(
+            reinterpret_cast<HWND>(sceneViewportHost_->winId()),
+            static_cast<unsigned int>((std::max)(1, sceneViewportHost_->width())),
+            static_cast<unsigned int>((std::max)(1, sceneViewportHost_->height())),
+            false)
+        : sceneRuntime_->createNativeWindow(false);
+    if (!sceneWindowCreated)
     {
         appendLogMessage(sceneRuntime_->lastBridgeError(), true);
         return false;
     }
 
-    gameRuntime_->setStandaloneMode(true);
-    gameRuntime_->setEditorUiEnabled(false);
-    if (!gameRuntime_->createNativeWindow(false))
-    {
-        appendLogMessage(gameRuntime_->lastBridgeError(), true);
-        sceneRuntime_->destroyNativeWindow();
-        return false;
-    }
-
-    sceneRuntime_->showNativeWindow();
-    gameRuntime_->showNativeWindow();
     attachSceneViewport();
+    if (embedNativeViewports_)
+    {
+        if (!sceneRuntime_->createGameNativeWindowInParent(
+            reinterpret_cast<HWND>(gameViewportHost_->winId()),
+            static_cast<unsigned int>((std::max)(1, gameViewportHost_->width())),
+            static_cast<unsigned int>((std::max)(1, gameViewportHost_->height()))))
+        {
+            appendLogMessage(sceneRuntime_->lastBridgeError(), true);
+            return false;
+        }
+    }
+    else
+    {
+        sceneRuntime_->showNativeWindow();
+    }
     attachGameViewport();
+    syncRuntimeCamerasToEditor();
     tickTimer_->start();
-    appendLogMessage(QStringLiteral("Scene and Game runtimes initialized."));
+    appendLogMessage(QStringLiteral("Shared Scene/Game runtime initialized."));
     updateStatus();
     return true;
 }
@@ -282,11 +427,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
     detachGameViewport();
     if (sceneRuntime_ != nullptr)
     {
+        sceneRuntime_->destroyGameNativeWindow();
         sceneRuntime_->destroyNativeWindow();
-    }
-    if (gameRuntime_ != nullptr)
-    {
-        gameRuntime_->destroyNativeWindow();
     }
 
     saveLayout();
@@ -346,6 +488,47 @@ void MainWindow::buildUi()
     sceneViewportHost_->setAssetDropHandler([this](const QString& assetPath)
     {
         spawnActorFromAssetPath(assetPath);
+    });
+    sceneViewportHost_->setPanHandler([this](const QPoint& delta)
+    {
+        if (sceneRuntime_ == nullptr || sceneViewportHost_->width() <= 0 || sceneViewportHost_->height() <= 0)
+        {
+            return;
+        }
+
+        float centerX = 0.0f;
+        float centerY = 0.0f;
+        float zoom = 1.0f;
+        sceneRuntime_->getSceneViewportCamera(centerX, centerY, zoom);
+        centerX -= (static_cast<float>(delta.x()) / static_cast<float>(sceneViewportHost_->width())) * 2.0f * zoom;
+        centerY += (static_cast<float>(delta.y()) / static_cast<float>(sceneViewportHost_->height())) * 2.0f * zoom;
+        sceneRuntime_->setSceneViewportCamera(centerX, centerY, zoom);
+    });
+    sceneViewportHost_->setZoomHandler([this](float factor)
+    {
+        if (sceneRuntime_ == nullptr)
+        {
+            return;
+        }
+
+        float centerX = 0.0f;
+        float centerY = 0.0f;
+        float zoom = 1.0f;
+        sceneRuntime_->getSceneViewportCamera(centerX, centerY, zoom);
+        zoom *= factor;
+        if (zoom < 0.1f) zoom = 0.1f;
+        if (zoom > 5.0f) zoom = 5.0f;
+        sceneRuntime_->setSceneViewportCamera(centerX, centerY, zoom);
+    });
+    sceneViewportHost_->setOrbitHandler([this](const QPoint& delta)
+    {
+        if (sceneRuntime_ == nullptr)
+        {
+            return;
+        }
+
+        const float currentRotation = sceneRuntime_->sceneViewportRotation();
+        sceneRuntime_->setSceneViewportRotation(currentRotation + static_cast<float>(delta.x()) * 0.35f);
     });
     gameViewportHost_ = new NativeViewportHost(this);
     gameViewportHost_->setAcceptDrops(false);
@@ -456,7 +639,7 @@ void MainWindow::connectSignals()
 {
     connect(createButton_, &QPushButton::clicked, this, [this]()
     {
-        if (sceneRuntime_ == nullptr || gameRuntime_ == nullptr)
+        if (sceneRuntime_ == nullptr)
         {
             return;
         }
@@ -465,50 +648,56 @@ void MainWindow::connectSignals()
         {
             sceneRuntime_->setStandaloneMode(false);
             sceneRuntime_->setEditorUiEnabled(false);
-            if (!sceneRuntime_->createNativeWindow(false))
+            const bool createdSceneWindow = embedNativeViewports_
+                ? sceneRuntime_->createNativeWindowInParent(
+                    reinterpret_cast<HWND>(sceneViewportHost_->winId()),
+                    static_cast<unsigned int>((std::max)(1, sceneViewportHost_->width())),
+                    static_cast<unsigned int>((std::max)(1, sceneViewportHost_->height())),
+                    false)
+                : sceneRuntime_->createNativeWindow(false);
+            if (!createdSceneWindow)
             {
                 QMessageBox::warning(this, QStringLiteral("Editor"), sceneRuntime_->lastBridgeError());
                 appendLogMessage(sceneRuntime_->lastBridgeError(), true);
                 return;
             }
-            sceneRuntime_->showNativeWindow();
             attachSceneViewport();
-        }
-
-        if (!gameRuntime_->isNativeWindowValid())
-        {
-            gameRuntime_->setStandaloneMode(true);
-            gameRuntime_->setEditorUiEnabled(false);
-            if (!gameRuntime_->createNativeWindow(false))
-            {
-                QMessageBox::warning(this, QStringLiteral("Editor"), gameRuntime_->lastBridgeError());
-                appendLogMessage(gameRuntime_->lastBridgeError(), true);
-                return;
-            }
-            gameRuntime_->showNativeWindow();
-            attachGameViewport();
         }
 
         sceneViewportDock_->toggleView(true);
         sceneViewportDock_->raise();
-        gameViewportDock_->toggleView(true);
-        gameViewportDock_->raise();
-        appendLogMessage(QStringLiteral("Scene and Game native windows created."));
+
+        if (embedNativeViewports_ && !sceneRuntime_->isGameNativeWindowValid())
+        {
+            const bool createdGameWindow = sceneRuntime_->createGameNativeWindowInParent(
+                reinterpret_cast<HWND>(gameViewportHost_->winId()),
+                static_cast<unsigned int>((std::max)(1, gameViewportHost_->width())),
+                static_cast<unsigned int>((std::max)(1, gameViewportHost_->height())));
+            if (!createdGameWindow)
+            {
+                QMessageBox::warning(this, QStringLiteral("Editor"), sceneRuntime_->lastBridgeError());
+                appendLogMessage(sceneRuntime_->lastBridgeError(), true);
+                return;
+            }
+            attachGameViewport();
+        }
+
+        appendLogMessage(QStringLiteral("Shared native window created."));
         updateStatus();
     });
 
     connect(destroyButton_, &QPushButton::clicked, this, [this]()
     {
-        if (sceneRuntime_ == nullptr || gameRuntime_ == nullptr)
+        if (sceneRuntime_ == nullptr)
         {
             return;
         }
 
         detachSceneViewport();
         detachGameViewport();
+        sceneRuntime_->destroyGameNativeWindow();
         sceneRuntime_->destroyNativeWindow();
-        gameRuntime_->destroyNativeWindow();
-        appendLogMessage(QStringLiteral("Scene and Game native windows destroyed."));
+        appendLogMessage(QStringLiteral("Shared native window destroyed."));
         updateStatus();
     });
 
@@ -517,10 +706,6 @@ void MainWindow::connectSignals()
         if (sceneRuntime_ != nullptr)
         {
             sceneRuntime_->showNativeWindow();
-        }
-        if (gameRuntime_ != nullptr)
-        {
-            gameRuntime_->showNativeWindow();
         }
         sceneViewportDock_->toggleView(true);
         sceneViewportDock_->showNormal();
@@ -538,37 +723,69 @@ void MainWindow::connectSignals()
         {
             sceneRuntime_->hideNativeWindow();
         }
-        if (gameRuntime_ != nullptr)
-        {
-            gameRuntime_->hideNativeWindow();
-        }
         sceneViewportDock_->toggleView(false);
         gameViewportDock_->toggleView(false);
-        appendLogMessage(QStringLiteral("Scene and Game viewports hidden."));
+        appendLogMessage(QStringLiteral("Shared viewport hidden."));
         updateStatus();
     });
 
     auto startPie = [this]()
     {
-        if (gameRuntime_ == nullptr)
+        if (sceneRuntime_ == nullptr)
         {
             return;
         }
 
-        gameRuntime_->startPie();
-        appendLogMessage(QStringLiteral("PIE started in Game viewport."));
+        if (!sceneRuntime_->isNativeWindowValid())
+        {
+            sceneRuntime_->setStandaloneMode(false);
+            sceneRuntime_->setEditorUiEnabled(false);
+            const bool createdSceneWindow = embedNativeViewports_
+                ? sceneRuntime_->createNativeWindowInParent(
+                    reinterpret_cast<HWND>(sceneViewportHost_->winId()),
+                    static_cast<unsigned int>((std::max)(1, sceneViewportHost_->width())),
+                    static_cast<unsigned int>((std::max)(1, sceneViewportHost_->height())),
+                    false)
+                : sceneRuntime_->createNativeWindow(false);
+            if (!createdSceneWindow)
+            {
+                appendLogMessage(sceneRuntime_->lastBridgeError(), true);
+                updateStatus();
+                return;
+            }
+        }
+        if (embedNativeViewports_ && !sceneRuntime_->isGameNativeWindowValid())
+        {
+            if (!sceneRuntime_->createGameNativeWindowInParent(
+                reinterpret_cast<HWND>(gameViewportHost_->winId()),
+                static_cast<unsigned int>((std::max)(1, gameViewportHost_->width())),
+                static_cast<unsigned int>((std::max)(1, gameViewportHost_->height()))))
+            {
+                appendLogMessage(sceneRuntime_->lastBridgeError(), true);
+                updateStatus();
+                return;
+            }
+        }
+        if (!embedNativeViewports_)
+        {
+            sceneRuntime_->showNativeWindow();
+        }
+        attachSceneViewport();
+        attachGameViewport();
+        sceneRuntime_->startPie();
+        appendLogMessage(QStringLiteral("PIE started on the shared Scene/Game runtime."));
         updateStatus();
     };
 
     auto stopPie = [this]()
     {
-        if (gameRuntime_ == nullptr)
+        if (sceneRuntime_ == nullptr)
         {
             return;
         }
 
-        gameRuntime_->stopPie();
-        appendLogMessage(QStringLiteral("PIE stopped in Game viewport."));
+        sceneRuntime_->stopPie();
+        appendLogMessage(QStringLiteral("PIE stopped on the shared Scene/Game runtime."));
         updateStatus();
     };
 
@@ -579,7 +796,7 @@ void MainWindow::connectSignals()
 
     connect(backendCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int comboIndex)
     {
-        if (sceneRuntime_ == nullptr || gameRuntime_ == nullptr)
+        if (sceneRuntime_ == nullptr)
         {
             return;
         }
@@ -592,7 +809,6 @@ void MainWindow::connectSignals()
 
         const RendererBackend backend = static_cast<RendererBackend>(backendValue.toInt());
         sceneRuntime_->setRendererBackend(backend);
-        gameRuntime_->setRendererBackend(backend);
         appendLogMessage(QStringLiteral("Renderer switched to %1.").arg(backendName(backend)));
         updateStatus();
     });
@@ -634,6 +850,11 @@ void MainWindow::connectSignals()
                     actor.scale[1] = static_cast<float>(scaleSpin_[1]->value());
                     actor.scale[2] = static_cast<float>(scaleSpin_[2]->value());
                 }
+
+                if (selectedActorIsMainCamera())
+                {
+                    applyMainCameraActorToRuntime();
+                }
             });
         }
     };
@@ -658,9 +879,7 @@ void MainWindow::populateWorkspace()
     EditorWorldActor mainCamera;
     mainCamera.actorName = QStringLiteral("MainCamera");
     mainCamera.sourceAssetPath = QStringLiteral("Cameras/BP_Camera.asset");
-    mainCamera.location[1] = 140.0f;
     mainCamera.location[2] = -250.0f;
-    mainCamera.rotation[0] = 20.0f;
     worldActors_.push_back(mainCamera);
 
     for (const SampleAssetEntry& asset : kSampleAssets)
@@ -782,39 +1001,33 @@ void MainWindow::updateStatus()
 {
     const RendererBackend backend = sceneRuntime_ != nullptr ? sceneRuntime_->rendererBackend() : RendererBackend::DirectX12;
     const QString sceneRuntimeError = sceneRuntime_ != nullptr ? sceneRuntime_->runtimeLastError() : QString();
-    const QString gameRuntimeError = gameRuntime_ != nullptr ? gameRuntime_->runtimeLastError() : QString();
-    const QString runtimeError = !gameRuntimeError.isEmpty() ? gameRuntimeError : sceneRuntimeError;
+    const QString runtimeError = sceneRuntimeError;
     if (!runtimeError.isEmpty() && runtimeError != lastRuntimeError_)
     {
         appendLogMessage(runtimeError, true);
     }
     lastRuntimeError_ = runtimeError;
 
-    setWindowTitle(QStringLiteral("Editor | Scene: %1 | Game: %2 | PIE: %3 | Renderer: %4 | Scene Actors: %5")
+    setWindowTitle(QStringLiteral("Editor | Runtime: %1 | PIE: %2 | Renderer: %3 | Scene Actors: %4")
         .arg(sceneRuntime_ != nullptr ? sceneRuntime_->runtimeStatus() : QStringLiteral("Runtime unavailable"))
-        .arg(gameRuntime_ != nullptr ? gameRuntime_->runtimeStatus() : QStringLiteral("Runtime unavailable"))
-        .arg(gameRuntime_ != nullptr && gameRuntime_->isPieRunning() ? QStringLiteral("Running") : QStringLiteral("Stopped"))
+        .arg(sceneRuntime_ != nullptr && sceneRuntime_->isPieRunning() ? QStringLiteral("Running") : QStringLiteral("Stopped"))
         .arg(backendName(backend))
         .arg(worldActors_.size()));
 }
 
-bool MainWindow::initializeSecondaryRuntime(const QString& baseDir)
-{
-    gameRuntime_ = std::make_unique<RuntimeBridge>();
-    if (!gameRuntime_->load(baseDir, QStringLiteral("qt_game")))
-    {
-        appendLogMessage(gameRuntime_->lastBridgeError(), true);
-        gameRuntime_.reset();
-        return false;
-    }
-    return true;
-}
-
 void MainWindow::attachSceneViewport()
 {
+    if (!embedNativeViewports_)
+    {
+        return;
+    }
     if (sceneRuntime_ != nullptr)
     {
-        sceneViewportHost_->setNativeWindow(sceneRuntime_->nativeWindowHandle());
+        const HWND hwnd = sceneRuntime_->nativeWindowHandle();
+        if (sceneViewportHost_->nativeWindow() != hwnd)
+        {
+            sceneViewportHost_->setNativeWindow(hwnd);
+        }
     }
 }
 
@@ -825,15 +1038,142 @@ void MainWindow::detachSceneViewport()
 
 void MainWindow::attachGameViewport()
 {
-    if (gameRuntime_ != nullptr)
+    if (!embedNativeViewports_)
     {
-        gameViewportHost_->setNativeWindow(gameRuntime_->nativeWindowHandle());
+        return;
+    }
+    if (sceneRuntime_ != nullptr)
+    {
+        const HWND hwnd = sceneRuntime_->gameNativeWindowHandle();
+        if (gameViewportHost_->nativeWindow() != hwnd)
+        {
+            gameViewportHost_->setNativeWindow(hwnd);
+        }
     }
 }
 
 void MainWindow::detachGameViewport()
 {
     gameViewportHost_->clearNativeWindow();
+}
+
+void MainWindow::syncRuntimeCamerasToEditor()
+{
+    if (sceneRuntime_ == nullptr)
+    {
+        return;
+    }
+
+    float gameCenterX = 0.0f;
+    float gameCenterY = 0.0f;
+    float gameZoom = 1.0f;
+    sceneRuntime_->getGameViewportCamera(gameCenterX, gameCenterY, gameZoom);
+
+    for (EditorWorldActor& actor : worldActors_)
+    {
+        if (actor.actorName == QStringLiteral("MainCamera"))
+        {
+            actor.location[0] = gameCenterX;
+            actor.location[1] = gameCenterY;
+            actor.location[2] = cameraDepthFromZoom(gameZoom);
+            actor.scale[0] = gameZoom;
+            actor.scale[1] = gameZoom;
+            actor.scale[2] = 1.0f;
+            break;
+        }
+    }
+
+    refreshActorDetails();
+}
+
+void MainWindow::applyMainCameraActorToRuntime()
+{
+    if (sceneRuntime_ == nullptr)
+    {
+        return;
+    }
+
+    for (const EditorWorldActor& actor : worldActors_)
+    {
+        if (actor.actorName == QStringLiteral("MainCamera"))
+        {
+            sceneRuntime_->setGameViewportCamera(
+                actor.location[0],
+                actor.location[1],
+                zoomFromCameraDepth(actor.location[2]));
+            return;
+        }
+    }
+}
+
+bool MainWindow::selectedActorIsMainCamera() const
+{
+    const int index = selectedActorIndex();
+    return index >= 0 && worldActors_[static_cast<size_t>(index)].actorName == QStringLiteral("MainCamera");
+}
+
+float MainWindow::zoomFromCameraDepth(float z)
+{
+    const float depth = std::abs(z) > 1.0f ? std::abs(z) : 250.0f;
+    const float zoom = depth / 250.0f;
+    return zoom < 0.1f ? 0.1f : zoom;
+}
+
+float MainWindow::cameraDepthFromZoom(float zoom)
+{
+    const float safeZoom = zoom < 0.1f ? 0.1f : zoom;
+    return -250.0f * safeZoom;
+}
+
+bool MainWindow::ensureRuntimeBackend(RendererBackend backend, int maxAttempts)
+{
+    if (sceneRuntime_ == nullptr)
+    {
+        return false;
+    }
+
+    auto syncCombo = [this, backend]()
+    {
+        const int comboIndex = backendCombo_->findData(static_cast<int>(backend));
+        if (comboIndex >= 0 && backendCombo_->currentIndex() != comboIndex)
+        {
+            backendCombo_->blockSignals(true);
+            backendCombo_->setCurrentIndex(comboIndex);
+            backendCombo_->blockSignals(false);
+        }
+    };
+
+    if (sceneRuntime_->rendererBackend() == backend)
+    {
+        syncCombo();
+        return true;
+    }
+
+    if (!sceneRuntime_->setRendererBackend(backend))
+    {
+        appendLogMessage(QStringLiteral("Renderer switch request failed: %1").arg(backendName(backend)), true);
+        return false;
+    }
+
+    for (int attempt = 0; attempt < maxAttempts; ++attempt)
+    {
+        sceneRuntime_->tick();
+        QCoreApplication::processEvents();
+        if (sceneRuntime_->rendererBackend() == backend)
+        {
+            syncCombo();
+            appendLogMessage(QStringLiteral("Shared runtime renderer is %1.").arg(backendName(backend)));
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+
+    appendLogMessage(
+        QStringLiteral("Renderer switch did not complete. Requested %1, current %2.")
+            .arg(backendName(backend))
+            .arg(backendName(sceneRuntime_->rendererBackend())),
+        true);
+    return false;
 }
 
 QString MainWindow::backendName(RendererBackend backend) const

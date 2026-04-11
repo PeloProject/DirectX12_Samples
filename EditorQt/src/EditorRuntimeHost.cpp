@@ -1,4 +1,4 @@
-#include "EditorRuntimeHost.h"
+﻿#include "EditorRuntimeHost.h"
 
 #include "RuntimeBridge.h"
 
@@ -21,7 +21,7 @@ QString GetEditorBaseDirectory()
 
 int RunStandaloneGameMode(RuntimeBridge& runtime, const QString& baseDir)
 {
-    if (!runtime.load(baseDir))
+    if (!runtime.Load(baseDir))
     {
         MessageBoxW(nullptr,
             reinterpret_cast<LPCWSTR>(runtime.lastBridgeError().utf16()),

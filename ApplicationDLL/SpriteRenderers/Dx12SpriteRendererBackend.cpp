@@ -16,8 +16,8 @@ void Dx12SpriteRendererBackend::SetMaterialName(const std::string& materialName)
     quad_.SetMaterialName(materialName);
 }
 
-void Dx12SpriteRendererBackend::Render(IRenderDevice* renderDevice)
+void Dx12SpriteRendererBackend::Render(IRenderDevice* renderDevice, ViewportRenderMode viewportMode)
 {
     (void)renderDevice;
-    quad_.Render();
+    quad_.Render(viewportMode);
 }

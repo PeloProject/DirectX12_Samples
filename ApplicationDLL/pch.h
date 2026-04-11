@@ -46,6 +46,24 @@ inline void DebugOutputFormatString(const wchar_t* type, const char* format, ...
    OutputDebugString(type);  
    OutputDebugString(wbuffer);  
    OutputDebugString(L"\n");  
+
+   HANDLE logFile = CreateFileW(
+       L"ApplicationDLL.debug.log",
+       FILE_APPEND_DATA,
+       FILE_SHARE_READ | FILE_SHARE_WRITE,
+       nullptr,
+       OPEN_ALWAYS,
+       FILE_ATTRIBUTE_NORMAL,
+       nullptr);
+   if (logFile != INVALID_HANDLE_VALUE)
+   {
+       DWORD written = 0;
+       WriteFile(logFile, type, static_cast<DWORD>(wcslen(type) * sizeof(wchar_t)), &written, nullptr);
+       WriteFile(logFile, wbuffer, static_cast<DWORD>(wcslen(wbuffer) * sizeof(wchar_t)), &written, nullptr);
+       static const wchar_t newline[] = L"\r\n";
+       WriteFile(logFile, newline, static_cast<DWORD>((_countof(newline) - 1) * sizeof(wchar_t)), &written, nullptr);
+       CloseHandle(logFile);
+   }
 #endif  
 }  
 

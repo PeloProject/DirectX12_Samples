@@ -37,6 +37,15 @@ ID3D12GraphicsCommandList* Dx12RenderDevice::GetCommandList()
     return (s_activeInstance_ != nullptr) ? s_activeInstance_->commandList_.Get() : nullptr;
 }
 
+HRESULT Dx12RenderDevice::GetDeviceRemovedReason()
+{
+    if (s_activeInstance_ == nullptr || s_activeInstance_->device_ == nullptr)
+    {
+        return E_POINTER;
+    }
+    return s_activeInstance_->device_->GetDeviceRemovedReason();
+}
+
 #ifdef _DEBUG
 void Dx12RenderDevice::EnableDebugLayer()
 {
@@ -45,7 +54,7 @@ void Dx12RenderDevice::EnableDebugLayer()
         char* value = nullptr;
         size_t len = 0;
         const errno_t err = _dupenv_s(&value, &len, "DX12_DEBUG_LAYER");
-        const bool enabled = !(err == 0 && value != nullptr && strcmp(value, "0") == 0);
+        const bool enabled = (err == 0 && value != nullptr && strcmp(value, "1") == 0);
         if (value != nullptr)
         {
             free(value);
@@ -111,19 +120,13 @@ void Dx12RenderDevice::Shutdown()
 
     WaitForPreviousFrame();
 
-    swapChain_.Reset();
+    renderTargets_.clear();
+    primaryHwnd_ = nullptr;
     commandList_.Reset();
     commandAllocator_.Reset();
     commandQueue_.Reset();
-    rtvHeap_.Reset();
     fence_.Reset();
     adapter_.Reset();
-
-    for (auto& buffer : backBuffers_)
-    {
-        buffer.Reset();
-    }
-    backBuffers_.clear();
 
 #ifdef _DEBUG
     ComPtr<ID3D12DebugDevice> debugDevice;
@@ -172,12 +175,55 @@ void Dx12RenderDevice::ReportLiveDeviceObjects(ComPtr<ID3D12DebugDevice>& debugD
             DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
     }
 }
+
+void Dx12RenderDevice::DumpInfoQueueMessages(const char* context)
+{
+    if (device_ == nullptr)
+    {
+        return;
+    }
+
+    ComPtr<ID3D12InfoQueue> infoQueue;
+    if (FAILED(device_->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+    {
+        return;
+    }
+
+    const UINT64 messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+    for (UINT64 index = 0; index < messageCount; ++index)
+    {
+        SIZE_T messageLength = 0;
+        if (FAILED(infoQueue->GetMessage(index, nullptr, &messageLength)) || messageLength == 0)
+        {
+            continue;
+        }
+
+        std::vector<unsigned char> storage(messageLength);
+        D3D12_MESSAGE* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+        if (FAILED(infoQueue->GetMessage(index, message, &messageLength)))
+        {
+            continue;
+        }
+
+        LOG_DEBUG("D3D12InfoQueue[%s] severity=%u id=%d text=%s",
+            context != nullptr ? context : "unknown",
+            static_cast<unsigned int>(message->Severity),
+            static_cast<int>(message->ID),
+            message->pDescription != nullptr ? message->pDescription : "(null)");
+    }
+
+    if (messageCount > 0)
+    {
+        infoQueue->ClearStoredMessages();
+    }
+}
 #endif
 
 bool Dx12RenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
 {
     isShutdown_ = false;
     s_activeInstance_ = this;
+    primaryHwnd_ = hwnd;
 
 #ifdef _DEBUG
     EnableDebugLayer();
@@ -187,8 +233,11 @@ bool Dx12RenderDevice::Initialize(HWND hwnd, UINT width, UINT height)
     if (!CreateDevice()) return false;
     if (!CreateCommandList()) return false;
     if (!CreateCommandQueue()) return false;
-    if (!CreateSwapChain(hwnd, width, height)) return false;
-    if (!CreateRenderTargetView()) return false;
+    SwapChainRenderTarget primaryTarget = {};
+    primaryTarget.hwnd = hwnd;
+    if (!CreateSwapChain(primaryTarget, hwnd, width, height)) return false;
+    if (!CreateRenderTargetView(primaryTarget)) return false;
+    renderTargets_[hwnd] = std::move(primaryTarget);
     if (!CreateFence()) return false;
 
 	if (!DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get()))
@@ -205,20 +254,89 @@ bool Dx12RenderDevice::CreateGraphicsInterface()
 
 IDXGIAdapter* Dx12RenderDevice::GetAdapter()
 {
+    if (adapter_ != nullptr)
+    {
+        return adapter_.Get();
+    }
+
+    auto trySelectAdapter = [this](IDXGIAdapter1* candidate, bool allowSoftware) -> bool
+    {
+        if (candidate == nullptr)
+        {
+            return false;
+        }
+
+        DXGI_ADAPTER_DESC1 desc = {};
+        if (FAILED(candidate->GetDesc1(&desc)))
+        {
+            return false;
+        }
+        if (!allowSoftware && (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+        {
+            return false;
+        }
+        if (FAILED(D3D12CreateDevice(candidate, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), nullptr)))
+        {
+            return false;
+        }
+
+        adapter_ = candidate;
+        return true;
+    };
+
+    const bool forceWarp = []() -> bool
+    {
+        char* value = nullptr;
+        size_t len = 0;
+        const errno_t err = _dupenv_s(&value, &len, "DX12_FORCE_WARP");
+        const bool enabled = (err == 0 && value != nullptr && strcmp(value, "1") == 0);
+        if (value != nullptr)
+        {
+            free(value);
+        }
+        return enabled;
+    }();
+
+    if (forceWarp)
+    {
+        ComPtr<IDXGIAdapter> warpAdapter;
+        if (SUCCEEDED(dxgiFactory_->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter))))
+        {
+            ComPtr<IDXGIAdapter1> warpAdapter1;
+            if (SUCCEEDED(warpAdapter.As(&warpAdapter1)) && trySelectAdapter(warpAdapter1.Get(), true))
+            {
+                return adapter_.Get();
+            }
+        }
+    }
+
+    ComPtr<IDXGIFactory6> factory6;
+    if (SUCCEEDED(dxgiFactory_.As(&factory6)))
+    {
+        for (UINT i = 0;; ++i)
+        {
+            ComPtr<IDXGIAdapter1> candidate;
+            if (factory6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&candidate)) == DXGI_ERROR_NOT_FOUND)
+            {
+                break;
+            }
+            if (trySelectAdapter(candidate.Get(), false))
+            {
+                return adapter_.Get();
+            }
+        }
+    }
+
     for (UINT i = 0;; ++i)
     {
-        ComPtr<IDXGIAdapter> tempAdapter;
-        if (dxgiFactory_->EnumAdapters(i, &tempAdapter) == DXGI_ERROR_NOT_FOUND)
+        ComPtr<IDXGIAdapter1> candidate;
+        if (dxgiFactory_->EnumAdapters1(i, &candidate) == DXGI_ERROR_NOT_FOUND)
         {
             break;
         }
-        DXGI_ADAPTER_DESC desc;
-        tempAdapter->GetDesc(&desc);
-
-        if (desc.VendorId == 0x10DE)
+        if (trySelectAdapter(candidate.Get(), false))
         {
-            adapter_ = tempAdapter;
-            break;
+            return adapter_.Get();
         }
     }
 
@@ -273,7 +391,7 @@ bool Dx12RenderDevice::CreateCommandQueue()
     return SUCCEEDED(device_->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue_)));
 }
 
-bool Dx12RenderDevice::CreateSwapChain(HWND hwnd, UINT width, UINT height)
+bool Dx12RenderDevice::CreateSwapChain(SwapChainRenderTarget& target, HWND hwnd, UINT width, UINT height)
 {
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
     swapChainDesc.Width = width;
@@ -287,18 +405,27 @@ bool Dx12RenderDevice::CreateSwapChain(HWND hwnd, UINT width, UINT height)
     swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    swapChainDesc.Flags = 0;
 
-    return SUCCEEDED(dxgiFactory_->CreateSwapChainForHwnd(
+    target.hwnd = hwnd;
+
+    ComPtr<IDXGISwapChain1> swapChain;
+    const HRESULT hr = dxgiFactory_->CreateSwapChainForHwnd(
         commandQueue_.Get(),
         hwnd,
         &swapChainDesc,
         nullptr,
         nullptr,
-        reinterpret_cast<IDXGISwapChain1**>(swapChain_.GetAddressOf())));
+        swapChain.GetAddressOf());
+    if (FAILED(hr))
+    {
+        return false;
+    }
+
+    return SUCCEEDED(swapChain.As(&target.swapChain));
 }
 
-bool Dx12RenderDevice::CreateRenderTargetView()
+bool Dx12RenderDevice::CreateRenderTargetView(SwapChainRenderTarget& target)
 {
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
     rtvHeapDesc.NumDescriptors = 2;
@@ -306,30 +433,30 @@ bool Dx12RenderDevice::CreateRenderTargetView()
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     rtvHeapDesc.NodeMask = 0;
 
-    if (FAILED(device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvHeap_))))
+    if (FAILED(device_->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&target.rtvHeap))))
     {
         return false;
     }
 
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-    if (FAILED(swapChain_->GetDesc(&swapChainDesc)))
+    if (target.swapChain == nullptr || FAILED(target.swapChain->GetDesc(&swapChainDesc)))
     {
         return false;
     }
 
-    backBuffers_.resize(swapChainDesc.BufferCount);
+    target.backBuffers.resize(swapChainDesc.BufferCount);
     for (UINT i = 0; i < swapChainDesc.BufferCount; ++i)
     {
-        if (FAILED(swapChain_->GetBuffer(i, IID_PPV_ARGS(&backBuffers_[i]))))
+        if (FAILED(target.swapChain->GetBuffer(i, IID_PPV_ARGS(&target.backBuffers[i]))))
         {
             return false;
         }
     }
 
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = target.rtvHeap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < swapChainDesc.BufferCount; ++i)
     {
-        device_->CreateRenderTargetView(backBuffers_[i].Get(), nullptr, rtvHandle);
+        device_->CreateRenderTargetView(target.backBuffers[i].Get(), nullptr, rtvHandle);
         rtvHandle.ptr += device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     }
 
@@ -338,30 +465,52 @@ bool Dx12RenderDevice::CreateRenderTargetView()
 
 bool Dx12RenderDevice::Resize(UINT width, UINT height)
 {
-    if (swapChain_ == nullptr || width == 0 || height == 0)
+    SwapChainRenderTarget* target = FindRenderTarget(primaryHwnd_);
+    if (target == nullptr)
+    {
+        return false;
+    }
+
+    return ResizeRenderTarget(*target, width, height);
+}
+
+bool Dx12RenderDevice::ResizeRenderTarget(HWND hwnd, UINT width, UINT height)
+{
+    SwapChainRenderTarget* target = FindRenderTarget(hwnd);
+    if (target == nullptr)
+    {
+        return false;
+    }
+
+    return ResizeRenderTarget(*target, width, height);
+}
+
+bool Dx12RenderDevice::ResizeRenderTarget(SwapChainRenderTarget& target, UINT width, UINT height)
+{
+    if (target.swapChain == nullptr || width == 0 || height == 0)
     {
         return false;
     }
 
     WaitForPreviousFrame();
 
-    for (auto& buffer : backBuffers_)
+    for (auto& buffer : target.backBuffers)
     {
         buffer.Reset();
     }
-    backBuffers_.clear();
-    rtvHeap_.Reset();
+    target.backBuffers.clear();
+    target.rtvHeap.Reset();
 	//DescriptorHeapManager::Get().ResetGlobalTextureHeap();
 
-    const HRESULT hr = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    const HRESULT hr = target.swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (FAILED(hr))
     {
         return false;
     }
 
 	//DescriptorHeapManager::Get().InitializeGlobalTextureHeap(device_.Get());
-    barrierDesc_.Transition.pResource = nullptr;
-    return CreateRenderTargetView();
+    target.barrierDesc.Transition.pResource = nullptr;
+    return CreateRenderTargetView(target);
 }
 
 bool Dx12RenderDevice::CreateFence()
@@ -371,22 +520,38 @@ bool Dx12RenderDevice::CreateFence()
 
 void Dx12RenderDevice::PreRender(const float clearColor[4])
 {
-    if (swapChain_ == nullptr || backBuffers_.empty())
+    PreRenderTarget(primaryHwnd_, clearColor);
+}
+
+void Dx12RenderDevice::PreRenderTarget(HWND hwnd, const float clearColor[4])
+{
+    SwapChainRenderTarget* target = FindRenderTarget(hwnd);
+    if (target == nullptr)
     {
         return;
     }
 
-    const auto bbidx = swapChain_->GetCurrentBackBufferIndex();
+    PreRenderTarget(*target, clearColor);
+}
 
-    barrierDesc_.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrierDesc_.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrierDesc_.Transition.pResource = backBuffers_[bbidx].Get();
-    barrierDesc_.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrierDesc_.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-    barrierDesc_.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    commandList_->ResourceBarrier(1, &barrierDesc_);
+void Dx12RenderDevice::PreRenderTarget(SwapChainRenderTarget& target, const float clearColor[4])
+{
+    if (target.swapChain == nullptr || target.backBuffers.empty())
+    {
+        return;
+    }
 
-    auto rtvH = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+    const auto bbidx = target.swapChain->GetCurrentBackBufferIndex();
+
+    target.barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    target.barrierDesc.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    target.barrierDesc.Transition.pResource = target.backBuffers[bbidx].Get();
+    target.barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    target.barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    target.barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    commandList_->ResourceBarrier(1, &target.barrierDesc);
+
+    auto rtvH = target.rtvHeap->GetCPUDescriptorHandleForHeapStart();
     rtvH.ptr += bbidx * device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     commandList_->OMSetRenderTargets(1, &rtvH, true, nullptr);
 
@@ -397,26 +562,97 @@ void Dx12RenderDevice::PreRender(const float clearColor[4])
 
 void Dx12RenderDevice::Render()
 {
-    if (swapChain_ == nullptr || backBuffers_.empty())
+    RenderTarget(primaryHwnd_);
+}
+
+void Dx12RenderDevice::RenderTarget(HWND hwnd)
+{
+    SwapChainRenderTarget* target = FindRenderTarget(hwnd);
+    if (target == nullptr)
     {
         return;
     }
 
-    barrierDesc_.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrierDesc_.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-    commandList_->ResourceBarrier(1, &barrierDesc_);
+    RenderTarget(*target);
+}
+
+void Dx12RenderDevice::RenderTarget(SwapChainRenderTarget& target)
+{
+    if (target.swapChain == nullptr || target.backBuffers.empty())
+    {
+        return;
+    }
+
+    target.barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    target.barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+    commandList_->ResourceBarrier(1, &target.barrierDesc);
 
     commandList_->Close();
 
     ID3D12CommandList* commandLists[] = { commandList_.Get() };
     commandQueue_->ExecuteCommandLists(_countof(commandLists), commandLists);
 
+    const HRESULT presentHr = target.swapChain->Present(1, 0);
+
+#ifdef _DEBUG
+    if (FAILED(presentHr))
+    {
+        DumpInfoQueueMessages("Present");
+    }
+#endif
+
     WaitForPreviousFrame();
 
     commandAllocator_->Reset();
     commandList_->Reset(commandAllocator_.Get(), nullptr);
 
-    swapChain_->Present(1, 0);
+    if (FAILED(presentHr))
+    {
+        LOG_DEBUG("Present failed. hr=0x%08X", static_cast<unsigned int>(presentHr));
+    }
+}
+
+bool Dx12RenderDevice::CreateAdditionalRenderTarget(HWND hwnd, UINT width, UINT height)
+{
+    if (hwnd == nullptr || renderTargets_.find(hwnd) != renderTargets_.end())
+    {
+        return false;
+    }
+
+    SwapChainRenderTarget target = {};
+    target.hwnd = hwnd;
+    if (!CreateSwapChain(target, hwnd, width, height))
+    {
+        return false;
+    }
+    if (!CreateRenderTargetView(target))
+    {
+        return false;
+    }
+
+    renderTargets_[hwnd] = std::move(target);
+    return true;
+}
+
+void Dx12RenderDevice::DestroyAdditionalRenderTarget(HWND hwnd)
+{
+    if (hwnd == nullptr || hwnd == primaryHwnd_)
+    {
+        return;
+    }
+
+    WaitForPreviousFrame();
+    renderTargets_.erase(hwnd);
+}
+
+Dx12RenderDevice::SwapChainRenderTarget* Dx12RenderDevice::FindRenderTarget(HWND hwnd)
+{
+    const auto it = renderTargets_.find(hwnd);
+    if (it == renderTargets_.end())
+    {
+        return nullptr;
+    }
+    return &it->second;
 }
 
 void Dx12RenderDevice::WaitForPreviousFrame()

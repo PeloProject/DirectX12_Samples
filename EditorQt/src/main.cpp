@@ -1,4 +1,4 @@
-#include "EditorRuntimeHost.h"
+﻿#include "EditorRuntimeHost.h"
 #include "ImGuiEditorFrontend.h"
 #include "LaunchOptions.h"
 #include "QtEditorFrontend.h"
@@ -8,6 +8,15 @@
 
 #include <Windows.h>
 
+
+///=====================================================================
+/// <summary>
+/// メインエントリポイント
+/// </summary>
+/// <param name="argc"></param>
+/// <param name="argv"></param>
+/// <returns></returns>
+///=====================================================================
 int main(int argc, char* argv[])
 {
     const LaunchOptions options = ParseLaunchOptions(argc, argv);
@@ -19,7 +28,7 @@ int main(int argc, char* argv[])
         return RunStandaloneGameMode(runtime, baseDir);
     }
 
-    if (!runtime.load(baseDir))
+    if (!runtime.Load(baseDir))
     {
         MessageBoxW(nullptr,
             reinterpret_cast<LPCWSTR>(runtime.lastBridgeError().utf16()),

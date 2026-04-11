@@ -1,7 +1,9 @@
 ﻿#include "pch.h"
 #include "PolygonTest.h"
+#include "AppRuntime.h"
 #include "Source/Dx12RenderDevice.h"
 #include <algorithm>
+#include <sstream>
 #include <string>
 
 namespace
@@ -10,6 +12,13 @@ PipelineLibrary& GetPipelineLibrary()
 {
 	static PipelineLibrary library;
 	return library;
+}
+
+std::string FormatHResult(HRESULT hr)
+{
+	std::ostringstream stream;
+	stream << "0x" << std::hex << static_cast<unsigned int>(hr);
+	return stream.str();
 }
 }
 
@@ -20,11 +29,23 @@ PipelineLibrary& GetPipelineLibrary()
 //=========================================================================================
 QuadRenderObject::QuadRenderObject()
 {
-	ApplyQuadTransform();
+	ApplyQuadTransform(ViewportRenderMode::Game);
 
-	if (CreateMeshResources() != S_OK || InitializeMaterial() != S_OK)
+	const HRESULT meshHr = CreateMeshResources();
+	if (FAILED(meshHr))
 	{
-		throw std::runtime_error("QuadRenderObject initialization failed.");
+		const HRESULT removedReason = Dx12RenderDevice::GetDeviceRemovedReason();
+		throw std::runtime_error(
+			"QuadRenderObject mesh initialization failed. hr=" +
+			FormatHResult(meshHr) +
+			" removed=" +
+			FormatHResult(removedReason));
+	}
+
+	const HRESULT materialHr = InitializeMaterial();
+	if (FAILED(materialHr))
+	{
+		throw std::runtime_error("QuadRenderObject material initialization failed. hr=" + FormatHResult(materialHr));
 	}
 }
 
@@ -73,14 +94,29 @@ void QuadRenderObject::SetMaterialName(const std::string& materialName)
 /// m_quadTransformの中心座標と幅・高さに基づいて、四角形の4頂点の位置とUV座標をm_Verticesに設定するメンバ関数。
 /// </summary>
 ///=========================================================================================
-void QuadRenderObject::ApplyQuadTransform()
+void QuadRenderObject::ApplyQuadTransform(ViewportRenderMode viewportMode)
 {
-	const float halfWidth = m_quadTransform.width * 0.5f;
-	const float halfHeight = m_quadTransform.height * 0.5f;
-	const float left = m_quadTransform.centerX - halfWidth;
-	const float right = m_quadTransform.centerX + halfWidth;
-	const float bottom = m_quadTransform.centerY - halfHeight;
-	const float top = m_quadTransform.centerY + halfHeight;
+	float transformedCenterX = m_quadTransform.centerX;
+	float transformedCenterY = m_quadTransform.centerY;
+	float transformedWidth = m_quadTransform.width;
+	float transformedHeight = m_quadTransform.height;
+	TransformWorldQuadToViewportNdc(
+		viewportMode,
+		m_quadTransform.centerX,
+		m_quadTransform.centerY,
+		m_quadTransform.width,
+		m_quadTransform.height,
+		transformedCenterX,
+		transformedCenterY,
+		transformedWidth,
+		transformedHeight);
+
+	const float halfWidth = transformedWidth * 0.5f;
+	const float halfHeight = transformedHeight * 0.5f;
+	const float left = transformedCenterX - halfWidth;
+	const float right = transformedCenterX + halfWidth;
+	const float bottom = transformedCenterY - halfHeight;
+	const float top = transformedCenterY + halfHeight;
 
 	m_Vertices[0] = { { left, bottom, 0.0f }, { 0.0f, 1.0f } };
 	m_Vertices[1] = { { left, top, 0.0f }, { 0.0f, 0.0f } };
@@ -112,8 +148,14 @@ void QuadRenderObject::UploadVertexBufferData()
 /// <param name="heapProps">D3D12_HEAP_PROPERTIES 構造体。頂点バッファのためのヒープ割り当てのプロパティ（メモリ種類や作成方法など）を指定します。</param>
 /// <param name="resourceDesc">D3D12_RESOURCE_DESC 構造体。作成するリソースのサイズ、フォーマット、使用方法などの記述を指定します。</param>
 ///==========================================================================================
-void QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+HRESULT QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
+	ID3D12Device* device = Dx12RenderDevice::GetDevice();
+	if (device == nullptr)
+	{
+		return E_POINTER;
+	}
+
 	HRESULT hr = Dx12RenderDevice::GetDevice()->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
@@ -123,8 +165,11 @@ void QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps
 		IID_PPV_ARGS(&m_pVertexBuffer)
 	);
 	if (!SUCCEEDED(hr)) {
-		LOG_DEBUG("CreateVertexBuffer: CreateCommittedResource failed. hr=0x%08X", static_cast<unsigned int>(hr));
-		return;
+		const HRESULT removedReason = Dx12RenderDevice::GetDeviceRemovedReason();
+		LOG_DEBUG("CreateVertexBuffer: CreateCommittedResource failed. hr=0x%08X removed=0x%08X",
+			static_cast<unsigned int>(hr),
+			static_cast<unsigned int>(removedReason));
+		return hr;
 	}
 
 	Vertex* vertexMap = nullptr;
@@ -137,16 +182,24 @@ void QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapProps
 	else
 	{
 		LOG_DEBUG("CreateVertexBuffer: Map failed. hr=0x%08X", static_cast<unsigned int>(hr));
+		return hr;
 	}
 
 	m_VertexBufferView.BufferLocation = m_pVertexBuffer->GetGPUVirtualAddress();
 	m_VertexBufferView.SizeInBytes = sizeof(m_Vertices);
 	m_VertexBufferView.StrideInBytes = sizeof(m_Vertices[0]);
+	return S_OK;
 }
 
-void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
+HRESULT QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
-	HRESULT hr = Dx12RenderDevice::GetDeviceComPtr()->CreateCommittedResource(
+	ID3D12Device* device = Dx12RenderDevice::GetDevice();
+	if (device == nullptr)
+	{
+		return E_POINTER;
+	}
+
+	HRESULT hr = device->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
@@ -156,8 +209,11 @@ void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps,
 	);
 
 	if (!SUCCEEDED(hr)) {
-		LOG_DEBUG("CreateIndexBuffer: CreateCommittedResource failed. hr=0x%08X", static_cast<unsigned int>(hr));
-		return;
+		const HRESULT removedReason = Dx12RenderDevice::GetDeviceRemovedReason();
+		LOG_DEBUG("CreateIndexBuffer: CreateCommittedResource failed. hr=0x%08X removed=0x%08X",
+			static_cast<unsigned int>(hr),
+			static_cast<unsigned int>(removedReason));
+		return hr;
 	}
 
 	unsigned short indices[] = {
@@ -171,7 +227,7 @@ void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps,
 	hr = m_pIndexBuffer->Map(0, nullptr, reinterpret_cast<void**>(&indexMap));
 	if (!SUCCEEDED(hr)) {
 		LOG_DEBUG("CreateIndexBuffer: Map failed. hr=0x%08X", static_cast<unsigned int>(hr));
-		return;
+		return hr;
 	}
 
 	std::copy(std::begin(m_Indices), std::end(m_Indices), indexMap);
@@ -180,6 +236,7 @@ void QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps,
 	m_IndexBufferView.BufferLocation = m_pIndexBuffer->GetGPUVirtualAddress();
 	m_IndexBufferView.Format = DXGI_FORMAT_R16_UINT;
 	m_IndexBufferView.SizeInBytes = static_cast<UINT>(sizeof(m_Indices[0]) * m_Indices.size());
+	return S_OK;
 }
 
 ///=========================================================================================
@@ -210,8 +267,18 @@ HRESULT QuadRenderObject::CreateMeshResources()
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-	CreateVertexBuffer(heapProps, resourceDesc);
-	CreateIndexBuffer(heapProps, resourceDesc);
+	const HRESULT vertexHr = CreateVertexBuffer(heapProps, resourceDesc);
+	if (FAILED(vertexHr))
+	{
+		return vertexHr;
+	}
+
+	const HRESULT indexHr = CreateIndexBuffer(heapProps, resourceDesc);
+	if (FAILED(indexHr))
+	{
+		return indexHr;
+	}
+
 	if (m_pVertexBuffer == nullptr || m_pIndexBuffer == nullptr)
 	{
 		return E_FAIL;
@@ -243,14 +310,11 @@ HRESULT QuadRenderObject::InitializeMaterial()
 /// 描画
 /// </summary>
 //=========================================================================================
-void QuadRenderObject::Render()
+void QuadRenderObject::Render(ViewportRenderMode viewportMode)
 {
-	if (m_isVertexDirty)
-	{
-		ApplyQuadTransform();
-		UploadVertexBufferData();
-		m_isVertexDirty = false;
-	}
+	ApplyQuadTransform(viewportMode);
+	UploadVertexBufferData();
+	m_isVertexDirty = false;
 
 	ID3D12GraphicsCommandList* commandList = Dx12RenderDevice::GetCommandList();
 	if (commandList == nullptr)

@@ -14,7 +14,7 @@ public:
 	void ChangeScene(int sceneID);
 
 	void Update(float deltaTime);
-	void Render();
+	void Render(ViewportRenderMode viewportMode);
 
 private:
 	int m_NextSceneID = -1;

@@ -77,8 +77,8 @@ internal sealed class SpriteRendererSystem
                     if (spriteRenderer.TextureHandle.IsValid)
                     {
                         NativeMethods.SetSpriteRendererTexture(spriteRenderer.NativeSpriteRendererHandle, spriteRenderer.TextureHandle.Value);
+                        spriteRenderer.AppliedTexture = spriteRenderer.Texture;
                     }
-                    spriteRenderer.AppliedTexture = spriteRenderer.Texture;
                 }
 
                 // ゲームオブジェクトのトランスフォームが変更されているかどうかを判断するためのロジックはここでは省略していますが、必要に応じて追加できます。

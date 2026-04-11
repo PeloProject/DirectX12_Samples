@@ -46,13 +46,13 @@ namespace
         /// @brief 描画
         /// @param renderDevice 
         ///===================================================
-        void Render(IRenderDevice* renderDevice) override
+        void Render(IRenderDevice* renderDevice, ViewportRenderMode viewportMode) override
         {
             if (renderer_ == nullptr)
             {
                 return;
             }
-            renderer_->Render(renderDevice);
+            renderer_->Render(renderDevice, viewportMode);
         }
 
     private:

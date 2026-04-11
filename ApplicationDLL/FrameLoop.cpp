@@ -14,10 +14,13 @@
 
 #include <string>
 #include <tchar.h>
+#include <algorithm>
+#include <unordered_map>
 
 namespace
 {
     constexpr float kDefaultSceneClearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    std::unordered_map<HWND, SIZE> g_viewportSizes;
 
     bool SetRendererBackendFromEditorUi(uint32_t backend)
     {
@@ -33,16 +36,64 @@ namespace
     {
         EditorUi::EndSceneRenderToTexture();
     }
+
+    void RenderRuntimeSceneToWindow(HWND hwnd)
+    {
+        if (hwnd == NULL || RuntimeStateRef().g_renderDevice == nullptr)
+        {
+            return;
+        }
+        if (!IsWindow(hwnd) || !IsWindowVisible(hwnd))
+        {
+            return;
+        }
+
+        RECT clientRect = {};
+        if (GetClientRect(hwnd, &clientRect))
+        {
+            const LONG clientWidth = clientRect.right - clientRect.left;
+            const LONG clientHeight = clientRect.bottom - clientRect.top;
+            if (clientWidth <= 0 || clientHeight <= 0)
+            {
+                return;
+            }
+
+            const UINT width = static_cast<UINT>((std::max)(1L, clientWidth));
+            const UINT height = static_cast<UINT>((std::max)(1L, clientHeight));
+            auto& cachedSize = g_viewportSizes[hwnd];
+            if (cachedSize.cx != static_cast<LONG>(width) || cachedSize.cy != static_cast<LONG>(height))
+            {
+                if (hwnd == RuntimeStateRef().g_hwnd)
+                {
+                    Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
+                    EditorUi::RequestSceneRenderSize(width, height);
+                }
+                RuntimeStateRef().g_renderDevice->ResizeRenderTarget(hwnd, width, height);
+                cachedSize.cx = static_cast<LONG>(width);
+                cachedSize.cy = static_cast<LONG>(height);
+            }
+
+            Application::SetWindowSize(
+                static_cast<int>(width),
+                static_cast<int>(height));
+        }
+
+        const ViewportRenderMode viewportMode = ResolveViewportRenderMode(hwnd);
+        RuntimeStateRef().g_renderDevice->PreRenderTarget(hwnd, RuntimeStateRef().g_gameClearColor);
+        SceneManager::GetInstance().Render(viewportMode);
+        RenderSpriteRenderers(viewportMode);
+        RuntimeStateRef().g_renderDevice->RenderTarget(hwnd);
+    }
 }
 
-void RenderSpriteRenderers()
+void RenderSpriteRenderers(ViewportRenderMode viewportMode)
 {
     RuntimeState& state = RuntimeStateRef();
     for (auto& spriteRendererEntry : state.g_spriteRenderers)
     {
         if (spriteRendererEntry.second != nullptr)
         {
-            spriteRendererEntry.second->Render(state.g_renderDevice.get());
+            spriteRendererEntry.second->Render(state.g_renderDevice.get(), viewportMode);
         }
     }
 }
@@ -147,7 +198,27 @@ void AppRuntime::SetSpriteRendererMaterial(uint32_t handle, const char* material
 
 TextureHandle AppRuntime::AcquireTextureHandle(const char* texturePath)
 {
-    return TextureAssetManager::Get().AcquireTexture(texturePath);
+    const TextureHandle handle = TextureAssetManager::Get().AcquireTexture(texturePath);
+    if (handle == 0)
+    {
+        if (RuntimeStateRef().g_rendererBackend != RendererBackend::DirectX12)
+        {
+            RuntimeStateRef().g_pieGameStatus =
+                std::string("Texture skipped on ") +
+                RendererBackendToString(RuntimeStateRef().g_rendererBackend) +
+                ": " +
+                (texturePath != nullptr ? texturePath : "(null)");
+        }
+        else
+        {
+            RuntimeStateRef().g_pieGameStatus = std::string("Texture acquire failed: ") + (texturePath != nullptr ? texturePath : "(null)");
+        }
+    }
+    else
+    {
+        RuntimeStateRef().g_pieGameStatus = std::string("Texture acquired: ") + (texturePath != nullptr ? texturePath : "(null)") + " handle=" + std::to_string(handle);
+    }
+    return handle;
 }
 
 void AppRuntime::ReleaseTextureHandle(TextureHandle textureHandle)
@@ -206,13 +277,15 @@ void AppRuntime::MessageLoopIteration()
 
     const bool isNonDxBackend = (activeRenderBackend != RendererBackend::DirectX12);
 
+    bool framePresentedExplicitly = false;
+
     if (activeRenderBackend == RendererBackend::DirectX12)
     {
         if (RuntimeStateRef().g_imguiInitialized)
         {
             BeginSceneRenderToTexture();
-            SceneManager::GetInstance().Render();
-            RenderSpriteRenderers();
+            SceneManager::GetInstance().Render(ViewportRenderMode::Scene);
+            RenderSpriteRenderers(ViewportRenderMode::Scene);
             EndSceneRenderToTexture();
 
             if (RuntimeStateRef().g_renderDevice != nullptr)
@@ -222,10 +295,10 @@ void AppRuntime::MessageLoopIteration()
         }
         else if (RuntimeStateRef().g_renderDevice != nullptr)
         {
-            // When no editor UI is active, render directly into the swapchain backbuffer.
-            RuntimeStateRef().g_renderDevice->PreRender(RuntimeStateRef().g_gameClearColor);
-            SceneManager::GetInstance().Render();
-            RenderSpriteRenderers();
+            // Qt editor mode disables the DLL UI; render the same runtime scene into every native viewport.
+            RenderRuntimeSceneToWindow(RuntimeStateRef().g_hwnd);
+            RenderRuntimeSceneToWindow(RuntimeStateRef().g_gameHwnd);
+            framePresentedExplicitly = true;
         }
     }
     else if (RuntimeStateRef().g_renderDevice != nullptr)
@@ -235,8 +308,8 @@ void AppRuntime::MessageLoopIteration()
 
     if (isNonDxBackend)
     {
-        SceneManager::GetInstance().Render();
-        RenderSpriteRenderers();
+        SceneManager::GetInstance().Render(ViewportRenderMode::Game);
+        RenderSpriteRenderers(ViewportRenderMode::Game);
 
         if (RuntimeStateRef().g_imguiInitialized && RuntimeStateRef().g_renderDevice != nullptr)
         {
@@ -290,7 +363,7 @@ void AppRuntime::MessageLoopIteration()
         }
     }
 
-    if (RuntimeStateRef().g_renderDevice != nullptr)
+    if (RuntimeStateRef().g_renderDevice != nullptr && !framePresentedExplicitly)
     {
         RuntimeStateRef().g_renderDevice->Render();
     }

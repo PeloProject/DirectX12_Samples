@@ -237,9 +237,22 @@ LRESULT AppRuntime::HandleWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     case WM_DESTROY:
         if (hwnd == RuntimeStateRef().g_hwnd)
         {
+            if (RuntimeStateRef().g_gameHwnd != NULL)
+            {
+                DestroyWindow(RuntimeStateRef().g_gameHwnd);
+                RuntimeStateRef().g_gameHwnd = NULL;
+            }
             ShutdownRendererAndUi();
             RuntimeStateRef().g_hwnd = NULL;
             RuntimeStateRef().g_rendererBackendLocked = false;
+        }
+        else if (hwnd == RuntimeStateRef().g_gameHwnd)
+        {
+            if (RuntimeStateRef().g_renderDevice != nullptr)
+            {
+                RuntimeStateRef().g_renderDevice->DestroyAdditionalRenderTarget(hwnd);
+            }
+            RuntimeStateRef().g_gameHwnd = NULL;
         }
         return 0;
     default:
@@ -333,7 +346,75 @@ HWND AppRuntime::CreateNativeWindow()
                 static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top)));
         }
 
-        InitializeRendererAndUi(RuntimeStateRef().g_displayRendererBackend);
+        if (!InitializeRendererAndUi(RuntimeStateRef().g_displayRendererBackend))
+        {
+            DestroyWindow(RuntimeStateRef().g_hwnd);
+            RuntimeStateRef().g_hwnd = NULL;
+            RuntimeStateRef().g_rendererBackendLocked = false;
+            return NULL;
+        }
+
+        SceneManager::GetInstance().ChangeScene(0);
+    }
+    OutputDebugStringA("=== Main Loop START ===\n");
+    return RuntimeStateRef().g_hwnd;
+}
+
+HWND AppRuntime::CreateNativeChildWindow(HWND parentHwnd, UINT width, UINT height)
+{
+    if (parentHwnd == NULL)
+    {
+        return NULL;
+    }
+    if (RuntimeStateRef().g_hwnd != NULL)
+    {
+        return RuntimeStateRef().g_hwnd;
+    }
+
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    LPCTSTR className = GetWindowClassName();
+
+    WNDCLASS wc = {};
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = className;
+    wc.hbrBackground = NULL;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+
+    if (RegisterClass(&wc) == 0)
+    {
+        const DWORD registerError = GetLastError();
+        if (registerError != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            LOG_DEBUG("RegisterClass failed: %lu", registerError);
+            return NULL;
+        }
+    }
+
+    RuntimeStateRef().g_rendererBackend = ResolveRendererBackendFromEnvironment(RuntimeStateRef().g_rendererBackend);
+    RuntimeStateRef().g_rendererBackendLocked = true;
+
+    const UINT safeWidth = (std::max)(1u, width);
+    const UINT safeHeight = (std::max)(1u, height);
+    RuntimeStateRef().g_hwnd = parentHwnd;
+    RuntimeStateRef().g_ownsHwnd = false;
+
+    if (RuntimeStateRef().g_hwnd != NULL)
+    {
+        Application::SetWindowSize(static_cast<int>(safeWidth), static_cast<int>(safeHeight));
+        EditorUi::RequestSceneRenderSize(safeWidth, safeHeight);
+
+        if (!InitializeRendererAndUi(RuntimeStateRef().g_displayRendererBackend))
+        {
+            RuntimeStateRef().g_hwnd = NULL;
+            RuntimeStateRef().g_ownsHwnd = true;
+            RuntimeStateRef().g_rendererBackendLocked = false;
+            return NULL;
+        }
 
         SceneManager::GetInstance().ChangeScene(0);
     }
@@ -346,7 +427,7 @@ HWND AppRuntime::CreateNativeWindow()
 ///=====================================================================
 void AppRuntime::ShowNativeWindow()
 {
-    if (RuntimeStateRef().g_hwnd == NULL)
+    if (RuntimeStateRef().g_hwnd == NULL || !RuntimeStateRef().g_ownsHwnd)
     {
         return;
     }
@@ -355,12 +436,94 @@ void AppRuntime::ShowNativeWindow()
     
 }
 
+HWND AppRuntime::CreateGameNativeWindow()
+{
+    if (RuntimeStateRef().g_hwnd == NULL || RuntimeStateRef().g_renderDevice == nullptr)
+    {
+        return NULL;
+    }
+    if (RuntimeStateRef().g_gameHwnd != NULL)
+    {
+        return RuntimeStateRef().g_gameHwnd;
+    }
+
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    LPCTSTR className = GetWindowClassName();
+
+    RECT windowRect = { 0, 0, Application::GetWindowWidth(), Application::GetWindowHeight() };
+    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+
+    HWND hwnd = CreateWindow(
+        className,
+        _T("Game View"),
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        windowRect.right - windowRect.left,
+        windowRect.bottom - windowRect.top,
+        NULL, NULL,
+        hInstance,
+        NULL);
+    RuntimeStateRef().g_ownsGameHwnd = true;
+
+    if (hwnd == NULL)
+    {
+        return NULL;
+    }
+
+    RECT clientRect = {};
+    UINT width = static_cast<UINT>(Application::GetWindowWidth());
+    UINT height = static_cast<UINT>(Application::GetWindowHeight());
+    if (GetClientRect(hwnd, &clientRect))
+    {
+        width = static_cast<UINT>((std::max)(1L, clientRect.right - clientRect.left));
+        height = static_cast<UINT>((std::max)(1L, clientRect.bottom - clientRect.top));
+    }
+
+    if (!RuntimeStateRef().g_renderDevice->CreateAdditionalRenderTarget(hwnd, width, height))
+    {
+        DestroyWindow(hwnd);
+        return NULL;
+    }
+
+    RuntimeStateRef().g_gameHwnd = hwnd;
+    RuntimeStateRef().g_ownsGameHwnd = true;
+    ShowWindow(RuntimeStateRef().g_gameHwnd, SW_SHOW);
+    UpdateWindow(RuntimeStateRef().g_gameHwnd);
+    return hwnd;
+}
+
+HWND AppRuntime::CreateGameNativeChildWindow(HWND parentHwnd, UINT width, UINT height)
+{
+    if (parentHwnd == NULL || RuntimeStateRef().g_hwnd == NULL || RuntimeStateRef().g_renderDevice == nullptr)
+    {
+        return NULL;
+    }
+    if (RuntimeStateRef().g_gameHwnd != NULL)
+    {
+        return RuntimeStateRef().g_gameHwnd;
+    }
+
+    const UINT safeWidth = (std::max)(1u, width);
+    const UINT safeHeight = (std::max)(1u, height);
+    HWND hwnd = parentHwnd;
+
+    if (!RuntimeStateRef().g_renderDevice->CreateAdditionalRenderTarget(hwnd, safeWidth, safeHeight))
+    {
+        DestroyWindow(hwnd);
+        return NULL;
+    }
+
+    RuntimeStateRef().g_gameHwnd = hwnd;
+    RuntimeStateRef().g_ownsGameHwnd = false;
+    return hwnd;
+}
+
 ///=====================================================================
 /// @brief ウィンドウの非表示
 ///=====================================================================
 void AppRuntime::HideNativeWindow()
 {
-    if (RuntimeStateRef().g_hwnd == NULL)
+    if (RuntimeStateRef().g_hwnd == NULL || !RuntimeStateRef().g_ownsHwnd)
     {
         return;
     }
@@ -378,11 +541,36 @@ void AppRuntime::DestroyNativeWindow()
     }
 
     m_PlayInEditor.StopImmediate();
+    DestroyGameNativeWindow();
     ShutdownImGui();
     ShutdownRendererAndUi();
-    DestroyWindow(RuntimeStateRef().g_hwnd);
+    if (RuntimeStateRef().g_ownsHwnd)
+    {
+        DestroyWindow(RuntimeStateRef().g_hwnd);
+    }
     RuntimeStateRef().g_hwnd = NULL;
+    RuntimeStateRef().g_ownsHwnd = true;
     RuntimeStateRef().g_rendererBackendLocked = false;
+}
+
+void AppRuntime::DestroyGameNativeWindow()
+{
+    if (RuntimeStateRef().g_gameHwnd == NULL)
+    {
+        return;
+    }
+
+    const HWND gameHwnd = RuntimeStateRef().g_gameHwnd;
+    if (RuntimeStateRef().g_renderDevice != nullptr)
+    {
+        RuntimeStateRef().g_renderDevice->DestroyAdditionalRenderTarget(gameHwnd);
+    }
+    RuntimeStateRef().g_gameHwnd = NULL;
+    if (RuntimeStateRef().g_ownsGameHwnd)
+    {
+        DestroyWindow(gameHwnd);
+    }
+    RuntimeStateRef().g_ownsGameHwnd = true;
 }
 
 ///=====================================================================
@@ -408,6 +596,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
     const RendererBackend targetBackend = RuntimeStateRef().g_pendingRendererBackend;
     const RendererBackend previousBackend = RuntimeStateRef().g_rendererBackend;
     const bool wasPieRunning = m_PlayInEditor.IsPieRunning();
+    const bool hadGameWindow = RuntimeStateRef().g_gameHwnd != NULL;
     LOG_DEBUG("ApplyPendingRendererSwitch: %s -> %s",
         RendererBackendToString(previousBackend),
         RendererBackendToString(targetBackend));
@@ -419,6 +608,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
 
     m_PlayInEditor.StopImmediate();
     LOG_DEBUG("ApplyPendingRendererSwitch: StopPieImmediate done");
+    DestroyGameNativeWindow();
     ShutdownRendererAndUi();
     LOG_DEBUG("ApplyPendingRendererSwitch: ShutdownRendererAndUi done");
     const bool needsWindowRecreate = true;
@@ -453,6 +643,10 @@ bool AppRuntime::ApplyPendingRendererSwitch()
         {
             m_PlayInEditor.StartImmediate();
         }
+        if (hadGameWindow)
+        {
+            CreateGameNativeWindow();
+        }
         return false;
     }
 
@@ -466,6 +660,10 @@ bool AppRuntime::ApplyPendingRendererSwitch()
     {
         m_PlayInEditor.StartImmediate();
     }
+    if (hadGameWindow)
+    {
+        CreateGameNativeWindow();
+    }
     LOG_DEBUG("ApplyPendingRendererSwitch: success");
 
 	RuntimeStateRef().g_rendererBackend = targetBackend;
@@ -477,7 +675,7 @@ bool AppRuntime::ApplyPendingRendererSwitch()
 ///=====================================================================
 void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (hwnd != RuntimeStateRef().g_hwnd)
+    if (hwnd != RuntimeStateRef().g_hwnd && hwnd != RuntimeStateRef().g_gameHwnd)
     {
         return;
     }
@@ -487,11 +685,14 @@ void AppRuntime::ChangeWindowSize(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     {
         LOG_DEBUG("ChangeWindowSize: backend=%s width=%u height=%u",
             RendererBackendToString(RuntimeStateRef().g_rendererBackend), width, height);
-        Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
-        EditorUi::RequestSceneRenderSize(width, height);
+        if (hwnd == RuntimeStateRef().g_hwnd)
+        {
+            Application::SetWindowSize(static_cast<int>(width), static_cast<int>(height));
+            EditorUi::RequestSceneRenderSize(width, height);
+        }
         if (RuntimeStateRef().g_renderDevice != nullptr)
         {
-            const bool resized = RuntimeStateRef().g_renderDevice->Resize(width, height);
+            const bool resized = RuntimeStateRef().g_renderDevice->ResizeRenderTarget(hwnd, width, height);
             LOG_DEBUG("ChangeWindowSize: renderDevice->Resize result=%d", resized ? 1 : 0);
         }
         if (RuntimeStateRef().g_imguiInitialized)

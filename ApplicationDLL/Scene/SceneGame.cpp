@@ -15,6 +15,7 @@ void SceneGame::Update(float deltaTime)
 
 }
 
-void SceneGame::Render()
+void SceneGame::Render(ViewportRenderMode viewportMode)
 {
+    (void)viewportMode;
 }

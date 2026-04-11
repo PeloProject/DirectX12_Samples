@@ -1,4 +1,4 @@
-#include "RuntimeBridge.h"
+﻿#include "RuntimeBridge.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,14 +14,23 @@ RuntimeBridge::RuntimeBridge() = default;
 
 RuntimeBridge::~RuntimeBridge()
 {
-    unload();
+    Unload();
 }
 
-bool RuntimeBridge::load(const QString& baseDir, const QString& instanceTag)
+///================================================================================================
+/// <summary>
+/// Windows環境において、指定されたベースディレクトリからアプリケーションDLLをロードします。
+/// </summary>
+/// <param name="baseDir"></param>
+/// <param name="instanceTag"></param>
+/// <returns></returns>
+///================================================================================================
+bool RuntimeBridge::Load(const QString& baseDir, const QString& instanceTag)
 {
 #ifdef _WIN32
-    unload();
+    Unload();
 
+	// アプリケーションDLLのパスを構築
     const QString sourceDllPath = QDir(baseDir).filePath(QStringLiteral("ApplicationDLL.dll"));
     if (!QFileInfo::exists(sourceDllPath))
     {
@@ -65,6 +74,7 @@ bool RuntimeBridge::load(const QString& baseDir, const QString& instanceTag)
 
     bool ok = true;
     ok = resolve(createNativeWindow_, "CreateNativeWindow") && ok;
+    ok = resolve(createNativeChildWindow_, "CreateNativeChildWindow") && ok;
     ok = resolve(showNativeWindow_, "ShowNativeWindow") && ok;
     ok = resolve(hideNativeWindow_, "HideNativeWindow") && ok;
     ok = resolve(destroyNativeWindow_, "DestroyNativeWindow") && ok;
@@ -73,16 +83,26 @@ bool RuntimeBridge::load(const QString& baseDir, const QString& instanceTag)
     ok = resolve(stopPie_, "StopPie") && ok;
     ok = resolve(setEditorUiEnabled_, "SetEditorUiEnabled") && ok;
     ok = resolve(setStandaloneMode_, "SetStandaloneMode") && ok;
+    ok = resolve(setSceneViewportCamera_, "SetSceneViewportCamera") && ok;
+    ok = resolve(getSceneViewportCamera_, "GetSceneViewportCamera") && ok;
+    ok = resolve(setSceneViewportRotation_, "SetSceneViewportRotation") && ok;
+    ok = resolve(getSceneViewportRotation_, "GetSceneViewportRotation") && ok;
+    ok = resolve(setGameViewportCamera_, "SetGameViewportCamera") && ok;
+    ok = resolve(getGameViewportCamera_, "GetGameViewportCamera") && ok;
     ok = resolve(isPieRunning_, "IsPieRunning") && ok;
     ok = resolve(setRendererBackend_, "SetRendererBackend") && ok;
     ok = resolve(getRendererBackend_, "GetRendererBackend") && ok;
     ok = resolve(getRuntimeStatusText_, "GetRuntimeStatusText") && ok;
     ok = resolve(getRuntimeLastErrorText_, "GetRuntimeLastErrorText") && ok;
     ok = resolve(getNativeWindowHandle_, "GetNativeWindowHandle") && ok;
+    ok = resolve(createGameNativeWindow_, "CreateGameNativeWindow") && ok;
+    ok = resolve(createGameNativeChildWindow_, "CreateGameNativeChildWindow") && ok;
+    ok = resolve(destroyGameNativeWindow_, "DestroyGameNativeWindow") && ok;
+    ok = resolve(getGameNativeWindowHandle_, "GetGameNativeWindowHandle") && ok;
 
     if (!ok)
     {
-        unload();
+        Unload();
         return false;
     }
 
@@ -130,12 +150,96 @@ bool RuntimeBridge::createNativeWindow(bool enableEditorUi)
 #endif
 }
 
+bool RuntimeBridge::createNativeWindowInParent(HWND parentHwnd, unsigned int width, unsigned int height, bool enableEditorUi)
+{
+#ifdef _WIN32
+    if (!isLoaded())
+    {
+        setLastError(QStringLiteral("ApplicationDLL.dll is not loaded."));
+        return false;
+    }
+
+    setEditorUiEnabled(enableEditorUi);
+    if (createNativeChildWindow_ == nullptr || createNativeChildWindow_(parentHwnd, width, height) == nullptr)
+    {
+        setLastError(runtimeStatus());
+        return false;
+    }
+
+    lastError_.clear();
+    return true;
+#else
+    Q_UNUSED(parentHwnd);
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+    Q_UNUSED(enableEditorUi);
+    return false;
+#endif
+}
+
 void RuntimeBridge::destroyNativeWindow()
 {
 #ifdef _WIN32
     if (destroyNativeWindow_ != nullptr)
     {
         destroyNativeWindow_();
+    }
+#endif
+}
+
+bool RuntimeBridge::createGameNativeWindow()
+{
+#ifdef _WIN32
+    if (!isLoaded())
+    {
+        setLastError(QStringLiteral("ApplicationDLL.dll is not loaded."));
+        return false;
+    }
+
+    if (createGameNativeWindow_ == nullptr || createGameNativeWindow_() == nullptr)
+    {
+        setLastError(runtimeStatus());
+        return false;
+    }
+
+    lastError_.clear();
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool RuntimeBridge::createGameNativeWindowInParent(HWND parentHwnd, unsigned int width, unsigned int height)
+{
+#ifdef _WIN32
+    if (!isLoaded())
+    {
+        setLastError(QStringLiteral("ApplicationDLL.dll is not loaded."));
+        return false;
+    }
+
+    if (createGameNativeChildWindow_ == nullptr || createGameNativeChildWindow_(parentHwnd, width, height) == nullptr)
+    {
+        setLastError(runtimeStatus());
+        return false;
+    }
+
+    lastError_.clear();
+    return true;
+#else
+    Q_UNUSED(parentHwnd);
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+    return false;
+#endif
+}
+
+void RuntimeBridge::destroyGameNativeWindow()
+{
+#ifdef _WIN32
+    if (destroyGameNativeWindow_ != nullptr)
+    {
+        destroyGameNativeWindow_();
     }
 #endif
 }
@@ -156,6 +260,83 @@ void RuntimeBridge::hideNativeWindow()
     if (hideNativeWindow_ != nullptr)
     {
         hideNativeWindow_();
+    }
+#endif
+}
+
+void RuntimeBridge::setSceneViewportCamera(float centerX, float centerY, float zoom)
+{
+#ifdef _WIN32
+    if (setSceneViewportCamera_ != nullptr)
+    {
+        setSceneViewportCamera_(centerX, centerY, zoom);
+    }
+#else
+    Q_UNUSED(centerX);
+    Q_UNUSED(centerY);
+    Q_UNUSED(zoom);
+#endif
+}
+
+void RuntimeBridge::getSceneViewportCamera(float& centerX, float& centerY, float& zoom) const
+{
+    centerX = 0.0f;
+    centerY = 0.0f;
+    zoom = 1.0f;
+#ifdef _WIN32
+    if (getSceneViewportCamera_ != nullptr)
+    {
+        getSceneViewportCamera_(&centerX, &centerY, &zoom);
+    }
+#endif
+}
+
+void RuntimeBridge::setSceneViewportRotation(float rotationDegrees)
+{
+#ifdef _WIN32
+    if (setSceneViewportRotation_ != nullptr)
+    {
+        setSceneViewportRotation_(rotationDegrees);
+    }
+#else
+    Q_UNUSED(rotationDegrees);
+#endif
+}
+
+float RuntimeBridge::sceneViewportRotation() const
+{
+#ifdef _WIN32
+    if (getSceneViewportRotation_ != nullptr)
+    {
+        return getSceneViewportRotation_();
+    }
+#endif
+    return 0.0f;
+}
+
+void RuntimeBridge::setGameViewportCamera(float centerX, float centerY, float zoom)
+{
+#ifdef _WIN32
+    if (setGameViewportCamera_ != nullptr)
+    {
+        setGameViewportCamera_(centerX, centerY, zoom);
+    }
+#else
+    Q_UNUSED(centerX);
+    Q_UNUSED(centerY);
+    Q_UNUSED(zoom);
+#endif
+}
+
+void RuntimeBridge::getGameViewportCamera(float& centerX, float& centerY, float& zoom) const
+{
+    centerX = 0.0f;
+    centerY = 0.0f;
+    zoom = 1.0f;
+#ifdef _WIN32
+    if (getGameViewportCamera_ != nullptr)
+    {
+        getGameViewportCamera_(&centerX, &centerY, &zoom);
     }
 #endif
 }
@@ -278,10 +459,29 @@ HWND RuntimeBridge::nativeWindowHandle() const
 #endif
 }
 
+HWND RuntimeBridge::gameNativeWindowHandle() const
+{
+#ifdef _WIN32
+    return getGameNativeWindowHandle_ != nullptr ? getGameNativeWindowHandle_() : nullptr;
+#else
+    return nullptr;
+#endif
+}
+
 bool RuntimeBridge::isNativeWindowValid() const
 {
 #ifdef _WIN32
     const HWND hwnd = nativeWindowHandle();
+    return hwnd != nullptr && IsWindow(hwnd) != FALSE;
+#else
+    return false;
+#endif
+}
+
+bool RuntimeBridge::isGameNativeWindowValid() const
+{
+#ifdef _WIN32
+    const HWND hwnd = gameNativeWindowHandle();
     return hwnd != nullptr && IsWindow(hwnd) != FALSE;
 #else
     return false;
@@ -311,7 +511,7 @@ QString RuntimeBridge::fromUtf8(const char* text) const
     return QString::fromUtf8(text != nullptr ? text : "");
 }
 
-void RuntimeBridge::unload()
+void RuntimeBridge::Unload()
 {
 #ifdef _WIN32
     if (module_ != nullptr)
@@ -335,6 +535,9 @@ void RuntimeBridge::unload()
     getRuntimeStatusText_ = nullptr;
     getRuntimeLastErrorText_ = nullptr;
     getNativeWindowHandle_ = nullptr;
+    createGameNativeWindow_ = nullptr;
+    destroyGameNativeWindow_ = nullptr;
+    getGameNativeWindowHandle_ = nullptr;
 
     loadedModulePath_.clear();
     if (!copiedModulePath_.isEmpty())

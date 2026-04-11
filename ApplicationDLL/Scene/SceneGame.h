@@ -7,5 +7,5 @@ public:
 	SceneGame();
 	virtual ~SceneGame() {}
 	virtual void Update(float deltaTime) override;
-	virtual void Render() override;
+	virtual void Render(ViewportRenderMode viewportMode) override;
 };
