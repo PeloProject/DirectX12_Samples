@@ -176,7 +176,7 @@ bool InitializeDirectX(HWND hwnd)
 
 	swapChainDesc.Width = 800; // ウィンドウの幅
 	swapChainDesc.Height = 600; // ウィンドウの高さ
-	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // バッファのフォーマット
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // バッファのフォーマット
 	swapChainDesc.Stereo = false; // ステレオ表示はしない
 	
 	

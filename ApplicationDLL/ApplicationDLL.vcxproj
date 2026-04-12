@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -132,7 +132,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);$(VULKAN_SDK)\Include;$(DXTEX_DIR);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'!=''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);$(VULKAN_SDK)\Include;$(DXTEX_DIR);$(DXTEX_DIR)\..\Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(VULKAN_SDK)'==''">$(ProjectDir)\Source;$(ProjectDir)\Source\Scene;$(ProjectDir)\Source\Math;$(ProjectDir)\ThirdParty\imgui;$(ProjectDir)\ThirdParty\imgui\backends;$(ProjectDir)\ThirdParty\glad\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <ForcedIncludeFiles>math.h</ForcedIncludeFiles>
@@ -168,6 +168,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Analyzer\PMDAnalyzer.h" />
     <ClInclude Include="AppRuntime.h" />
     <ClInclude Include="Renderer\RootSignatureCache.h" />
     <ClInclude Include="Renderer\ShaderCache.h" />
@@ -213,6 +214,7 @@
     <ClInclude Include="WinHandleRAII.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Analyzer\PMDAnalyzer.cpp" />
     <ClCompile Include="AppRuntime.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="Renderer\RootSignatureCache.cpp" />

@@ -26,7 +26,7 @@
 #include <stdexcept>
 #include <wrl/client.h>
 #include <DirectXTex.h>
-
+#include <d3dx12.h>
 #include "Application.h"
 
 // @brief コンソール画面にフォーマット付き文字列を出力する関数  

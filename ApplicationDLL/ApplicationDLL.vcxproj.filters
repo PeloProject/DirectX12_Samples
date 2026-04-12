@@ -58,6 +58,12 @@
     <Filter Include="ソース ファイル\Renderer">
       <UniqueIdentifier>{a3cc81dc-922d-4e68-8503-676bc9b4670a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\Analyzer">
+      <UniqueIdentifier>{20b811f7-ca73-4c9d-acee-ea9a708979c2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Analyzer">
+      <UniqueIdentifier>{fdd3fc2d-ccad-4c7e-9d1b-d9b94ac8a2b2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AppRuntime.h">
@@ -188,6 +194,9 @@
     </ClInclude>
     <ClInclude Include="Renderer\RootSignatureCache.h">
       <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Analyzer\PMDAnalyzer.h">
+      <Filter>ヘッダー ファイル\Analyzer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -334,6 +343,9 @@
     </ClCompile>
     <ClCompile Include="Renderer\RootSignatureCache.cpp">
       <Filter>ソース ファイル\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Analyzer\PMDAnalyzer.cpp">
+      <Filter>ソース ファイル\Analyzer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

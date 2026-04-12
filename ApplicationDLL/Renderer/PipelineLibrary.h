@@ -36,7 +36,7 @@ public:
 		ShaderCache::ShaderProgramDesc vertexShader;
         ShaderCache::ShaderProgramDesc pixelShader;
        
-        DXGI_FORMAT renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        DXGI_FORMAT renderTargetFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         D3D12_CULL_MODE cullMode = D3D12_CULL_MODE_NONE;
         D3D12_PRIMITIVE_TOPOLOGY_TYPE topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         bool enableDepth = false;
