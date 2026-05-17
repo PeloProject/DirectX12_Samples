@@ -1,4 +1,4 @@
-#include "DescriptorHeapManager.h"
+﻿#include "DescriptorHeapManager.h"
 
 DescriptorHeapManager& DescriptorHeapManager::Get()
 {
@@ -34,6 +34,13 @@ bool DescriptorHeapManager::InitializeGlobalTextureHeap(ID3D12Device* device)
 	return true;
 }
 
+///====================================================================
+/// <summary>
+/// ディスクリプタヒープからグローバルテクスチャ用の記述子を割り当てます。
+/// 割り当てられた記述子のインデックスが返されます。
+/// </summary>
+/// <returns></returns>
+///====================================================================
 UINT DescriptorHeapManager::AllocateGlobalTextureDescriptor()
 {
 	if (!m_TextureDescriptorFreeList.empty())
@@ -47,6 +54,8 @@ UINT DescriptorHeapManager::AllocateGlobalTextureDescriptor()
 	{
 		return m_TextureFreeIndex++;
 	}
+
+	return UINT_MAX; // 失敗
 }
 
 void DescriptorHeapManager::FreeGlobalTextureDescriptor(UINT descriptorIndex)
@@ -57,6 +66,13 @@ void DescriptorHeapManager::FreeGlobalTextureDescriptor(UINT descriptorIndex)
 	}
 }
 
+///====================================================================
+/// <summary>
+/// 指定されたインデックスに対応する CPU デスクリプタハンドルを取得します。
+/// </summary>
+/// <param name="index"></param>
+/// <returns></returns>
+///====================================================================
 D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeapManager::GetCPUHandle(uint32_t index) const
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE handle = m_CpuStart;

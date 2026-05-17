@@ -1,9 +1,15 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d12.h>
 #include <wrl/client.h>
 #include <vector>
 
+
+///=======================================================================
+/// <summary>
+/// ディスクリプタヒープを管理するクラス。
+/// </summary>
+///=======================================================================
 class DescriptorHeapManager
 {
 public:

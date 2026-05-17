@@ -30,15 +30,26 @@ Material::MaterialDesc Material::CreateBuiltInTexturedQuadDesc()
         
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
         {
+			/// ディスクリプタテーブルのルートパラメータを追加します。
             {
                 RootSignatureCache::RootParameterType::DescriptorTableSrv,
                 D3D12_SHADER_VISIBILITY_PIXEL,
-                1,
-                0,
+				1,  // ディスクリプタテーブルに含まれる SRV の数を指定します。
+				0,  // ディスクリプタテーブルのルートパラメータがバインドされるシェーダーレジスタのベースを指定します。ここでは、SRV が t0 レジスタから始まると仮定して 0 を指定します。
                 0,
                 0,
                 0
-            }
+            },
+		    /// 定数バッファビューのルートパラメータを追加します。
+            {
+                RootSignatureCache::RootParameterType::ConstantBufferView,
+                D3D12_SHADER_VISIBILITY_VERTEX,
+				0,  // 定数バッファビューのルートパラメータは、ディスクリプタテーブルを使用しないため、numDescriptors を 0 に設定します。
+				0,  // 定数バッファビューのルートパラメータは、ディスクリプタテーブルを使用しないため、baseShaderRegister を 0 に設定します。
+				0,  // 定数バッファビューのルートパラメータは、ディスクリプタテーブルを使用しないため、registerSpace を 0 に設定します。
+				0,  // 定数バッファビューのルートパラメータは、cbvShaderRegister を使用してシェーダーレジスタを指定するため、cbvShaderRegister を 0 に設定します。
+				0   // 定数バッファビューのルートパラメータは、cbvRegisterSpace を使用してシェーダーレジスタスペースを指定するため、cbvRegisterSpace を 0 に設定します。
+			}
         },
         {
             {
@@ -173,4 +184,22 @@ void Material::SetTexture(RHITexture* texture)
         return;
     }
     m_ParameterBlock.textureBindings[0].textureResource = texture;
+}
+
+
+///=====================================================
+/// <summary>
+/// マテリアルのテクスチャーを更新します。
+/// parameterBlock_ の最初のテクスチャバインディングを新しいテクスチャーリソースで上書きします。
+/// </summary>
+/// <param name="texture"></param>
+///=====================================================
+void Material::SetConstantBuffer(D3D12_GPU_VIRTUAL_ADDRESS address)
+{
+    if (m_ParameterBlock.constantBufferBindings.empty())
+    {
+        m_ParameterBlock.constantBufferBindings.push_back({ 1, address });
+        return;
+    }
+    m_ParameterBlock.constantBufferBindings[0].gpuVirtualAddress = address;
 }

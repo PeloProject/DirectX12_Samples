@@ -173,7 +173,9 @@
     <ClInclude Include="Renderer\RootSignatureCache.h" />
     <ClInclude Include="Renderer\ShaderCache.h" />
     <ClInclude Include="RHI\DescriptorHeapManager.h" />
+    <ClInclude Include="RHI\DX12FrameConstantBuffer.h" />
     <ClInclude Include="RHI\DX12Texture.h" />
+    <ClInclude Include="RHI\FrameConstantsManager.h" />
     <ClInclude Include="RHI\TextureAssetManager.h" />
     <ClInclude Include="FrameLoop.h" />
     <ClInclude Include="Renderer\SpriteRenderObject.h" />
@@ -221,7 +223,9 @@
     <ClCompile Include="Renderer\ShaderCache.cpp" />
     <ClCompile Include="RHI\DescriptorHeapManager.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="RHI\DX12FrameConstantBuffer.cpp" />
     <ClCompile Include="RHI\DX12Texture.cpp" />
+    <ClCompile Include="RHI\FrameConstantsManager.cpp" />
     <ClCompile Include="RHI\TextureAssetManager.cpp" />
     <ClCompile Include="FrameLoop.cpp" />
     <ClCompile Include="Renderer\SpriteRenderObject.cpp" />

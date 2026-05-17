@@ -198,6 +198,12 @@
     <ClInclude Include="Analyzer\PMDAnalyzer.h">
       <Filter>ヘッダー ファイル\Analyzer</Filter>
     </ClInclude>
+    <ClInclude Include="RHI\FrameConstantsManager.h">
+      <Filter>ヘッダー ファイル\RHI</Filter>
+    </ClInclude>
+    <ClInclude Include="RHI\DX12FrameConstantBuffer.h">
+      <Filter>ヘッダー ファイル\Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppRuntime.cpp">
@@ -346,6 +352,12 @@
     </ClCompile>
     <ClCompile Include="Analyzer\PMDAnalyzer.cpp">
       <Filter>ソース ファイル\Analyzer</Filter>
+    </ClCompile>
+    <ClCompile Include="RHI\FrameConstantsManager.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
+    </ClCompile>
+    <ClCompile Include="RHI\DX12FrameConstantBuffer.cpp">
+      <Filter>ソース ファイル\RHI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

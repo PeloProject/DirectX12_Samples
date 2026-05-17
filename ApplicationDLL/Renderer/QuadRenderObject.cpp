@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include "../RHI/DX12FrameConstantBuffer.h"
 
 namespace
 {
@@ -42,11 +43,30 @@ QuadRenderObject::QuadRenderObject()
 			FormatHResult(removedReason));
 	}
 
+	//定数バッファ作成
+	m_WorldMatrix = DirectX::XMMatrixRotationY(DirectX::XM_PIDIV4);
+	Vector3 eye(0, 0, -5);
+	Vector3 target(0, 0, 0);
+	Vector3 up(0, 1, 0);
+	m_ViewMatrix = DirectX::XMMatrixLookAtLH(XMLoadFloat3(&eye), XMLoadFloat3(&target), XMLoadFloat3(&up));
+	m_ProjectionMatrix = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV2,//画角は90°
+		static_cast<float>(Application::GetWindowWidth()) / static_cast<float>(Application::GetWindowHeight()),//アス比
+		1.0f,//近い方
+		10.0f//遠い方
+	);
+
+
+	m_FrameConstantBuffer.Initialize();
+
+
 	const HRESULT materialHr = InitializeMaterial();
 	if (FAILED(materialHr))
 	{
 		throw std::runtime_error("QuadRenderObject material initialization failed. hr=" + FormatHResult(materialHr));
 	}
+
+	m_material.SetConstantBuffer(m_FrameConstantBuffer.GetGPUVirtualAddress());
+
 }
 
 void QuadRenderObject::SetTransform(float centerX, float centerY, float width, float height)
@@ -312,6 +332,12 @@ HRESULT QuadRenderObject::InitializeMaterial()
 //=========================================================================================
 void QuadRenderObject::Render(ViewportRenderMode viewportMode)
 {
+
+	angle += 0.1f;
+	m_WorldMatrix = DirectX::XMMatrixRotationY(angle);
+	m_FrameConstantBuffer.Update(m_WorldMatrix * m_ViewMatrix * m_ProjectionMatrix);
+
+
 	ApplyQuadTransform(viewportMode);
 	UploadVertexBufferData();
 	m_isVertexDirty = false;

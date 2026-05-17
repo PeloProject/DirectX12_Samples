@@ -4,6 +4,7 @@
 #include "Source/Material.h"
 #include "Source/PipelineLibrary.h"
 #include "DX12Texture.h"
+#include "../RHI/DX12FrameConstantBuffer.h"
 #include <d3d12.h>
 
 #include <memory>
@@ -12,6 +13,8 @@
 
 using namespace WL;
 using Microsoft::WRL::ComPtr;
+
+
 
 enum class ViewportRenderMode : uint32_t;
 
@@ -77,6 +80,13 @@ private:
 	ComPtr<ID3D12Resource>		m_pImageTextureBuffer;
 	D3D12_VERTEX_BUFFER_VIEW	m_VertexBufferView = {};
 	D3D12_INDEX_BUFFER_VIEW		m_IndexBufferView = {};
+
+	DX12FrameConstantBuffer		m_FrameConstantBuffer;
+
+	Matrix m_WorldMatrix = DirectX::XMMatrixIdentity();
+	Matrix m_ViewMatrix = DirectX::XMMatrixIdentity();
+	Matrix m_ProjectionMatrix = DirectX::XMMatrixIdentity();
+	float angle = 0.0f;
 
 	std::vector<short> m_Indices;
 

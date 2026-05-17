@@ -52,6 +52,8 @@ public:
     /// <param name="texture"></param>
     void SetTexture(RHITexture* texture);
 
+    void SetConstantBuffer(D3D12_GPU_VIRTUAL_ADDRESS address);
+
 private:
     std::shared_ptr<const PipelineLibrary::GraphicsPipeline> m_pPipeline;
     MaterialParameterBlock m_ParameterBlock;
