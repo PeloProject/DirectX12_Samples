@@ -86,7 +86,7 @@ private:
 	Matrix m_WorldMatrix = DirectX::XMMatrixIdentity();
 	Matrix m_ViewMatrix = DirectX::XMMatrixIdentity();
 	Matrix m_ProjectionMatrix = DirectX::XMMatrixIdentity();
-	float angle = 0.0f;
+	float m_Angle = 0.0f;
 
 	std::vector<short> m_Indices;
 

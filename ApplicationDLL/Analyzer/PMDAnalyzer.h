@@ -1,10 +1,13 @@
 ﻿#pragma once
 
 #include <string>
+#include <cstdint>
 #include "../Math/MathUtil.h"
 
 using namespace std;
 using namespace WL;
+using Microsoft::WRL::ComPtr;
+
 
 struct PMDHeader
 {
@@ -27,7 +30,9 @@ class PMDAnalyzer
 {
 
 private:
-	static constexpr size_t PMD_HEADER_SIZE = sizeof(PMDHeader);
+	static constexpr size_t			PMD_HEADER_SIZE = sizeof(PMDHeader);
+	static constexpr unsigned int	PMD_VERTEX_SIZE = 38;//頂点1つあたりのサイズ
+	ComPtr<ID3D12Resource>			m_pVertexBuffer;
 public:
 	PMDAnalyzer(string fileName);
 };

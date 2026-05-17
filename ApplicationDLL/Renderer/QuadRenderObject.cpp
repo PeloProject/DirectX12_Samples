@@ -69,6 +69,15 @@ QuadRenderObject::QuadRenderObject()
 
 }
 
+///=========================================================================================
+/// <summary>
+/// トランスフォームの設定を行います。四角形の中心座標と幅・高さを指定して、m_quadTransformに保存します。
+/// </summary>
+/// <param name="centerX">四角形の中心のX座標</param>
+/// <param name="centerY">四角形の中心のY座標</param>
+/// <param name="width">四角形の幅</param>
+/// <param name="height">四角形の高さ</param>
+///=========================================================================================
 void QuadRenderObject::SetTransform(float centerX, float centerY, float width, float height)
 {
 	m_quadTransform.centerX = centerX;
@@ -78,6 +87,12 @@ void QuadRenderObject::SetTransform(float centerX, float centerY, float width, f
 	m_isVertexDirty = true;
 }
 
+///=========================================================================================
+/// <summary>
+/// テクスチャハンドルを受け取り、テクスチャアセットマネージャーからテクスチャリソースを取得して、マテリアルに設定します。
+/// </summary>
+/// <param name="textureHandle"></param>
+///=========================================================================================
 void QuadRenderObject::SetTextureHandle(TextureHandle textureHandle)
 {
 	textureAsset_ = TextureAssetManager::Get().GetTexture(textureHandle);
@@ -211,6 +226,14 @@ HRESULT QuadRenderObject::CreateVertexBuffer(const D3D12_HEAP_PROPERTIES& heapPr
 	return S_OK;
 }
 
+///==========================================================================================
+/// <summary>
+/// インデックスバッファ用のコミット済みGPUリソースを作成し、クラス内のインデックスデータを転送してインデックスバッファビューを設定します。
+/// </summary>
+/// <param name="heapProps"></param>
+/// <param name="resourceDesc"></param>
+/// <returns></returns>
+///==========================================================================================
 HRESULT QuadRenderObject::CreateIndexBuffer(const D3D12_HEAP_PROPERTIES& heapProps, const D3D12_RESOURCE_DESC& resourceDesc)
 {
 	ID3D12Device* device = Dx12RenderDevice::GetDevice();
@@ -332,9 +355,8 @@ HRESULT QuadRenderObject::InitializeMaterial()
 //=========================================================================================
 void QuadRenderObject::Render(ViewportRenderMode viewportMode)
 {
-
-	angle += 0.1f;
-	m_WorldMatrix = DirectX::XMMatrixRotationY(angle);
+	m_Angle += 0.1f;
+	m_WorldMatrix = DirectX::XMMatrixRotationY(m_Angle);
 	m_FrameConstantBuffer.Update(m_WorldMatrix * m_ViewMatrix * m_ProjectionMatrix);
 
 
