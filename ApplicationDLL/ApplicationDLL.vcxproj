@@ -170,6 +170,7 @@
   <ItemGroup>
     <ClInclude Include="Analyzer\PMDAnalyzer.h" />
     <ClInclude Include="AppRuntime.h" />
+    <ClInclude Include="Renderer\MeshObject.h" />
     <ClInclude Include="Renderer\RootSignatureCache.h" />
     <ClInclude Include="Renderer\ShaderCache.h" />
     <ClInclude Include="RHI\DescriptorHeapManager.h" />
@@ -219,6 +220,7 @@
     <ClCompile Include="Analyzer\PMDAnalyzer.cpp" />
     <ClCompile Include="AppRuntime.cpp" />
     <ClCompile Include="Application.cpp" />
+    <ClCompile Include="Renderer\MeshObject.cpp" />
     <ClCompile Include="Renderer\RootSignatureCache.cpp" />
     <ClCompile Include="Renderer\ShaderCache.cpp" />
     <ClCompile Include="RHI\DescriptorHeapManager.cpp" />

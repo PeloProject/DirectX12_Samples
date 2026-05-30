@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include <vector>
 #include "../Math/MathUtil.h"
 
 using namespace std;
@@ -32,7 +33,9 @@ class PMDAnalyzer
 private:
 	static constexpr size_t			PMD_HEADER_SIZE = sizeof(PMDHeader);
 	static constexpr unsigned int	PMD_VERTEX_SIZE = 38;//頂点1つあたりのサイズ
-	ComPtr<ID3D12Resource>			m_pVertexBuffer;
+	std::vector<PMDVertex>			m_Vertices;
 public:
 	PMDAnalyzer(string fileName);
+
+	const std::vector<PMDVertex>& GetVertices() const { return m_Vertices; }
 };
