@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.ComponentModel.Design.Serialization;
 
 internal sealed class SpriteRendererSystem
 {
@@ -29,6 +30,9 @@ internal sealed class SpriteRendererSystem
     ///=============================================================================================================================
     public void Sync(Scene scene)
     {
+        // コンポーネントの削除
+        ProcessDestroyedComponents(scene);
+
         // シーン状の全てのゲームオブジェクトをループして、スプライトレンダラーコンポーネントを持つものを探します。
         foreach (GameObject gameObject in scene.GameObjects)
         {
@@ -113,6 +117,17 @@ internal sealed class SpriteRendererSystem
 
     ///=============================================================================================================================
     /// <summary>
+    /// オブジェクトスプライトレンダラーのネイティブリソースを解放します。
+    /// </summary>
+    /// <param name="scene"></param>
+    ///=============================================================================================================================
+    public void Release(SpriteRenderer spriteRenderer)
+    {
+        DestroyNativeSpriteRenderer(spriteRenderer);
+    }
+
+    ///=============================================================================================================================
+    /// <summary>
     /// テクスチャが有効かどうかを判断します。テクスチャがnull、空白、またはすでに適用されているテクスチャと同じ場合は無効とみなします。
     /// </summary>
     /// <param name="spriteRenderer"></param>
@@ -189,5 +204,23 @@ internal sealed class SpriteRendererSystem
             _textureAssetManager.Release(spriteRenderer.TextureHandle);
         }
         spriteRenderer.TextureHandle = TextureHandle.Invalid;
+    }
+
+    ///=============================================================================================================================  
+    /// <summary>
+    /// コンポーネントの削除
+    /// </summary>
+    /// <param name="scene"></param>
+    ///=============================================================================================================================
+    private void ProcessDestroyedComponents(Scene scene)
+    {
+        foreach( var component in scene.DestroyedComponents )
+        {
+            if( component is SpriteRenderer spriteRenderer )
+            {
+                Release(spriteRenderer);
+            }
+        }
+        scene.ClearDestroyedComponents();
     }
 }

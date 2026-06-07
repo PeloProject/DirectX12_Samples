@@ -6,6 +6,11 @@ internal static class GameEntry
 {
     private static Scene? _scene = null;
     private static SpriteRendererSystem? _spriteRendererSystem;
+    public static SpriteRendererSystem? SpriteRendererSystem{ get {return _spriteRendererSystem;} }
+
+    private static GameObject? _player = null;
+    private static float _elapsedTime = 3.0f;
+    private static bool _playerDestroyed = false;
 
     ///========================================================================================
     /// <summary>
@@ -40,6 +45,21 @@ internal static class GameEntry
 
         _scene.Update(deltaSeconds);
         _spriteRendererSystem.Sync(_scene);
+
+        if (_elapsedTime > 0.0f)
+        {
+            _elapsedTime -= deltaSeconds;
+        }
+        else if (!_playerDestroyed)
+        {
+            if (_player != null)
+            {
+                _scene.DestroyGameObject(_player);
+                _player = null;
+                _playerDestroyed = true;
+            }
+        }
+
     }
 
     ///========================================================================================
@@ -72,11 +92,11 @@ internal static class GameEntry
         var scene = new Scene();
 
         // プレイヤーオブジェクトの作成
-        GameObject player = scene.CreateGameObject("Player");
-        SpriteRenderer spriteRenderer = player.AddComponent<SpriteRenderer>();
+        _player = scene.CreateGameObject("Player");
+        SpriteRenderer spriteRenderer = _player.AddComponent<SpriteRenderer>();
         spriteRenderer.Material = BuiltInMaterials.UnlitTexture;
         spriteRenderer.Texture = "textest.png";
-        player.AddComponent<PlayerPulseController>();
+        _player.AddComponent<PlayerPulseController>();
 
         return scene;
     }

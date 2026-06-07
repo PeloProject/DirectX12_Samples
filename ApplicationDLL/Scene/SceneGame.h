@@ -10,5 +10,5 @@ public:
 	virtual void Render(ViewportRenderMode viewportMode) override;
 
 private:
-	std::unique_ptr<PMDRenderObject> m_ppmdModel_;
+	//std::unique_ptr<PMDRenderObject> m_ppmdModel_;
 };

@@ -1,8 +1,17 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 internal sealed class Scene
 {
+
+    /// <summary>
+    /// このシーンに存在する全てのゲームオブジェクトのリスト。
+    /// ゲームオブジェクトはシーン内で一意である必要があるため、同じゲームオブジェクトを複数回追加することはできません。
+    /// </summary>
     public List<GameObject> GameObjects { get; } = new List<GameObject>();
+
+    private List<Component> _DestroyedComponents = new List<Component>();
+
+    internal IReadOnlyList<Component> DestroyedComponents => _DestroyedComponents;
 
     public bool IsStarted { get; private set; }
 
@@ -84,11 +93,19 @@ internal sealed class Scene
         }
     }
 
-    private static void DestroyGameObjectComponents(GameObject gameObject)
+    private void DestroyGameObjectComponents(GameObject gameObject)
     {
         foreach (Component component in gameObject.Components)
         {
-            component.InvokeDestroy();
+            _DestroyedComponents.Add(component);
         }
+    }
+
+    /// <summary>
+    /// 削除されたオブジェクトコンポーネントのリストをクリアします。
+    /// </summary>
+    public void ClearDestroyedComponents()
+    {
+        _DestroyedComponents.Clear();
     }
 }
