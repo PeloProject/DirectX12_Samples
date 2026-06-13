@@ -86,6 +86,10 @@ namespace
     }
 }
 
+///===================================================================
+/// @brief スプライトレンダラーの描画
+/// @param viewportMode 
+///===================================================================
 void RenderSpriteRenderers(ViewportRenderMode viewportMode)
 {
     RuntimeState& state = RuntimeStateRef();

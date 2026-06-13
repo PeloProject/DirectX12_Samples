@@ -243,9 +243,8 @@ bool EnsurePieGameModuleLoaded()
 
 void UnloadPieGameModule()
 {
-    ScopedModule loadedModule(RuntimeStateRef().g_pieGameModule);
+    HMODULE mod = RuntimeStateRef().g_pieGameModule;
     RuntimeStateRef().g_pieGameModule = nullptr;
-
     RuntimeStateRef().g_pieGameStart = nullptr;
     RuntimeStateRef().g_pieGameTick = nullptr;
     RuntimeStateRef().g_pieGameStop = nullptr;
@@ -253,6 +252,14 @@ void UnloadPieGameModule()
     RuntimeStateRef().g_pieGameSourceModulePath.clear();
     RuntimeStateRef().g_pieGameSourceWriteTimeValid = false;
     RuntimeStateRef().g_pieGameLastLoadError.clear();
+
+    // NativeAOT の FreeLibrary はシャットダウン時にデッドロックする可能性があるため、
+    // シャットダウン時はスキップしてプロセス終了に委ねる。
+    // ホットリロード時はフラグが false なので通常通り FreeLibrary を実行する。
+    if (mod != nullptr && !RuntimeStateRef().g_isShuttingDown)
+    {
+        FreeLibrary(mod);
+    }
 }
 
 bool TryHotReloadPieGameModule()

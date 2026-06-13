@@ -49,6 +49,10 @@ int main(int argc, char* argv[])
 
         const int exitCode = frontend.run();
         frontend.shutdown();
+        // NativeAOT DLL_PROCESS_DETACH が ExitProcess 時にデッドロックするのを防ぐため
+        // TerminateProcess で強制終了する。レイアウト保存・レンダラシャットダウンは
+        // frontend.run() 内で完了済み。
+        TerminateProcess(GetCurrentProcess(), static_cast<UINT>(exitCode >= 0 ? exitCode : 0));
         return exitCode;
     }
 
@@ -64,5 +68,9 @@ int main(int argc, char* argv[])
 
     const int exitCode = frontend.run();
     frontend.shutdown();
+    // NativeAOT DLL_PROCESS_DETACH が ExitProcess 時にデッドロックするのを防ぐため
+    // TerminateProcess で強制終了する。レイアウト保存・レンダラシャットダウンは
+    // frontend.run() 内で完了済み。
+    TerminateProcess(GetCurrentProcess(), static_cast<UINT>(exitCode >= 0 ? exitCode : 0));
     return exitCode;
 }

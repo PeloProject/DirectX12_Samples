@@ -112,6 +112,7 @@ struct RuntimeState
     ViewportCamera2D g_gameViewportCamera = { 0.0f, 0.0f, 1.0f, 0.0f };
     std::vector<RuntimeActor> g_runtimeActors;
     std::wstring g_windowClassName;
+    bool g_isShuttingDown = false;
 };
 
 class AppRuntime

@@ -36,15 +36,16 @@ internal sealed class Scene
             return false;
         }
 
-        DestroyGameObjectComponents(gameObject);
+        NotifyGameObjectComponentsDestroyed(gameObject);
         return true;
     }
 
     public void DestroyAllGameObjects()
     {
-        foreach (GameObject gameObject in GameObjects)
+        var gameObjects = new List<GameObject>(GameObjects);
+        foreach (GameObject gameObject in gameObjects)
         {
-            DestroyGameObjectComponents(gameObject);
+            NotifyGameObjectComponentsDestroyed(gameObject);
         }
 
         GameObjects.Clear();
@@ -93,19 +94,44 @@ internal sealed class Scene
         }
     }
 
-    private void DestroyGameObjectComponents(GameObject gameObject)
+    ///=====================================================================
+    /// <summary>
+    /// コンポーネントの削除
+    /// </summary>
+    /// <param name="gameObject"></param>
+    ///=====================================================================
+    private void NotifyGameObjectComponentsDestroyed(GameObject gameObject)
     {
-        foreach (Component component in gameObject.Components)
+        var components = new List<Component>(gameObject.Components);
+        foreach (Component component in components)
         {
-            _DestroyedComponents.Add(component);
+            NotifyComponentDestroyed(component);
         }
     }
 
+    ///=====================================================================
     /// <summary>
     /// 削除されたオブジェクトコンポーネントのリストをクリアします。
     /// </summary>
+    ///=====================================================================
     public void ClearDestroyedComponents()
     {
         _DestroyedComponents.Clear();
+    }
+
+    ///=====================================================================
+    /// <summary>
+    /// コンポーネントの削除
+    /// </summary>
+    /// <param name="component"></param>
+    ///=====================================================================
+    internal void NotifyComponentDestroyed(Component component)
+    {
+        if (_DestroyedComponents.Contains(component))
+        {
+            return;
+        }
+        _DestroyedComponents.Add(component);
+        component.InvokeDestroy();
     }
 }

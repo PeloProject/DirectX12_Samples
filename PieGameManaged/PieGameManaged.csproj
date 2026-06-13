@@ -11,4 +11,11 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <Target Name="PublishAfterBuild" AfterTargets="AfterBuild" Condition="'$(IsPublishing)' != 'true'">
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Publish"
+             Properties="IsPublishing=true;Configuration=$(Configuration)" />
+  </Target>
+
 </Project>

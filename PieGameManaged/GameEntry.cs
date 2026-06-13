@@ -20,6 +20,9 @@ internal static class GameEntry
     [UnmanagedCallersOnly(EntryPoint = "GameStart", CallConvs = new[] { typeof(CallConvCdecl) })]
     public static void GameStart()
     {
+        _elapsedTime = 3.0f;
+        _playerDestroyed = false;
+
         _scene = CreateScene();
         _scene.Start();
         _spriteRendererSystem = new SpriteRendererSystem();
@@ -44,7 +47,6 @@ internal static class GameEntry
         }
 
         _scene.Update(deltaSeconds);
-        _spriteRendererSystem.Sync(_scene);
 
         if (_elapsedTime > 0.0f)
         {
@@ -60,6 +62,7 @@ internal static class GameEntry
             }
         }
 
+        _spriteRendererSystem.Sync(_scene);
     }
 
     ///========================================================================================
@@ -73,8 +76,8 @@ internal static class GameEntry
         NativeMethods.SetGameClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         if (_scene != null && _spriteRendererSystem != null)
         {
-            _spriteRendererSystem.Release(_scene);
             _scene.DestroyAllGameObjects();
+            _spriteRendererSystem.Release(_scene);
         }
 
         _spriteRendererSystem = null;

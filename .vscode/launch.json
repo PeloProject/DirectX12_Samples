@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug ApplicationDLLHost (x64 Debug)",
+      "name": "Debug Editor (x64 Debug)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/ApplicationDLLHost.exe",
+      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/Editor.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows",
@@ -28,7 +28,7 @@
         }
       ],
       "console": "internalConsole",
-      "preLaunchTask": "build:ApplicationDLLHost Debug x64",
+      "preLaunchTask": "build:Editor Debug x64",
       "symbolSearchPath": "",
       "justMyCode": true,
       "logging": {
@@ -39,10 +39,10 @@
       }
     },
     {
-      "name": "Debug ApplicationDLLHost (No Build)",
+      "name": "Debug Editor (No Build)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/ApplicationDLLHost.exe",
+      "program": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows/Editor.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/Editor/bin/Debug/net8.0-windows",
@@ -75,7 +75,36 @@
       }
     },
     {
-      "name": "Attach ApplicationDLLHost",
+      "name": "Debug Editor Release (x64 Release)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Editor/bin/Release/net8.0-windows/Editor.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/Editor/bin/Release/net8.0-windows",
+      "environment": [
+        {
+          "name": "DX12_DEBUG_LAYER",
+          "value": "0"
+        },
+        {
+          "name": "DX12_GPU_VALIDATION",
+          "value": "0"
+        }
+      ],
+      "console": "internalConsole",
+      "preLaunchTask": "build:Editor Release x64",
+      "symbolSearchPath": "",
+      "justMyCode": true,
+      "logging": {
+        "moduleLoad": false,
+        "programOutput": true,
+        "trace": false,
+        "engineLogging": false
+      }
+    },
+    {
+      "name": "Attach Editor",
       "type": "cppvsdbg",
       "request": "attach",
       "processId": "${command:pickProcess}",

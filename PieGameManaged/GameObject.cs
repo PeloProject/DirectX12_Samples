@@ -59,14 +59,22 @@ internal sealed class GameObject
         return components;
     }
 
+    ///==============================================================
+    /// <summary>
+    /// コンポーネントの削除
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
+    ///==============================================================
     public bool RemoveComponent<T>() where T : Component
     {
         for (int i = 0; i < _components.Count; ++i)
         {
-            if (_components[i] is T)
+            if (_components[i] is T component)
             {
-                _components[i].InvokeDestroy();
+                // OnDestroy 内で RemoveComponent が呼ばれても index がずれないよう、先に list から外す。
                 _components.RemoveAt(i);
+                Scene.NotifyComponentDestroyed(component);
                 return true;
             }
         }
@@ -81,7 +89,7 @@ internal sealed class GameObject
             return false;
         }
 
-        component.InvokeDestroy();
+        Scene.NotifyComponentDestroyed(component);
         return true;
     }
 

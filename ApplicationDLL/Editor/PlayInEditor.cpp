@@ -72,6 +72,10 @@ void PlayInEditor::StopImmediate()
     RuntimeStateRef().g_pieManagedPublishCheckTimer = 0.0f;
     RuntimeStateRef().g_pieManagedPendingPublishSourceWriteTimeValid = false;
 
+    if (RuntimeStateRef().g_pieManagedPublishProcess != nullptr)
+    {
+        TerminateProcess(RuntimeStateRef().g_pieManagedPublishProcess, 1);
+    }
     ScopedHandle publishProcess(RuntimeStateRef().g_pieManagedPublishProcess);
     RuntimeStateRef().g_pieManagedPublishProcess = nullptr;
 

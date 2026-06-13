@@ -535,15 +535,17 @@ void AppRuntime::HideNativeWindow()
 ///=====================================================================
 void AppRuntime::DestroyNativeWindow()
 {
+    RuntimeStateRef().g_isShuttingDown = true;
+    m_PlayInEditor.StopImmediate();
+    DestroyGameNativeWindow();
+    ShutdownImGui();
+    ShutdownRendererAndUi();
+
     if (RuntimeStateRef().g_hwnd == NULL)
     {
         return;
     }
 
-    m_PlayInEditor.StopImmediate();
-    DestroyGameNativeWindow();
-    ShutdownImGui();
-    ShutdownRendererAndUi();
     if (RuntimeStateRef().g_ownsHwnd)
     {
         DestroyWindow(RuntimeStateRef().g_hwnd);

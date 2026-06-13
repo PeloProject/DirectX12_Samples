@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build:ApplicationDLLHost Debug x64",
+      "label": "build:Editor Debug x64",
       "type": "shell",
       "command": "powershell",
       "args": [
@@ -18,7 +18,7 @@
         "-Platform",
         "x64",
         "-Target",
-        "ApplicationDLLHost"
+        "Editor"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -26,6 +26,32 @@
       "group": {
         "kind": "build",
         "isDefault": true
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "build:Editor Release x64",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".vscode/build.ps1",
+        "-Solution",
+        "DirectX12_Samples.sln",
+        "-Configuration",
+        "Release",
+        "-Platform",
+        "x64",
+        "-Target",
+        "Editor"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
       },
       "problemMatcher": [
         "$msCompile"
@@ -45,6 +71,30 @@
         "DirectX12_Samples.sln",
         "-Configuration",
         "Debug",
+        "-Platform",
+        "x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "build:Solution Release x64",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        ".vscode/build.ps1",
+        "-Solution",
+        "DirectX12_Samples.sln",
+        "-Configuration",
+        "Release",
         "-Platform",
         "x64"
       ],

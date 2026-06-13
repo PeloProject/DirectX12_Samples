@@ -104,6 +104,9 @@ internal sealed class SpriteRendererSystem
     ///=============================================================================================================================
     public void Release(Scene scene)
     {
+        // 未処理の破棄処理をはじめに行います。
+        ProcessDestroyedComponents(scene);
+
         foreach (GameObject gameObject in scene.GameObjects)
         {
             foreach (SpriteRenderer spriteRenderer in gameObject.GetComponents<SpriteRenderer>())
