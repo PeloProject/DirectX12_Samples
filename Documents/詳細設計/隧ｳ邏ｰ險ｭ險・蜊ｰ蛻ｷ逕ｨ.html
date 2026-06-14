@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>DirectX12_Samples 隧ｳ邏ｰ險ｭ險郁ｳ・侭</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{font-family:"Meiryo UI","Yu Gothic UI","MS Gothic",sans-serif;font-size:11pt;line-height:1.65;color:#222;margin:0;padding:0}
+.doc{max-width:980px;margin:0 auto;padding:28px 36px}
+.doc-header{font-size:8.5pt;color:#888;border-bottom:1px solid #ddd;padding-bottom:3px;margin-bottom:14px}
+h1{font-size:17pt;color:#0D47A1;border-bottom:2.5px solid #1565C0;padding-bottom:5px;margin:22px 0 10px}
+h2{font-size:13pt;color:#1565C0;border-bottom:1px solid #90CAF9;padding-bottom:3px;margin:18px 0 8px}
+h3{font-size:11.5pt;color:#1976D2;margin:14px 0 6px}
+h4{font-size:11pt;color:#1E88E5;margin:10px 0 4px}
+h5,h6{font-size:10pt;color:#2196F3}
+p{margin:5px 0}
+.ol-item{margin-left:1.8em}
+pre{background:#1e1e1e;color:#d4d4d4;padding:10px 14px;border-radius:5px;overflow-x:auto;font-size:8.5pt;font-family:"Consolas","Courier New",monospace;white-space:pre-wrap;word-break:break-all;margin:8px 0}
+code{background:#f0f0f0;padding:1px 5px;border-radius:3px;font-family:"Consolas","Courier New",monospace;font-size:8.5pt}
+pre code{background:none;padding:0;color:inherit}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:10pt}
+th{background:#1565C0;color:#fff;padding:6px 10px;text-align:left;border:1px solid #0D47A1}
+td{padding:5px 9px;border:1px solid #ccc}
+tr:nth-child(even) td{background:#F5F5F5}
+ul{margin:5px 0;padding-left:1.6em}
+li{margin:3px 0}
+hr{border:none;border-top:1px solid #ddd;margin:14px 0}
+a{color:#1565C0}
+strong{color:#111}
+.puml{text-align:center;margin:14px 0;padding:8px;border:1px dashed #90CAF9;border-radius:5px;background:#fafafa;min-height:40px}
+.puml-src{display:none}
+.puml img{max-width:100%;height:auto;display:block;margin:0 auto}
+.puml-msg{color:#888;font-size:9pt;padding:6px}
+.pb{page-break-after:always;break-after:page;height:0}
+.cover{height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center}
+.cover h1{border:none;font-size:26pt;margin:0}
+.cover h2{border:none;font-size:18pt;color:#444;font-weight:normal;margin:8px 0 0}
+.cover p{color:#888;margin-top:30px}
+@media print{
+  .pb{page-break-after:always}
+  body{font-size:10pt}
+  pre{font-size:7.5pt}
+  .cover{height:100vh}
+}
+@page{size:A4;margin:15mm}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>DirectX12_Samples</h1>
+  <h2>隧ｳ邏ｰ險ｭ險郁ｳ・侭</h2>
+  <p>菴懈・譌･: 2026-06-14</p>
+</div>
+<div class="pb"></div>
+
+<section class='doc'>
+<div class='doc-header'>00_INDEX</div>
+  <h1>DirectX12_Samples 詳細設計資料 - 目次</h1>
+<p>作成日: 2026-06-14</p>
+<h2>ドキュメント一覧</h2>
+<table>
+<tr><th>#</th><th>ファイル</th><th>内容</th></tr>
+<tr><td>01</td><td><a href="01_プロジェクト概要.md">プロジェクト概要</a></td><td>プロジェクト全体の目的・技術スタック・コンポーネント図</td></tr>
+<tr><td>02</td><td><a href="02_レイヤーアーキテクチャ.md">レイヤーアーキテクチャ</a></td><td>3層構成とモジュール間依存関係図</td></tr>
+<tr><td>03</td><td><a href="03_クラス図_ApplicationDLL.md">クラス図_ApplicationDLL</a></td><td>C++ネイティブ側の全クラス設計</td></tr>
+<tr><td>04</td><td><a href="04_クラス図_PieGameManaged.md">クラス図_PieGameManaged</a></td><td>C#マネージド側の全クラス設計</td></tr>
+<tr><td>05</td><td><a href="05_シーケンス図_初期化.md">シーケンス図_初期化</a></td><td>起動〜描画開始までの初期化フロー</td></tr>
+<tr><td>06</td><td><a href="06_シーケンス図_フレームループ.md">シーケンス図_フレームループ</a></td><td>毎フレームの処理順序</td></tr>
+<tr><td>07</td><td><a href="07_シーケンス図_PIE.md">シーケンス図_PIE</a></td><td>Play In Editor の開始・停止・ホットリロード</td></tr>
+<tr><td>08</td><td><a href="08_API仕様.md">API仕様</a></td><td>ApplicationDLL 公開API と PieGameManaged エクスポート一覧</td></tr>
+</table>
+<h2>システム概要</h2>
+<pre><code>┌──────────────────────────────────────────┐
+│  ホスト層                                 │
+│  EditorQt (Qt6 UI)  /  ApplicationDLLHost │
+├──────────────────────────────────────────┤
+│  ネイティブランタイム層                    │
+│  ApplicationDLL.dll (DirectX12/Vulkan/GL) │
+├──────────────────────────────────────────┤
+│  マネージドゲーム層                        │
+│  PieGameManaged.dll (C# NativeAOT)        │
+└──────────────────────────────────────────┘</code></pre>
+<h2>PlantUML のレンダリングについて</h2>
+<p>各ドキュメントの図は PlantUML 形式で記述されています。  </p>
+<p>VSCode では <a href="https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml">PlantUML 拡張</a> を使用することでプレビューできます。  </p>
+<p>オンラインでは https://www.plantuml.com/plantuml/ でレンダリング可能です。</p>
+
+</section><div class='pb'></div>
+
+
+<script>
+// PlantUML 繧ｨ繝ｳ繧ｳ繝ｼ繝 (raw deflate + 繧ｫ繧ｹ繧ｿ繝Base64)
+function pumlEncode(src){
+  var s=unescape(encodeURIComponent(src));
+  var b=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++) b[i]=s.charCodeAt(i);
+  var c=pako.deflateRaw(b,{level:9});
+  var r='';
+  for(var i=0;i<c.length;i+=3){
+    var b1=c[i],b2=i+1<c.length?c[i+1]:0,b3=i+2<c.length?c[i+2]:0;
+    r+=e6(b1>>2);r+=e6(((b1&3)<<4)|(b2>>4));
+    r+=e6(((b2&15)<<2)|(b3>>6));r+=e6(b3&63);
+  }
+  return r;
+}
+function e6(b){
+  b&=63;
+  if(b<10) return String.fromCharCode(48+b);
+  b-=10; if(b<26) return String.fromCharCode(65+b);
+  b-=26; if(b<26) return String.fromCharCode(97+b);
+  b-=26; return b===0?'-':'_';
+}
+
+window.addEventListener('load',function(){
+  document.querySelectorAll('.puml').forEach(function(box){
+    var pre=box.querySelector('.puml-src');
+    if(!pre) return;
+    var src=pre.textContent.trim();
+    var encoded=pumlEncode(src);
+    var img=document.createElement('img');
+    img.alt='PlantUML Diagram';
+    img.onload=function(){ var m=box.querySelector('.puml-msg'); if(m) m.style.display='none'; };
+    img.onerror=function(){ var m=box.querySelector('.puml-msg'); if(m) m.textContent='蝗ｳ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆ (繧､繝ｳ繧ｿ繝ｼ繝阪ャ繝域磁邯壹ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞)'; };
+    img.src='https://www.plantuml.com/plantuml/png/'+encoded;
+    box.insertBefore(img, box.querySelector('.puml-msg'));
+  });
+});
+</script>
+</body>
+</html>

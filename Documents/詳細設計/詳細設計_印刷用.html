@@ -1,0 +1,1825 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>DirectX12_Samples 詳細設計資料</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{font-family:"Meiryo UI","Yu Gothic UI","MS Gothic",sans-serif;font-size:11pt;line-height:1.65;color:#222;margin:0;padding:0}
+.doc{max-width:980px;margin:0 auto;padding:28px 36px}
+.doc-header{font-size:8.5pt;color:#888;border-bottom:1px solid #ddd;padding-bottom:3px;margin-bottom:14px}
+h1{font-size:17pt;color:#0D47A1;border-bottom:2.5px solid #1565C0;padding-bottom:5px;margin:22px 0 10px}
+h2{font-size:13pt;color:#1565C0;border-bottom:1px solid #90CAF9;padding-bottom:3px;margin:18px 0 8px}
+h3{font-size:11.5pt;color:#1976D2;margin:14px 0 6px}
+h4{font-size:11pt;color:#1E88E5;margin:10px 0 4px}
+h5,h6{font-size:10pt;color:#2196F3}
+p{margin:5px 0}
+.ol-item{margin-left:1.8em}
+pre{background:#1e1e1e;color:#d4d4d4;padding:10px 14px;border-radius:5px;overflow-x:auto;font-size:8.5pt;font-family:"Consolas","Courier New",monospace;white-space:pre-wrap;word-break:break-all;margin:8px 0}
+code{background:#f0f0f0;padding:1px 5px;border-radius:3px;font-family:"Consolas","Courier New",monospace;font-size:8.5pt}
+pre code{background:none;padding:0;color:inherit}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:10pt}
+th{background:#1565C0;color:#fff;padding:6px 10px;text-align:left;border:1px solid #0D47A1}
+td{padding:5px 9px;border:1px solid #ccc}
+tr:nth-child(even) td{background:#F5F5F5}
+ul{margin:5px 0;padding-left:1.6em}
+li{margin:3px 0}
+hr{border:none;border-top:1px solid #ddd;margin:14px 0}
+a{color:#1565C0}
+strong{color:#111}
+.puml{text-align:center;margin:14px 0;padding:8px;border:1px dashed #90CAF9;border-radius:5px;background:#fafafa;min-height:40px}
+.puml-src{display:none}
+.puml img{max-width:100%;height:auto;display:block;margin:0 auto}
+.puml-msg{color:#888;font-size:9pt;padding:6px}
+.pb{page-break-after:always;break-after:page;height:0}
+.cover{height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center}
+.cover h1{border:none;font-size:26pt;margin:0}
+.cover h2{border:none;font-size:18pt;color:#444;font-weight:normal;margin:8px 0 0}
+.cover p{color:#888;margin-top:30px}
+@media print{
+  .pb{page-break-after:always}
+  body{font-size:10pt}
+  pre{font-size:7.5pt}
+  .cover{height:100vh}
+}
+@page{size:A4;margin:15mm}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>DirectX12_Samples</h1>
+  <h2>詳細設計資料</h2>
+  <p>作成日: 2026-06-14</p>
+</div>
+<div class="pb"></div>
+
+<section class='doc'>
+<div class='doc-header'>00_INDEX</div>
+  <h1>DirectX12_Samples 詳細設計資料 - 目次</h1>
+<p>作成日: 2026-06-14</p>
+<h2>ドキュメント一覧</h2>
+<table>
+<tr><th>#</th><th>ファイル</th><th>内容</th></tr>
+<tr><td>01</td><td><a href="01_プロジェクト概要.md">プロジェクト概要</a></td><td>プロジェクト全体の目的・技術スタック・コンポーネント図</td></tr>
+<tr><td>02</td><td><a href="02_レイヤーアーキテクチャ.md">レイヤーアーキテクチャ</a></td><td>3層構成とモジュール間依存関係図</td></tr>
+<tr><td>03</td><td><a href="03_クラス図_ApplicationDLL.md">クラス図_ApplicationDLL</a></td><td>C++ネイティブ側の全クラス設計</td></tr>
+<tr><td>04</td><td><a href="04_クラス図_PieGameManaged.md">クラス図_PieGameManaged</a></td><td>C#マネージド側の全クラス設計</td></tr>
+<tr><td>05</td><td><a href="05_シーケンス図_初期化.md">シーケンス図_初期化</a></td><td>起動〜描画開始までの初期化フロー</td></tr>
+<tr><td>06</td><td><a href="06_シーケンス図_フレームループ.md">シーケンス図_フレームループ</a></td><td>毎フレームの処理順序</td></tr>
+<tr><td>07</td><td><a href="07_シーケンス図_PIE.md">シーケンス図_PIE</a></td><td>Play In Editor の開始・停止・ホットリロード</td></tr>
+<tr><td>08</td><td><a href="08_API仕様.md">API仕様</a></td><td>ApplicationDLL 公開API と PieGameManaged エクスポート一覧</td></tr>
+</table>
+<h2>システム概要</h2>
+<pre><code>┌──────────────────────────────────────────┐
+│  ホスト層                                 │
+│  EditorQt (Qt6 UI)  /  ApplicationDLLHost │
+├──────────────────────────────────────────┤
+│  ネイティブランタイム層                    │
+│  ApplicationDLL.dll (DirectX12/Vulkan/GL) │
+├──────────────────────────────────────────┤
+│  マネージドゲーム層                        │
+│  PieGameManaged.dll (C# NativeAOT)        │
+└──────────────────────────────────────────┘</code></pre>
+<h2>PlantUML のレンダリングについて</h2>
+<p>各ドキュメントの図は PlantUML 形式で記述されています。  </p>
+<p>VSCode では <a href="https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml">PlantUML 拡張</a> を使用することでプレビューできます。  </p>
+<p>オンラインでは https://www.plantuml.com/plantuml/ でレンダリング可能です。</p>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>01_プロジェクト概要</div>
+    <h1>プロジェクト概要</h1>
+<h2>目的</h2>
+<p>DirectX12 の学習・実験を目的としたゲームエンジン実装プロジェクト。  </p>
+<p>Unity ライクな GameObject / Component アーキテクチャを採用し、C# でゲームロジックを記述しながらネイティブ (C++) でレンダリングを行う構成。</p>
+<h2>技術スタック</h2>
+<table>
+<tr><th>カテゴリ</th><th>技術</th></tr>
+<tr><td>レンダリング</td><td>DirectX 12 (メイン) / Vulkan / OpenGL</td></tr>
+<tr><td>シェーダー</td><td>HLSL (DirectX12), GLSL (Vulkan/OpenGL)</td></tr>
+<tr><td>ゲームロジック言語</td><td>C# (.NET 8, NativeAOT)</td></tr>
+<tr><td>ランタイム言語</td><td>C++ (Visual Studio 2022, x64)</td></tr>
+<tr><td>エディタ UI</td><td>Qt 6.8 + Qt Advanced Docking System</td></tr>
+<tr><td>エディタ内蔵 UI</td><td>ImGui</td></tr>
+<tr><td>3D モデル</td><td>PMD 形式</td></tr>
+<tr><td>テクスチャ</td><td>DirectXTex</td></tr>
+<tr><td>ビルドシステム</td><td>MSBuild (.vcxproj) + CMake (EditorQt)</td></tr>
+</table>
+<h2>ソリューション構成</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAFAFA
+skinparam component {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+}
+
+title DirectX12_Samples ソリューション構成
+
+package &quot;学習・実験用&quot; {
+  [DirectX12_Samples.exe] as DX12
+  [CommandListSimulation.exe] as CMD
+}
+
+package &quot;コアシステム&quot; {
+  [ApplicationDLL.dll\nネイティブランタイム] as AppDLL #D1FAE5
+  [PieGameManaged.dll\nC# NativeAOT ゲーム層] as PieGame #FEF3C7
+}
+
+package &quot;ホスト / エディタ&quot; {
+  [ApplicationDLLHost.exe\n最小ホスト] as Host #FCE4EC
+  [EditorQt.exe\nQt6 エディタ] as EditorQt #FCE4EC
+}
+
+package &quot;サードパーティ&quot; {
+  [DirectXTex] as DxTex
+  [ImGui] as ImGui
+  [Qt6] as Qt
+  [Qt-Advanced-Docking-System] as QADS
+}
+
+package &quot;アセット&quot; {
+  [Assets/\nテクスチャ・PMDモデル] as Assets
+}
+
+AppDLL --&gt; DxTex
+AppDLL --&gt; ImGui
+EditorQt --&gt; Qt
+EditorQt --&gt; QADS
+
+Host --&gt; AppDLL : LoadLibrary
+EditorQt --&gt; AppDLL : P/Invoke
+
+AppDLL &lt;--&gt; PieGame : SetNativeApi / GameStart\nGameTick / GameStop
+
+AppDLL ..&gt; Assets : 読み込み
+
+DX12 --&gt; AppDLL
+CMD -[hidden]-&gt; DX12
+
+note right of PieGame
+  dotnet publish (NativeAOT)
+  でビルド→ PIE 時に
+  動的ロード（ホットリロード可）
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>サブプロジェクト役割一覧</h2>
+<table>
+<tr><th>プロジェクト</th><th>種別</th><th>役割</th></tr>
+<tr><td><code>ApplicationDLL</code></td><td>DLL (C++)</td><td>ウィンドウ管理・レンダリング・PIE制御・ImGui UI の中核</td></tr>
+<tr><td><code>PieGameManaged</code></td><td>DLL (C# NativeAOT)</td><td>ゲームオブジェクト・コンポーネント・シーン管理</td></tr>
+<tr><td><code>EditorQt</code></td><td>EXE (C++/Qt6)</td><td>次世代エディタフロントエンド（現行メイン）</td></tr>
+<tr><td><code>ApplicationDLLHost</code></td><td>EXE (C++)</td><td>ApplicationDLL の最小ホスト (デバッグ・CI 用途)</td></tr>
+<tr><td><code>DirectX12_Samples</code></td><td>EXE (C++)</td><td>DirectX12 API の個別学習サンプル</td></tr>
+<tr><td><code>CommandListSimulation</code></td><td>EXE (C++)</td><td>コマンドキューの概念学習用シミュレーション</td></tr>
+<tr><td><code>Editor</code></td><td>EXE (WPF/C#)</td><td>レガシーエディタ（現在非アクティブ）</td></tr>
+</table>
+<h2>ディレクトリ構成</h2>
+<pre><code>DirectX12_Samples/
+├── ApplicationDLL/          # C++ ネイティブランタイム
+│   ├── RHI/                 #   レンダーハードウェアインターフェース
+│   ├── Renderer/            #   描画バックエンド (DX12/Vulkan/GL)
+│   ├── SpriteRenderers/     #   スプライト描画バックエンド
+│   ├── Scene/               #   シーン管理
+│   ├── Editor/              #   ImGui エディタUI + PIE制御
+│   ├── Analyzer/            #   PMD モデル解析
+│   ├── Math/                #   行列・ベクトル計算
+│   └── Shader/              #   HLSL シェーダー
+├── PieGameManaged/          # C# ゲームロジック層
+├── EditorQt/                # Qt6 エディタ
+│   └── src/                 #   ソースコード
+├── ApplicationDLLHost/      # 最小ホスト
+├── DirectX12_Samples/       # 学習サンプル
+├── CommandListSimulation/   # コマンドリスト学習
+├── Assets/                  # テクスチャ・モデルリソース
+│   ├── Texture/
+│   └── Model/
+├── ThirdParty/              # 外部ライブラリ
+│   ├── DirectXTex/
+│   ├── imgui/
+│   └── Qt-Advanced-Docking-System/
+└── Documents/               # 設計ドキュメント</code></pre>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>02_レイヤーアーキテクチャ</div>
+        <h1>レイヤーアーキテクチャ</h1>
+<h2>3層アーキテクチャ全体図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName &quot;Meiryo UI&quot;
+
+title システム 3層アーキテクチャ
+
+rectangle &quot;Layer 3: ホスト層&quot; #FCE4EC {
+  rectangle &quot;EditorQt.exe\n(Qt6 + Advanced Docking)&quot; as EditorQt
+  rectangle &quot;ApplicationDLLHost.exe\n(最小ホスト)&quot; as Host
+}
+
+rectangle &quot;Layer 2: ネイティブランタイム層\nApplicationDLL.dll&quot; #D1FAE5 {
+  rectangle &quot;AppRuntime\n(ファサード・シングルトン)&quot; as AppRuntime
+
+  rectangle &quot;ウィンドウ管理\nWindowHost\nWin32 API&quot; as Win32
+
+  rectangle &quot;描画システム&quot; #C8E6C9 {
+    rectangle &quot;IRenderDevice\n(インターフェース)&quot; as IRD
+    rectangle &quot;Dx12RenderDevice&quot; as DX12
+    rectangle &quot;VulkanRenderDevice&quot; as VK
+    rectangle &quot;OpenGLRenderDevice&quot; as GL
+    IRD &lt;|-- DX12
+    IRD &lt;|-- VK
+    IRD &lt;|-- GL
+  }
+
+  rectangle &quot;RHI層&quot; #A5D6A7 {
+    rectangle &quot;DescriptorHeapManager&quot; as DHM
+    rectangle &quot;TextureAssetManager&quot; as TAM
+    rectangle &quot;ShaderCompiler&quot; as SC
+    rectangle &quot;PipelineLibrary\n(PSO キャッシュ)&quot; as PL
+    rectangle &quot;RootSignatureCache&quot; as RSC
+    rectangle &quot;FrameConstantsManager&quot; as FCM
+  }
+
+  rectangle &quot;スプライト描画&quot; #E8F5E9 {
+    rectangle &quot;ISpriteRendererBackend&quot; as ISRB
+    rectangle &quot;Dx12SpriteRendererBackend&quot; as D12SRB
+    rectangle &quot;OpenGlSpriteRendererBackend&quot; as GLSRB
+    rectangle &quot;VulkanSpriteRendererBackend&quot; as VKB
+    ISRB &lt;|-- D12SRB
+    ISRB &lt;|-- GLSRB
+    ISRB &lt;|-- VKB
+  }
+
+  rectangle &quot;シーン管理&quot; #F1F8E9 {
+    rectangle &quot;SceneManager&quot; as SM
+    rectangle &quot;SceneBase → SceneGame&quot; as SG
+  }
+
+  rectangle &quot;エディタ + PIE&quot; #E3F2FD {
+    rectangle &quot;EditorUi\n(ImGui)&quot; as EditorUi
+    rectangle &quot;PlayInEditor&quot; as PIE
+    rectangle &quot;PieLoader&quot; as PLoader
+    rectangle &quot;PieAutoPublish&quot; as PubAuto
+  }
+
+  rectangle &quot;解析&quot; {
+    rectangle &quot;PMDAnalyzer&quot; as PMD
+  }
+
+  AppRuntime --&gt; Win32
+  AppRuntime --&gt; IRD
+  AppRuntime --&gt; SM
+  AppRuntime --&gt; EditorUi
+  AppRuntime --&gt; PIE
+  AppRuntime --&gt; TAM
+  IRD --&gt; DHM
+  IRD --&gt; SC
+  IRD --&gt; PL
+  IRD --&gt; RSC
+  IRD --&gt; FCM
+  IRD --&gt; ISRB
+  PIE --&gt; PLoader
+  PIE --&gt; PubAuto
+}
+
+rectangle &quot;Layer 1: マネージドゲーム層\nPieGameManaged.dll (C# NativeAOT)&quot; #FEF3C7 {
+  rectangle &quot;GameEntry\n(エクスポートエントリーポイント)&quot; as GameEntry
+  rectangle &quot;Scene\n(シーン管理)&quot; as Scene
+  rectangle &quot;GameObject / Component&quot; as GOC
+  rectangle &quot;SpriteRenderer\n+ SpriteRendererSystem&quot; as SRS
+  rectangle &quot;TextureAssetManager (C#)&quot; as TAM_CS
+  rectangle &quot;NativeMethods\n(P/Invoke ブリッジ)&quot; as NM
+  GameEntry --&gt; Scene
+  Scene --&gt; GOC
+  GOC --&gt; SRS
+  SRS --&gt; TAM_CS
+  SRS --&gt; NM
+}
+
+EditorQt --&gt; AppRuntime : P/Invoke\n(LoadLibrary)
+Host --&gt; AppRuntime : P/Invoke\n(LoadLibrary)
+PIE --&gt; GameEntry : GameStart()\nGameTick(delta)\nGameStop()
+GameEntry --&gt; AppRuntime : 関数ポインタ経由\n(NativeApiTable)
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>モジュール間依存関係</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+left to right direction
+
+title モジュール間依存関係図
+
+package &quot;EditorQt&quot; {
+  [MainWindow]
+  [EditorRuntimeHost]
+  [RuntimeBridge]
+  [QtEditorFrontend]
+  [ImGuiEditorFrontend]
+}
+
+package &quot;ApplicationDLL&quot; {
+  [AppRuntime] as AR
+  [FrameLoop] as FL
+  [PlayInEditor] as PIE
+  [EditorUi] as EU
+  [Dx12RenderDevice] as DX12
+  [SpriteRenderer系] as SR
+  [TextureAssetManager] as TAM
+  [PMDAnalyzer] as PMD
+}
+
+package &quot;PieGameManaged&quot; {
+  [GameEntry] as GE
+  [Scene] as SCN
+  [GameObject] as GO
+  [SpriteRendererSystem] as SRS
+  [NativeMethods] as NM
+}
+
+[MainWindow] --&gt; [EditorRuntimeHost]
+[EditorRuntimeHost] --&gt; [RuntimeBridge]
+[RuntimeBridge] --&gt; AR : dllimport
+[MainWindow] --&gt; [QtEditorFrontend]
+[QtEditorFrontend] --&gt; [RuntimeBridge]
+
+AR --&gt; FL
+AR --&gt; PIE
+AR --&gt; EU
+AR --&gt; DX12
+AR --&gt; TAM
+FL --&gt; DX12
+FL --&gt; SR
+PIE --&gt; GE : LoadLibrary\nGameStart/Tick/Stop
+GE --&gt; SCN
+SCN --&gt; GO
+GO --&gt; SRS
+SRS --&gt; NM
+NM --&gt; AR : 関数ポインタ
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>レンダリングバックエンド切り替え</h2>
+<p>実行時に <code>SetRendererBackend(backend)</code> を呼ぶことで切り替え可能。</p>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+state &quot;レンダリングバックエンド選択&quot; as choice &lt;&lt;choice&gt;&gt;
+
+[*] --&gt; choice : SetRendererBackend(n)
+
+choice --&gt; DirectX12 : n=0\n(既定)
+choice --&gt; Vulkan : n=1
+choice --&gt; OpenGL : n=2
+
+state DirectX12 {
+  Dx12RenderDevice --&gt; Dx12SpriteRendererBackend
+  Dx12RenderDevice --&gt; DescriptorHeapManager
+  Dx12RenderDevice --&gt; PipelineLibrary
+  Dx12RenderDevice --&gt; RootSignatureCache
+}
+
+state Vulkan {
+  VulkanRenderDevice --&gt; VulkanSpriteRendererBackend
+}
+
+state OpenGL {
+  OpenGLRenderDevice --&gt; OpenGlSpriteRendererBackend
+}
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>フレームループ実行順序</h2>
+<p><code>FrameLoop</code> クラスがフレームごとの処理順を定義する。</p>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam activityBackgroundColor #E3F2FD
+skinparam activityBorderColor #1565C0
+
+title フレームループ実行順序
+
+start
+
+:Win32 メッセージ処理;
+note right: PeekMessage / TranslateMessage
+
+if (PIE 実行中?) then (yes)
+  :PlayInEditor::Update()\n→ GameEntry::GameTick(delta);
+  :SpriteRendererSystem::Sync()\n(C#→ネイティブ状態同期);
+endif
+
+:IRenderDevice::PreRender(clearColor);
+note right: バックバッファクリア
+
+if (EditorUi 有効?) then (yes)
+  :EditorUi::RenderFrame()\n(ImGui ウィジェット描画);
+endif
+
+:IRenderDevice::Render();
+note right: スプライト・メッシュ描画\nPresent
+
+stop
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>03_クラス図_ApplicationDLL</div>
+            <h1>クラス図 - ApplicationDLL (C++ ネイティブ側)</h1>
+<h2>コアクラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #E3F2FD
+skinparam classBorderColor #1565C0
+skinparam classHeaderBackgroundColor #1565C0
+skinparam classHeaderFontColor white
+
+title ApplicationDLL コアクラス図
+
+class AppRuntime {
+  + {static} Get() : AppRuntime&amp;
+  + CreateNativeWindow() : HWND
+  + CreateNativeChildWindow(parent, w, h) : HWND
+  + CreateGameNativeWindow() : HWND
+  + ShowNativeWindow()
+  + HideNativeWindow()
+  + DestroyNativeWindow()
+  + MessageLoopIteration()
+  + StartPie()
+  + StopPie()
+  + SetEditorUiEnabled(enabled)
+  + CreateSpriteRenderer() : uint32_t
+  + DestroySpriteRenderer(handle)
+  + SetSpriteRendererTransform(handle, cx, cy, w, h)
+  + AcquireTextureHandle(path) : uint32_t
+  + ReleaseTextureHandle(handle)
+  + SetSpriteRendererTexture(sprHandle, texHandle)
+  + SetRendererBackend(backend) : BOOL
+  + GetRuntimeStatusText() : const char*
+  - m_state : RuntimeState
+}
+
+class RuntimeState {
+  + hwnd : HWND
+  + gameHwnd : HWND
+  + renderDevice : unique_ptr&lt;IRenderDevice&gt;
+  + pieGameModule : HMODULE
+  + pieGameStartFn : PieGameStartFn
+  + pieGameTickFn : PieGameTickFn
+  + pieGameStopFn : PieGameStopFn
+  + spriteRenderers : unordered_map&lt;uint32_t, ISpriteRenderObject*&gt;
+  + textureAssetManager : TextureAssetManager
+  + sceneViewportCamera : ViewportCamera2D
+  + gameViewportCamera : ViewportCamera2D
+  + editorUiEnabled : bool
+  + imguiInitialized : bool
+  + nextSpriteHandle : uint32_t
+  + clearColor : float[4]
+}
+
+AppRuntime *-- RuntimeState
+
+class FrameLoop {
+  + Run(state)
+  + RenderSpriteRenderers(device, renderers)
+  - ProcessWin32Messages()
+  - UpdatePie(delta)
+  - SyncRenderState()
+}
+
+AppRuntime --&gt; FrameLoop : uses
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>レンダリングデバイス クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #E8F5E9
+skinparam classBorderColor #2E7D32
+
+title レンダリングデバイス クラス階層
+
+interface IRenderDevice {
+  + {abstract} Initialize(hwnd, width, height) : bool
+  + {abstract} PreRender(clearColor)
+  + {abstract} Render()
+  + {abstract} Resize(width, height)
+  + {abstract} CreateSpriteRenderObject() : ISpriteRenderObject*
+  + {abstract} DestroySpriteRenderObject(obj)
+  + {abstract} AcquireTexture(path) : TextureHandle
+  + {abstract} ReleaseTexture(handle)
+  + {abstract} Shutdown()
+}
+
+class Dx12RenderDevice {
+  - m_device : ComPtr&lt;ID3D12Device&gt;
+  - m_commandQueue : ComPtr&lt;ID3D12CommandQueue&gt;
+  - m_swapChain : ComPtr&lt;IDXGISwapChain4&gt;
+  - m_descHeapManager : DescriptorHeapManager
+  - m_pipelineLibrary : PipelineLibrary
+  - m_rootSigCache : RootSignatureCache
+  - m_shaderCache : ShaderCache
+  - m_frameConstantsMgr : FrameConstantsManager
+  - m_textureManager : DX12TextureManager
+  + Initialize(hwnd, w, h) : bool
+  + PreRender(clearColor)
+  + Render()
+}
+
+class VulkanRenderDevice {
+  - m_instance : VkInstance
+  - m_physicalDevice : VkPhysicalDevice
+  - m_device : VkDevice
+  + Initialize(hwnd, w, h) : bool
+  + PreRender(clearColor)
+  + Render()
+}
+
+class OpenGLRenderDevice {
+  - m_hglrc : HGLRC
+  + Initialize(hwnd, w, h) : bool
+  + PreRender(clearColor)
+  + Render()
+}
+
+class RenderDeviceFactory {
+  + {static} Create(backend) : unique_ptr&lt;IRenderDevice&gt;
+}
+
+IRenderDevice &lt;|.. Dx12RenderDevice
+IRenderDevice &lt;|.. VulkanRenderDevice
+IRenderDevice &lt;|.. OpenGLRenderDevice
+RenderDeviceFactory ..&gt; IRenderDevice : creates
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>RHI (レンダーハードウェアインターフェース) クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #FFF8E1
+skinparam classBorderColor #F57F17
+
+title RHI クラス図
+
+class DescriptorHeapManager {
+  - m_device : ID3D12Device*
+  - m_cbvSrvUavHeap : ComPtr&lt;ID3D12DescriptorHeap&gt;
+  - m_rtvHeap : ComPtr&lt;ID3D12DescriptorHeap&gt;
+  - m_dsvHeap : ComPtr&lt;ID3D12DescriptorHeap&gt;
+  - m_allocatedCount : uint32_t
+  + Initialize(device) : bool
+  + AllocateCbvSrvUav() : D3D12_CPU_DESCRIPTOR_HANDLE
+  + AllocateRtv() : D3D12_CPU_DESCRIPTOR_HANDLE
+}
+
+class TextureAssetManager {
+  - m_textures : unordered_map&lt;string, TextureEntry&gt;
+  + AcquireHandle(path) : uint32_t
+  + ReleaseHandle(handle)
+  + GetTexture(handle) : DX12Texture*
+  - m_nextHandle : uint32_t
+}
+
+class DX12Texture {
+  - m_resource : ComPtr&lt;ID3D12Resource&gt;
+  - m_srvHandle : D3D12_CPU_DESCRIPTOR_HANDLE
+  - m_width : uint32_t
+  - m_height : uint32_t
+  + Load(device, path) : bool
+  + GetSRVHandle() : D3D12_GPU_DESCRIPTOR_HANDLE
+}
+
+class ShaderCompiler {
+  + Compile(hlslSource, entryPoint, target) : ComPtr&lt;ID3DBlob&gt;
+  + CompileFromFile(path, entryPoint, target) : ComPtr&lt;ID3DBlob&gt;
+}
+
+class PipelineLibrary {
+  - m_cache : unordered_map&lt;PsoDesc, ComPtr&lt;ID3D12PipelineState&gt;&gt;
+  + GetOrCreate(device, desc) : ID3D12PipelineState*
+}
+
+class RootSignatureCache {
+  - m_cache : unordered_map&lt;RsDesc, ComPtr&lt;ID3D12RootSignature&gt;&gt;
+  + GetOrCreate(device, desc) : ID3D12RootSignature*
+}
+
+class ShaderCache {
+  - m_blobs : unordered_map&lt;string, ComPtr&lt;ID3DBlob&gt;&gt;
+  + GetOrCompile(path, entry, target) : ID3DBlob*
+}
+
+class FrameConstantsManager {
+  - m_uploadBuffers : array&lt;ComPtr&lt;ID3D12Resource&gt;, FRAME_COUNT&gt;
+  - m_currentFrame : uint32_t
+  + BeginFrame()
+  + UploadConstants(data, size) : D3D12_GPU_VIRTUAL_ADDRESS
+}
+
+TextureAssetManager *-- DX12Texture
+Dx12RenderDevice --&gt; DescriptorHeapManager
+Dx12RenderDevice --&gt; PipelineLibrary
+Dx12RenderDevice --&gt; RootSignatureCache
+Dx12RenderDevice --&gt; ShaderCache
+Dx12RenderDevice --&gt; FrameConstantsManager
+Dx12RenderDevice --&gt; TextureAssetManager
+ShaderCache --&gt; ShaderCompiler
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>スプライト描画クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #FCE4EC
+skinparam classBorderColor #880E4F
+
+title スプライト描画クラス図
+
+interface ISpriteRenderObject {
+  + {abstract} SetTransform(cx, cy, w, h)
+  + {abstract} SetTexture(texHandle)
+  + {abstract} SetMaterial(materialName)
+  + {abstract} Render(cmdList)
+  + {abstract} Release()
+}
+
+class Dx12SpriteRenderObject {
+  - m_vertexBuffer : ComPtr&lt;ID3D12Resource&gt;
+  - m_constantBuffer : ComPtr&lt;ID3D12Resource&gt;
+  - m_textureHandle : uint32_t
+  - m_transform : SpriteTransform
+  - m_materialName : string
+  + SetTransform(cx, cy, w, h)
+  + SetTexture(texHandle)
+  + Render(cmdList)
+}
+
+interface ISpriteRendererBackend {
+  + {abstract} CreateSpriteRenderObject() : ISpriteRenderObject*
+}
+
+class Dx12SpriteRendererBackend {
+  - m_device : Dx12RenderDevice*
+  + CreateSpriteRenderObject() : ISpriteRenderObject*
+}
+
+class OpenGlSpriteRendererBackend {
+  + CreateSpriteRenderObject() : ISpriteRenderObject*
+}
+
+class VulkanSpriteRendererBackend {
+  + CreateSpriteRenderObject() : ISpriteRenderObject*
+}
+
+class NdcSpriteRendererBackendBase {
+  # ConvertToNdc(transform) : NdcRect
+}
+
+ISpriteRenderObject &lt;|.. Dx12SpriteRenderObject
+
+ISpriteRendererBackend &lt;|.. Dx12SpriteRendererBackend
+ISpriteRendererBackend &lt;|.. OpenGlSpriteRendererBackend
+ISpriteRendererBackend &lt;|.. VulkanSpriteRendererBackend
+NdcSpriteRendererBackendBase &lt;|-- Dx12SpriteRendererBackend
+NdcSpriteRendererBackendBase &lt;|-- OpenGlSpriteRendererBackend
+NdcSpriteRendererBackendBase &lt;|-- VulkanSpriteRendererBackend
+
+Dx12SpriteRendererBackend ..&gt; Dx12SpriteRenderObject : creates
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>シーン管理クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #E8EAF6
+skinparam classBorderColor #283593
+
+title シーン管理クラス図 (C++)
+
+class SceneManager {
+  - m_currentScene : unique_ptr&lt;SceneBase&gt;
+  + SetScene(scene)
+  + GetCurrentScene() : SceneBase*
+  + Update(deltaSeconds)
+  + Render(device)
+}
+
+abstract class SceneBase {
+  + {abstract} OnEnter()
+  + {abstract} OnExit()
+  + {abstract} Update(deltaSeconds)
+  + {abstract} Render(device)
+}
+
+class SceneGame {
+  - m_spriteRenderers : vector&lt;ISpriteRenderObject*&gt;
+  + OnEnter()
+  + OnExit()
+  + Update(deltaSeconds)
+  + Render(device)
+}
+
+SceneManager *-- SceneBase
+SceneBase &lt;|-- SceneGame
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>PIE (Play In Editor) クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #E0F7FA
+skinparam classBorderColor #006064
+
+title PIE クラス図
+
+class PlayInEditor {
+  - m_loader : PieLoader
+  - m_autoPublish : PieAutoPublish
+  - m_isRunning : bool
+  - m_lastFrameTime : LARGE_INTEGER
+  + Start()
+  + Stop()
+  + Update()
+  + IsRunning() : bool
+  - CalculateDeltaSeconds() : float
+}
+
+class PieLoader {
+  - m_hModule : HMODULE
+  - m_gameStartFn : PieGameStartFn
+  - m_gameTickFn : PieGameTickFn
+  - m_gameStopFn : PieGameStopFn
+  - m_setNativeApiFn : SetNativeApiFn
+  + Load(dllPath) : bool
+  + Unload()
+  + CallGameStart()
+  + CallGameTick(delta)
+  + CallGameStop()
+  + SetNativeApi(apiTable)
+  + IsLoaded() : bool
+}
+
+class PieAutoPublish {
+  - m_publishProcess : HANDLE
+  - m_dllOutputPath : string
+  + Publish() : bool
+  + IsPublishing() : bool
+  + WaitForPublish(timeoutMs) : bool
+  - RunDotnetPublish() : HANDLE
+}
+
+class EditorUi {
+  - m_pieState : PlayInEditor*
+  + RenderFrame(appRuntime)
+  - RenderMainMenuBar()
+  - RenderPieControls()
+  - RenderSceneViewport()
+  - RenderGameViewport()
+  - RenderStatusBar()
+}
+
+PlayInEditor *-- PieLoader
+PlayInEditor *-- PieAutoPublish
+EditorUi --&gt; PlayInEditor : controls
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>04_クラス図_PieGameManaged</div>
+        <h1>クラス図 - PieGameManaged (C# マネージド側)</h1>
+<h2>全体クラス図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #FEF3C7
+skinparam classBorderColor #92400E
+skinparam classHeaderBackgroundColor #92400E
+skinparam classHeaderFontColor white
+
+title PieGameManaged 全体クラス図
+
+class GameEntry &lt;&lt;static&gt;&gt; {
+  + {static} GameStart()
+  + {static} GameTick(deltaSeconds : float)
+  + {static} GameStop()
+  + {static} SetNativeApi(api : NativeApiTable*)
+  - {static} s_scene : Scene
+  - {static} s_spriteRendererSystem : SpriteRendererSystem
+  - {static} s_elapsedTime : float
+}
+
+class Scene {
+  + GameObjects : List&lt;GameObject&gt;
+  + IsStarted : bool
+  + CreateGameObject(name : string) : GameObject
+  + DestroyGameObject(go : GameObject) : bool
+  + DestroyAllGameObjects()
+  + Start()
+  + Update(deltaSeconds : float)
+  - m_pendingDestroyComponents : List&lt;Component&gt;
+}
+
+class GameObject {
+  + Name : string
+  + ActiveSelf : bool
+  + Transform : Transform
+  + AddComponent&lt;T&gt;() : T
+  + GetComponent&lt;T&gt;() : T?
+  + GetComponents&lt;T&gt;() : IReadOnlyList&lt;T&gt;
+  + RemoveComponent&lt;T&gt;() : bool
+  + RemoveComponent(component : Component) : bool
+  - m_components : List&lt;Component&gt;
+}
+
+abstract class Component {
+  + GameObject : GameObject
+  + Scene : Scene
+  + Transform : Transform
+  + Enabled : bool
+  # {abstract} Awake()
+  # {abstract} Start()
+  # {abstract} Update(deltaSeconds : float)
+  # {abstract} OnDestroy()
+}
+
+class Transform {
+  + CenterX : float
+  + CenterY : float
+  + Width : float
+  + Height : float
+}
+
+class SpriteRenderer {
+  + Material : string
+  + Texture : string
+  + NativeSpriteRendererHandle : uint &lt;&lt;internal&gt;&gt;
+  + TextureHandle : TextureHandle &lt;&lt;internal&gt;&gt;
+  # Awake()
+  # OnDestroy()
+}
+
+class SpriteRendererSystem {
+  - m_textureAssetManager : TextureAssetManager
+  + Initialize(scene : Scene)
+  + Sync(scene : Scene)
+  + Release(scene : Scene)
+  + Release(renderer : SpriteRenderer)
+  - CreateNativeSpriteRenderer(renderer)
+  - SyncTransform(renderer)
+  - SyncTexture(renderer)
+}
+
+class TextureAssetManager {
+  - m_pathToHandle : Dictionary&lt;string, uint&gt;
+  - m_refCount : Dictionary&lt;uint, int&gt;
+  + AcquireHandle(path : string) : TextureHandle
+  + ReleaseHandle(handle : TextureHandle)
+}
+
+class TextureHandle &lt;&lt;struct&gt;&gt; {
+  + Value : uint
+  + IsValid : bool
+}
+
+class PlayerPulseController {
+  - m_elapsedTime : float
+  - m_amplitude : float
+  - m_frequency : float
+  + {override} Update(deltaSeconds)
+}
+
+class NativeMethods &lt;&lt;static&gt;&gt; {
+  - {static} s_api : NativeApiTable
+  + {static} SetNativeApi(api : NativeApiTable*)
+  + {static} SetGameClearColor(r, g, b, a)
+  + {static} CreateSpriteRenderer() : uint
+  + {static} DestroySpriteRenderer(handle)
+  + {static} SetSpriteRendererTransform(handle, cx, cy, w, h)
+  + {static} AcquireTextureHandle(path) : uint
+  + {static} ReleaseTextureHandle(handle)
+  + {static} SetSpriteRendererTexture(sprHandle, texHandle)
+  + {static} SetSpriteRendererMaterial(sprHandle, matName)
+}
+
+class NativeApiTable &lt;&lt;struct&gt;&gt; {
+  + SetGameClearColor : delegate* unmanaged[Cdecl]&lt;float,float,float,float,void&gt;
+  + CreateSpriteRenderer : delegate* unmanaged[Cdecl]&lt;uint&gt;
+  + DestroySpriteRenderer : delegate* unmanaged[Cdecl]&lt;uint,void&gt;
+  + SetSpriteRendererTransform : delegate* unmanaged[Cdecl]&lt;uint,float,float,float,float,void&gt;
+  + AcquireTextureHandle : delegate* unmanaged[Cdecl]&lt;byte*,uint&gt;
+  + ReleaseTextureHandle : delegate* unmanaged[Cdecl]&lt;uint,void&gt;
+  + SetSpriteRendererTexture : delegate* unmanaged[Cdecl]&lt;uint,uint,void&gt;
+  + SetSpriteRendererMaterial : delegate* unmanaged[Cdecl]&lt;uint,byte*,void&gt;
+}
+
+class BuiltInMaterials &lt;&lt;static&gt;&gt; {
+  + {static} Default : string = &quot;Default&quot;
+  + {static} Sprite : string = &quot;Sprite&quot;
+}
+
+GameEntry --&gt; Scene : creates/owns
+GameEntry --&gt; SpriteRendererSystem : creates/owns
+GameEntry --&gt; NativeMethods : calls
+
+Scene &quot;1&quot; *-- &quot;0..*&quot; GameObject
+GameObject &quot;1&quot; *-- &quot;1&quot; Transform
+GameObject &quot;1&quot; *-- &quot;0..*&quot; Component
+
+Component &lt;|-- SpriteRenderer
+Component &lt;|-- PlayerPulseController
+
+SpriteRendererSystem --&gt; Scene : reads
+SpriteRendererSystem --&gt; SpriteRenderer : manages
+SpriteRendererSystem --&gt; TextureAssetManager : uses
+SpriteRendererSystem --&gt; NativeMethods : calls
+
+TextureAssetManager --&gt; TextureHandle : creates
+SpriteRenderer --&gt; TextureHandle : holds
+
+NativeMethods --&gt; NativeApiTable : uses
+NativeMethods ..&gt; BuiltInMaterials : references
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>コンポーネントライフサイクル</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam stateBackgroundColor #FEF9C3
+skinparam stateBorderColor #92400E
+
+title Component ライフサイクル
+
+[*] --&gt; Created : AddComponent&lt;T&gt;()
+
+Created --&gt; Awake : 即座に
+Awake --&gt; WaitForStart : Awake() 完了
+
+WaitForStart --&gt; Start : Scene.Start()\nまたは\n遅延実行
+
+Start --&gt; Active : Start() 完了
+
+Active --&gt; Active : Update(delta)\n毎フレーム呼ばれる
+
+Active --&gt; Disabled : Enabled = false
+Disabled --&gt; Active : Enabled = true
+
+Active --&gt; PendingDestroy : RemoveComponent()\nまたは\nDestroyGameObject()
+
+PendingDestroy --&gt; OnDestroy : フレーム末に実行
+OnDestroy --&gt; [*]
+
+note right of PendingDestroy
+  Scene.m_pendingDestroyComponents に
+  追加され、フレーム末に一括処理される
+  (イテレーション中の削除を防ぐ)
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>SpriteRenderer 同期フロー</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam activityBackgroundColor #FEF3C7
+skinparam activityBorderColor #92400E
+
+title SpriteRendererSystem::Sync() フロー
+
+start
+
+:Scene 内の全 SpriteRenderer を収集;
+
+while (SpriteRenderer が存在する?) is (yes)
+
+  if (NativeHandle == 0?) then (未作成)
+    :NativeMethods.CreateSpriteRenderer()\n→ ネイティブハンドル取得;
+    :NativeSpriteRendererHandle に格納;
+  endif
+
+  if (Texture が変更された?) then (yes)
+    if (前のテクスチャがあれば) then (yes)
+      :TextureAssetManager.ReleaseHandle(旧ハンドル);
+    endif
+    :TextureAssetManager.AcquireHandle(新テクスチャパス)\n→ 新テクスチャハンドル取得;
+    :NativeMethods.SetSpriteRendererTexture(sprHandle, texHandle);
+  endif
+
+  if (Material が変更された?) then (yes)
+    :NativeMethods.SetSpriteRendererMaterial(sprHandle, matName);
+  endif
+
+  :NativeMethods.SetSpriteRendererTransform(\n  handle, cx, cy, w, h);
+  note right: Transform.CenterX/Y/Width/Height を送信
+
+endwhile (no)
+
+stop
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>NativeApiTable - P/Invoke ブリッジ設計</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam noteBackgroundColor #E8F5E9
+
+title P/Invoke 双方向ブリッジ
+
+rectangle &quot;C++ (ApplicationDLL.dll)&quot; #D1FAE5 {
+  rectangle &quot;エクスポート関数群\n(extern C)&quot; as CppExports {
+    [GameStart → ゲームDLLへ]
+    [GameTick(delta) → ゲームDLLへ]
+    [GameStop → ゲームDLLへ]
+  }
+
+  rectangle &quot;ネイティブ実装&quot; as NativeImpl {
+    [CreateSpriteRenderer]
+    [SetSpriteRendererTransform]
+    [AcquireTextureHandle]
+    [SetGameClearColor]
+    ...(他)
+  }
+}
+
+rectangle &quot;C# (PieGameManaged.dll)&quot; #FEF3C7 {
+  rectangle &quot;UnmanagedCallersOnly エクスポート&quot; as CsExports {
+    [GameStart()]
+    [GameTick(float)]
+    [GameStop()]
+    [SetNativeApi(NativeApiTable*)]
+  }
+
+  rectangle &quot;NativeMethods (関数ポインタ経由)&quot; as CsWrapper {
+    [SetGameClearColor(...)]
+    [CreateSpriteRenderer() : uint]
+    [DestroySpriteRenderer(uint)]
+    [AcquireTextureHandle(string) : uint]
+    ...(他)
+  }
+}
+
+[GameStart → ゲームDLLへ] --&gt; [GameStart()] : LoadLibrary\nGetProcAddress\n→ 関数ポインタ
+[GameTick(delta) → ゲームDLLへ] --&gt; [GameTick(float)]
+[GameStop → ゲームDLLへ] --&gt; [GameStop()]
+
+NativeImpl --&gt; CsWrapper : SetNativeApi で\nNativeApiTable 渡し\n関数ポインタ経由で呼び出し
+
+note bottom of CsWrapper
+  NativeApiTable 構造体に
+  関数ポインタ (unmanaged[Cdecl]) を格納し
+  SetNativeApi() で一括初期化する
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>05_シーケンス図_初期化</div>
+      <h1>シーケンス図 - 初期化フロー</h1>
+<h2>アプリケーション起動〜レンダリング開始</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowColor #1565C0
+skinparam sequenceParticipantBackgroundColor #E3F2FD
+skinparam sequenceParticipantBorderColor #1565C0
+skinparam sequenceLifeLineBackgroundColor #BBDEFB
+
+title アプリケーション起動〜レンダリング開始 シーケンス図
+
+actor User
+participant &quot;EditorQt / Host\n(ホストプロセス)&quot; as Host
+participant &quot;ApplicationDLL\n(AppRuntime)&quot; as AppRuntime
+participant &quot;RenderDeviceFactory&quot; as Factory
+participant &quot;Dx12RenderDevice\n(またはGL/Vulkan)&quot; as RD
+participant &quot;DescriptorHeapManager\n+ その他RHIクラス&quot; as RHI
+participant &quot;EditorUi\n(ImGui)&quot; as EditorUi
+
+User -&gt; Host : アプリ起動
+
+Host -&gt; Host : LoadLibrary(&quot;ApplicationDLL.dll&quot;)
+
+Host -&gt; AppRuntime : CreateNativeWindow()
+activate AppRuntime
+
+  AppRuntime -&gt; AppRuntime : Win32 ウィンドウ作成\n(RegisterClassEx / CreateWindowEx)
+
+  AppRuntime -&gt; Factory : Create(backend=DX12)
+  activate Factory
+    Factory -&gt; RD : new Dx12RenderDevice()
+    Factory --&gt; AppRuntime : unique_ptr&lt;IRenderDevice&gt;
+  deactivate Factory
+
+  AppRuntime -&gt; RD : Initialize(hwnd, width, height)
+  activate RD
+    RD -&gt; RD : CreateDXGIFactory()\nD3D12CreateDevice()
+    RD -&gt; RD : CreateCommandQueue()\nCreateCommandAllocator()
+    RD -&gt; RD : CreateSwapChain(hwnd)
+    RD -&gt; RHI : DescriptorHeapManager::Initialize(device)
+    RD -&gt; RHI : PipelineLibrary::Initialize(device)
+    RD -&gt; RHI : RootSignatureCache::Initialize()
+    RD -&gt; RHI : ShaderCache::Initialize()
+    RD -&gt; RHI : FrameConstantsManager::Initialize()
+    RD --&gt; AppRuntime : bool (success)
+  deactivate RD
+
+  AppRuntime -&gt; EditorUi : Initialize(hwnd, device)
+  activate EditorUi
+    EditorUi -&gt; EditorUi : ImGui::CreateContext()\nImGui_ImplWin32_Init()\nImGui_ImplDX12_Init()
+    EditorUi --&gt; AppRuntime : ok
+  deactivate EditorUi
+
+  AppRuntime --&gt; Host : HWND (ウィンドウハンドル)
+deactivate AppRuntime
+
+Host -&gt; Host : ShowWindow(hwnd)
+Host -&gt; AppRuntime : ShowNativeWindow()
+
+note over Host, EditorUi
+  以降は MessageLoopIteration() を
+  毎フレーム呼び続けるメインループへ
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>レンダリングデバイス切り替え時の再初期化</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title レンダラーバックエンド切り替え シーケンス
+
+participant &quot;EditorUI / ユーザー&quot; as UI
+participant &quot;AppRuntime&quot; as AR
+participant &quot;旧 RenderDevice&quot; as OldRD
+participant &quot;新 RenderDevice&quot; as NewRD
+participant &quot;TextureAssetManager&quot; as TAM
+
+UI -&gt; AR : SetRendererBackend(newBackend)
+activate AR
+
+  AR -&gt; AR : PIE が実行中なら StopPie()
+
+  AR -&gt; OldRD : Shutdown()
+  activate OldRD
+    OldRD -&gt; OldRD : GPU フェンス待機\n(全フレームの完了を保証)
+    OldRD -&gt; OldRD : 全リソース解放
+    OldRD --&gt; AR : ok
+  deactivate OldRD
+
+  AR -&gt; AR : m_renderDevice.reset()
+
+  AR -&gt; TAM : Clear() (テクスチャキャッシュ破棄)
+
+  AR -&gt; AR : RenderDeviceFactory::Create(newBackend)
+  AR -&gt; NewRD : Initialize(hwnd, w, h)
+  activate NewRD
+    NewRD -&gt; NewRD : バックエンド固有の初期化
+    NewRD --&gt; AR : bool
+  deactivate NewRD
+
+  AR --&gt; UI : BOOL (成功/失敗)
+deactivate AR
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>テクスチャロード フロー</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title テクスチャロード フロー (AcquireTextureHandle)
+
+participant &quot;C# SpriteRendererSystem\n(PieGameManaged)&quot; as CS
+participant &quot;NativeMethods&quot; as NM
+participant &quot;AppRuntime&quot; as AR
+participant &quot;TextureAssetManager (C++)&quot; as TAM
+participant &quot;DX12Texture&quot; as Tex
+participant &quot;DirectXTex&quot; as DxTex
+participant &quot;D3D12Resource&quot; as D3D
+
+CS -&gt; NM : AcquireTextureHandle(path)
+NM -&gt; AR : AcquireTextureHandle(path)
+activate AR
+
+  AR -&gt; TAM : AcquireHandle(path)
+  activate TAM
+
+    alt テクスチャが既にロード済み
+      TAM -&gt; TAM : refCount[path]++
+      TAM --&gt; AR : 既存 handle
+    else 初回ロード
+      TAM -&gt; Tex : new DX12Texture()
+      TAM -&gt; Tex : Load(device, path)
+      activate Tex
+        Tex -&gt; DxTex : LoadFromWICFile(path) / LoadFromDDSFile()
+        DxTex --&gt; Tex : Image data (pixels)
+        Tex -&gt; D3D : CreateCommittedResource()\n(GPU テクスチャバッファ)
+        Tex -&gt; D3D : CopyTextureRegion()\n(CPU→GPU アップロード)
+        Tex -&gt; Tex : CreateShaderResourceView()
+        Tex --&gt; TAM : ok
+      deactivate Tex
+      TAM -&gt; TAM : m_pathToHandle[path] = newHandle\nrefCount[newHandle] = 1
+      TAM --&gt; AR : newHandle
+    end
+
+  deactivate TAM
+
+  AR --&gt; NM : uint32_t handle
+deactivate AR
+
+NM --&gt; CS : uint (TextureHandle.Value)
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>06_シーケンス図_フレームループ</div>
+      <h1>シーケンス図 - フレームループ</h1>
+<h2>メインフレームループ全体</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowColor #2E7D32
+skinparam sequenceParticipantBackgroundColor #E8F5E9
+
+title メインフレームループ (MessageLoopIteration)
+
+participant &quot;Host\n(EditorQt/DLLHost)&quot; as Host
+participant &quot;AppRuntime\n/ FrameLoop&quot; as FL
+participant &quot;PlayInEditor&quot; as PIE
+participant &quot;GameEntry (C#)&quot; as GE
+participant &quot;Scene (C#)&quot; as Scene
+participant &quot;SpriteRendererSystem (C#)&quot; as SRS
+participant &quot;NativeMethods (C#)&quot; as NM
+participant &quot;AppRuntime\n(スプライト管理)&quot; as AR
+participant &quot;IRenderDevice\n(Dx12/GL/VK)&quot; as RD
+participant &quot;EditorUi\n(ImGui)&quot; as UI
+
+loop 毎フレーム
+  Host -&gt; FL : MessageLoopIteration()
+  activate FL
+
+  group Win32 メッセージ処理
+    FL -&gt; FL : PeekMessage() loop\nWM_SIZE → Resize()\nWM_CLOSE → DestroyWindow
+  end
+
+  alt PIE 実行中
+    group ゲーム更新
+      FL -&gt; PIE : Update()
+      activate PIE
+        PIE -&gt; PIE : delta = 経過時間計算\n(QueryPerformanceCounter)
+        PIE -&gt; GE : GameTick(deltaSeconds)
+        activate GE
+          GE -&gt; Scene : Update(delta)
+          activate Scene
+            Scene -&gt; Scene : 各 GameObject の\n全 Component::Update(delta) を呼ぶ
+            Scene -&gt; Scene : pendingDestroyComponents 処理\n→ OnDestroy() 呼び出し
+          deactivate Scene
+
+          GE -&gt; SRS : Sync(scene)
+          activate SRS
+            loop 各 SpriteRenderer
+              alt NativeHandle が未作成
+                SRS -&gt; NM : CreateSpriteRenderer()
+                NM -&gt; AR : CreateSpriteRenderer()
+                AR --&gt; NM : uint32_t handle
+                NM --&gt; SRS : handle
+              end
+              alt テクスチャ変更あり
+                SRS -&gt; NM : AcquireTextureHandle(path)
+                SRS -&gt; NM : SetSpriteRendererTexture(sp, tex)
+              end
+              SRS -&gt; NM : SetSpriteRendererTransform(h, cx, cy, w, h)
+              NM -&gt; AR : SetSpriteRendererTransform(...)
+            end
+          deactivate SRS
+        deactivate GE
+      deactivate PIE
+    end
+  end
+
+  group 描画
+    FL -&gt; RD : PreRender(clearColor)
+    activate RD
+      RD -&gt; RD : バックバッファクリア\nコマンドリセット
+    deactivate RD
+
+    alt EditorUi 有効
+      FL -&gt; UI : RenderFrame()
+      activate UI
+        UI -&gt; UI : ImGui::NewFrame()\nメニューバー描画\nPIEコントロール\nビューポート etc.
+        UI -&gt; UI : ImGui::Render()\nImGui_ImplDX12_RenderDrawData()
+      deactivate UI
+    end
+
+    FL -&gt; RD : Render()
+    activate RD
+      loop 全スプライトレンダラー
+        RD -&gt; RD : SetPipelineState()\nSetRootSignature()
+        RD -&gt; RD : SetVertexBuffer()\nSetConstantBuffer()
+        RD -&gt; RD : SetDescriptorTable(texture)
+        RD -&gt; RD : DrawInstanced(4) ← quad
+      end
+      RD -&gt; RD : ExecuteCommandLists()\nPresent(1, 0)\nフェンス更新
+    deactivate RD
+  end
+
+  deactivate FL
+end
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>スプライト描画詳細 (DirectX12)</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title スプライト1枚の描画フロー (DX12)
+
+participant &quot;Dx12RenderDevice&quot; as RD
+participant &quot;ID3D12GraphicsCommandList&quot; as CL
+participant &quot;PipelineLibrary\n(PSO)&quot; as PSO
+participant &quot;RootSignatureCache\n(RS)&quot; as RS
+participant &quot;DescriptorHeapManager&quot; as DHM
+participant &quot;FrameConstantsManager&quot; as FCM
+participant &quot;Dx12SpriteRenderObject&quot; as SRO
+participant &quot;GPU&quot; as GPU
+
+RD -&gt; CL : Reset(allocator, nullptr)
+RD -&gt; RS : GetOrCreate(device, spriteRsDesc)
+RD -&gt; CL : SetGraphicsRootSignature(rs)
+RD -&gt; PSO : GetOrCreate(device, spritePsoDesc)
+RD -&gt; CL : SetPipelineState(pso)
+RD -&gt; DHM : SetDescriptorHeaps([cbvSrvUav])
+RD -&gt; CL : SetDescriptorHeaps()
+
+loop 各 Dx12SpriteRenderObject
+  SRO -&gt; FCM : UploadConstants(transformData)
+  FCM --&gt; SRO : GPU virtual address
+  SRO -&gt; CL : SetGraphicsRootConstantBufferView(0, cbvAddr)
+  SRO -&gt; CL : SetGraphicsRootDescriptorTable(1, srvHandle)
+  SRO -&gt; CL : IASetVertexBuffers(0, vertexBufferView)
+  SRO -&gt; CL : IASetPrimitiveTopology(TRIANGLESTRIP)
+  SRO -&gt; CL : DrawInstanced(4, 1, 0, 0) ← 四角形
+end
+
+RD -&gt; CL : ResourceBarrier(PRESENT)
+RD -&gt; CL : Close()
+RD -&gt; RD : ExecuteCommandLists([cmdList])
+RD -&gt; RD : m_swapChain-&gt;Present(1, 0)
+RD -&gt; RD : Signal(fence, ++fenceValue)\n次フレームで Wait
+
+GPU -&gt; GPU : 頂点シェーダー\n(BasicVertexShader.hlsl)\nNDC座標変換
+
+GPU -&gt; GPU : ピクセルシェーダー\n(BasicPixelShader.hlsl)\nテクスチャサンプリング
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>Component::Update 呼び出し順序</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title Scene::Update() 内の処理順序
+
+start
+
+:m_elapsedTime += deltaSeconds;
+
+note: GameEntry.GameTick() から呼ばれる
+
+partition &quot;ゲームオブジェクト更新&quot; {
+  while (GameObjects に残りがある?) is (yes)
+    if (go.ActiveSelf == false?) then (skip)
+    else
+      while (Components に残りがある?) is (yes)
+        if (component.Enabled?) then (yes)
+          :component.Update(deltaSeconds);
+          note right
+            SpriteRenderer の場合は
+            トランスフォームの変更を記録するのみ。
+            実際の描画コールはフレーム末の
+            SpriteRendererSystem.Sync() で行う。
+          end note
+        endif
+      endwhile (no)
+    endif
+  endwhile (no)
+}
+
+partition &quot;遅延破棄処理&quot; {
+  while (m_pendingDestroyComponents?) is (yes)
+    :component.OnDestroy()\n(SpriteRenderer なら\n ネイティブハンドル解放);
+    :m_components から削除;
+  endwhile (no)
+}
+
+stop
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>07_シーケンス図_PIE</div>
+        <h1>シーケンス図 - PIE (Play In Editor)</h1>
+<h2>PIE 起動フロー</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowColor #6A1B9A
+skinparam sequenceParticipantBackgroundColor #F3E5F5
+
+title PIE (Play In Editor) 起動フロー
+
+actor User
+participant &quot;EditorUi\n(ImGui)&quot; as UI
+participant &quot;AppRuntime&quot; as AR
+participant &quot;PlayInEditor&quot; as PIE
+participant &quot;PieAutoPublish&quot; as Pub
+participant &quot;dotnet publish&quot; as DotNet
+participant &quot;PieLoader&quot; as Loader
+participant &quot;PieGameManaged.dll\n(GameEntry)&quot; as Game
+participant &quot;NativeMethods (C#)&quot; as NM
+
+User -&gt; UI : ▶ Play ボタン押下
+UI -&gt; AR : StartPie()
+activate AR
+  AR -&gt; PIE : Start()
+  activate PIE
+
+  group 自動パブリッシュ
+    PIE -&gt; Pub : Publish()
+    activate Pub
+      Pub -&gt; DotNet : CreateProcess(\n&quot;dotnet publish PieGameManaged.csproj\n  -c Release -r win-x64&quot;)
+      activate DotNet
+        DotNet -&gt; DotNet : C# ソースをコンパイル
+        DotNet -&gt; DotNet : NativeAOT でネイティブDLL生成
+        DotNet --&gt; Pub : 終了 (exit code 0)
+      deactivate DotNet
+      Pub --&gt; PIE : ok (DLL出力完了)
+    deactivate Pub
+  end
+
+  group DLL ロード + API 初期化
+    PIE -&gt; Loader : Load(&quot;PieGameManaged.dll&quot;)
+    activate Loader
+      Loader -&gt; Loader : LoadLibrary(dllPath)
+      Loader -&gt; Loader : GetProcAddress(&quot;GameStart&quot;)
+      Loader -&gt; Loader : GetProcAddress(&quot;GameTick&quot;)
+      Loader -&gt; Loader : GetProcAddress(&quot;GameStop&quot;)
+      Loader -&gt; Loader : GetProcAddress(&quot;SetNativeApi&quot;)
+      Loader --&gt; PIE : ok
+    deactivate Loader
+
+    PIE -&gt; Loader : SetNativeApi(apiTable)
+    Loader -&gt; Game : SetNativeApi(NativeApiTable*)
+    activate Game
+      Game -&gt; NM : s_api = *api\n(関数ポインタ格納)
+      Game --&gt; Loader : void
+    deactivate Game
+  end
+
+  group ゲーム初期化
+    PIE -&gt; Loader : CallGameStart()
+    Loader -&gt; Game : GameStart()
+    activate Game
+      Game -&gt; Game : new Scene()
+      Game -&gt; Game : シーンセットアップ\n(GameObjects 作成)
+      Game -&gt; Game : SpriteRendererSystem.Initialize(scene)
+      note right
+        SpriteRenderer の NativeHandle は
+        まだ 0 (未作成)
+        Sync() で初回作成される
+      end note
+      Game -&gt; Game : Scene.Start()\n→ 全 Component.Awake()\n→ 全 Component.Start()
+      Game --&gt; Loader : void
+    deactivate Game
+  end
+
+  PIE -&gt; PIE : m_isRunning = true\nタイマーリセット
+  PIE --&gt; AR : ok
+  deactivate PIE
+
+AR --&gt; UI : ok
+deactivate AR
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>PIE 停止フロー</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowColor #B71C1C
+skinparam sequenceParticipantBackgroundColor #FFEBEE
+
+title PIE 停止フロー
+
+actor User
+participant &quot;EditorUi&quot; as UI
+participant &quot;AppRuntime&quot; as AR
+participant &quot;PlayInEditor&quot; as PIE
+participant &quot;PieLoader&quot; as Loader
+participant &quot;PieGameManaged.dll\n(GameEntry)&quot; as Game
+participant &quot;Scene (C#)&quot; as Scene
+participant &quot;SpriteRendererSystem (C#)&quot; as SRS
+participant &quot;NativeMethods / AppRuntime&quot; as NM
+
+User -&gt; UI : ■ Stop ボタン押下
+UI -&gt; AR : StopPie()
+activate AR
+  AR -&gt; PIE : Stop()
+  activate PIE
+
+  group ゲーム終了
+    PIE -&gt; Loader : CallGameStop()
+    Loader -&gt; Game : GameStop()
+    activate Game
+
+      Game -&gt; SRS : Release(scene)
+      activate SRS
+        loop 各 SpriteRenderer
+          SRS -&gt; NM : DestroySpriteRenderer(handle)
+          NM -&gt; AR : DestroySpriteRenderer(handle) [ネイティブ実装]
+          AR -&gt; AR : g_spriteRenderers.erase(handle)
+          SRS -&gt; NM : ReleaseTextureHandle(texHandle)
+          NM -&gt; AR : ReleaseTextureHandle(texHandle)
+          AR -&gt; AR : refCount-- / テクスチャ破棄
+        end
+      deactivate SRS
+
+      Game -&gt; Scene : DestroyAllGameObjects()
+      activate Scene
+        Scene -&gt; Scene : 全 Component.OnDestroy() 呼び出し
+        Scene -&gt; Scene : m_gameObjects.Clear()
+      deactivate Scene
+
+      Game --&gt; Loader : void
+    deactivate Game
+  end
+
+  group DLL アンロード
+    PIE -&gt; Loader : Unload()
+    activate Loader
+      Loader -&gt; Loader : FreeLibrary(m_hModule)
+      Loader -&gt; Loader : 関数ポインタをクリア
+      Loader --&gt; PIE : ok
+    deactivate Loader
+  end
+
+  PIE -&gt; PIE : m_isRunning = false
+  PIE --&gt; AR : ok
+  deactivate PIE
+
+AR --&gt; UI : ok
+deactivate AR
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>PIE ホットリロード フロー</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title PIE ホットリロード (Stop → 再ビルド → Start)
+
+actor Developer
+participant &quot;EditorUi&quot; as UI
+participant &quot;PlayInEditor&quot; as PIE
+participant &quot;PieAutoPublish&quot; as Pub
+participant &quot;dotnet publish&quot; as DN
+participant &quot;PieLoader&quot; as Loader
+
+Developer -&gt; Developer : C# コードを編集・保存
+
+Developer -&gt; UI : ■ Stop → ▶ Play
+
+note over PIE: 停止フロー実行\n(前の PieGameManaged.dll を FreeLibrary)
+
+UI -&gt; PIE : Start()
+activate PIE
+
+PIE -&gt; Pub : Publish()
+activate Pub
+  Pub -&gt; DN : dotnet publish (再ビルド)
+  DN --&gt; Pub : 新しい PieGameManaged.dll 生成
+deactivate Pub
+
+PIE -&gt; Loader : Load(新 PieGameManaged.dll)
+note right: LoadLibrary で\n新 DLL をロード\n前の DLL は既にアンロード済み
+
+Loader --&gt; PIE : ok
+
+PIE -&gt; Loader : SetNativeApi(...) + CallGameStart()
+note right: 新しい DLL で\nゲームを初期化
+
+deactivate PIE
+
+note over Developer
+  ホットリロード完了
+  変更された C# コードが即座に反映される
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<h2>PIE 状態遷移図</h2>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+skinparam stateBackgroundColor #F3E5F5
+skinparam stateBorderColor #6A1B9A
+
+title PIE 状態遷移
+
+[*] --&gt; Idle : アプリ起動
+
+Idle --&gt; Publishing : StartPie()\nAutoPublish 開始
+
+Publishing --&gt; Loading : dotnet publish 完了
+Publishing --&gt; Idle : ビルドエラー\n(エラー表示)
+
+Loading --&gt; Initializing : LoadLibrary 成功\nSetNativeApi 完了
+
+Initializing --&gt; Running : GameStart() 完了
+
+Running --&gt; Running : MessageLoopIteration()\n→ GameTick(delta) 毎フレーム
+
+Running --&gt; Stopping : StopPie()
+
+Stopping --&gt; Idle : GameStop() + FreeLibrary 完了
+
+note right of Running
+  実行中は EditorUI で
+  シーン情報を表示可能
+  (将来機能)
+end note
+
+note right of Idle
+  レンダラーは動き続ける
+  (エディタビューポートを描画)
+end note
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+
+</section><div class='pb'></div>
+<section class='doc'>
+<div class='doc-header'>08_API仕様</div>
+      <h1>API仕様</h1>
+<h2>ApplicationDLL 公開 C API</h2>
+<p><code>dllmain.cpp</code> で <code>extern &quot;C&quot; __declspec(dllexport)</code> として公開されるAPI。  </p>
+<p>EditorQt および ApplicationDLLHost が LoadLibrary / GetProcAddress またはヘッダ直接参照で使用する。</p>
+<h3>ウィンドウ管理</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>CreateNativeWindow()</code></td><td><code>HWND</code></td><td>スタンドアロンウィンドウを作成し表示</td></tr>
+<tr><td><code>CreateNativeChildWindow(parent, w, h)</code></td><td><code>HWND</code></td><td>親ウィンドウへ埋め込む子ウィンドウを作成</td></tr>
+<tr><td><code>CreateGameNativeWindow()</code></td><td><code>HWND</code></td><td>ゲームビュー専用ウィンドウを作成</td></tr>
+<tr><td><code>CreateGameNativeChildWindow(parent, w, h)</code></td><td><code>HWND</code></td><td>ゲームビュー専用子ウィンドウを作成</td></tr>
+<tr><td><code>ShowNativeWindow()</code></td><td><code>void</code></td><td>エディタウィンドウを表示</td></tr>
+<tr><td><code>HideNativeWindow()</code></td><td><code>void</code></td><td>エディタウィンドウを非表示</td></tr>
+<tr><td><code>DestroyNativeWindow()</code></td><td><code>void</code></td><td>エディタウィンドウを破棄</td></tr>
+<tr><td><code>DestroyGameNativeWindow()</code></td><td><code>void</code></td><td>ゲームウィンドウを破棄</td></tr>
+<tr><td><code>GetNativeWindowHandle()</code></td><td><code>HWND</code></td><td>エディタウィンドウハンドルを取得</td></tr>
+<tr><td><code>GetGameNativeWindowHandle()</code></td><td><code>HWND</code></td><td>ゲームウィンドウハンドルを取得</td></tr>
+</table>
+<h3>フレーム制御</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>MessageLoopIteration()</code></td><td><code>void</code></td><td>1フレーム分の処理（Win32メッセージ・更新・描画）を実行</td></tr>
+</table>
+<p>&gt; <strong>注:</strong> ホストプロセスが独自のメッセージループを持つ場合でも、本関数を毎フレーム呼ぶ必要がある。</p>
+<h3>PIE 制御</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>StartPie()</code></td><td><code>void</code></td><td>PieGameManaged をビルド→ロード→GameStart()</td></tr>
+<tr><td><code>StopPie()</code></td><td><code>void</code></td><td>GameStop() → DLL アンロード</td></tr>
+<tr><td><code>SetEditorUiEnabled(enabled)</code></td><td><code>void</code></td><td>ImGui エディタUI の表示切り替え</td></tr>
+<tr><td><code>IsEditorUiEnabled()</code></td><td><code>BOOL</code></td><td>ImGui エディタUI が有効か</td></tr>
+<tr><td><code>GetRuntimeStatusText()</code></td><td><code>const char*</code></td><td>現在の状態テキスト（UTF-8）</td></tr>
+<tr><td><code>GetRuntimeLastErrorText()</code></td><td><code>const char*</code></td><td>最後のエラーテキスト（UTF-8）</td></tr>
+</table>
+<h3>描画制御</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>SetGameClearColor(r, g, b, a)</code></td><td><code>void</code></td><td>ゲームビューのクリアカラーを設定（0.0〜1.0）</td></tr>
+<tr><td><code>CreateSpriteRenderer()</code></td><td><code>uint32_t</code></td><td>スプライトレンダラーを生成しハンドルを返す</td></tr>
+<tr><td><code>DestroySpriteRenderer(handle)</code></td><td><code>void</code></td><td>スプライトレンダラーを破棄</td></tr>
+<tr><td><code>SetSpriteRendererTransform(handle, cx, cy, w, h)</code></td><td><code>void</code></td><td>位置・サイズを設定（NDC座標: -1.0〜1.0）</td></tr>
+<tr><td><code>SetSpriteRendererMaterial(handle, materialName)</code></td><td><code>void</code></td><td>マテリアルを設定（例: &quot;Default&quot;, &quot;Sprite&quot;）</td></tr>
+</table>
+<h3>テクスチャ管理</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>AcquireTextureHandle(path)</code></td><td><code>uint32_t</code></td><td>テクスチャをロードし参照カウントを増やしてハンドルを返す</td></tr>
+<tr><td><code>ReleaseTextureHandle(handle)</code></td><td><code>void</code></td><td>参照カウントを減らし、0になればGPUリソースを解放</td></tr>
+<tr><td><code>SetSpriteRendererTexture(sprHandle, texHandle)</code></td><td><code>void</code></td><td>スプライトにテクスチャを設定</td></tr>
+</table>
+<p>&gt; <code>AcquireTextureHandle</code> は同一パスに対して同じハンドルを返す（参照カウント方式）。  </p>
+<p>&gt; テクスチャを解放するには必ず <code>ReleaseTextureHandle</code> を呼ぶこと。</p>
+<h3>ビューポート管理</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>SetSceneViewportCamera(cx, cy, zoom)</code></td><td><code>void</code></td><td>シーンビューポートのカメラ位置・ズームを設定</td></tr>
+<tr><td><code>GetSceneViewportCamera(cx<em>, cy</em>, zoom*)</code></td><td><code>void</code></td><td>シーンビューポートのカメラ情報を取得</td></tr>
+<tr><td><code>SetSceneViewportRotation(degrees)</code></td><td><code>void</code></td><td>シーンビューポートの回転を設定</td></tr>
+<tr><td><code>GetSceneViewportRotation()</code></td><td><code>float</code></td><td>シーンビューポートの回転を取得</td></tr>
+<tr><td><code>SetGameViewportCamera(cx, cy, zoom)</code></td><td><code>void</code></td><td>ゲームビューポートのカメラを設定</td></tr>
+<tr><td><code>GetGameViewportCamera(cx<em>, cy</em>, zoom*)</code></td><td><code>void</code></td><td>ゲームビューポートのカメラを取得</td></tr>
+</table>
+<h3>レンダラー管理</h3>
+<table>
+<tr><th>関数</th><th>戻り値</th><th>説明</th></tr>
+<tr><td><code>SetRendererBackend(backend)</code></td><td><code>BOOL</code></td><td>バックエンドを切り替え（0=DX12, 1=Vulkan, 2=OpenGL）</td></tr>
+<tr><td><code>GetRendererBackend()</code></td><td><code>uint32_t</code></td><td>現在のバックエンドを取得</td></tr>
+</table>
+<hr>
+<h2>PieGameManaged エクスポート API</h2>
+<p>C# <code>[UnmanagedCallersOnly]</code> 属性で公開されるエントリーポイント。  </p>
+<p>ApplicationDLL の <code>PieLoader</code> が <code>GetProcAddress</code> で取得して呼び出す。</p>
+<table>
+<tr><th>エクスポート名</th><th>シグネチャ</th><th>説明</th></tr>
+<tr><td><code>GameStart</code></td><td><code>void()</code></td><td>ゲーム初期化 (Scene作成・Start呼び出し)</td></tr>
+<tr><td><code>GameTick</code></td><td><code>void(float deltaSeconds)</code></td><td>フレーム更新 (Scene::Update + SpriteRendererSystem::Sync)</td></tr>
+<tr><td><code>GameStop</code></td><td><code>void()</code></td><td>リソース解放 (スプライト破棄・Scene破棄)</td></tr>
+<tr><td><code>SetNativeApi</code></td><td><code>void(NativeApiTable*)</code></td><td>関数ポインタテーブルを受け取りNativeMethods初期化</td></tr>
+</table>
+<h3>NativeApiTable 構造体</h3>
+<p>C++ 側から渡される関数ポインタテーブル。  </p>
+<p><code>SetNativeApi(NativeApiTable*)</code> で初期化後、C# 内部で保持する。</p>
+<pre><code>[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeApiTable
+{
+    public delegate* unmanaged[Cdecl]&lt;float, float, float, float, void&gt;  SetGameClearColor;
+    public delegate* unmanaged[Cdecl]&lt;uint&gt;                              CreateSpriteRenderer;
+    public delegate* unmanaged[Cdecl]&lt;uint, void&gt;                        DestroySpriteRenderer;
+    public delegate* unmanaged[Cdecl]&lt;uint, float, float, float, float, void&gt; SetSpriteRendererTransform;
+    public delegate* unmanaged[Cdecl]&lt;byte*, uint&gt;                       AcquireTextureHandle;
+    public delegate* unmanaged[Cdecl]&lt;uint, void&gt;                        ReleaseTextureHandle;
+    public delegate* unmanaged[Cdecl]&lt;uint, uint, void&gt;                  SetSpriteRendererTexture;
+    public delegate* unmanaged[Cdecl]&lt;uint, byte*, void&gt;                 SetSpriteRendererMaterial;
+}</code></pre>
+<hr>
+<h2>ビルトインマテリアル</h2>
+<p><code>BuiltInMaterials.cs</code> で定義される文字列定数。<code>SetSpriteRendererMaterial</code> に渡す。</p>
+<table>
+<tr><th>定数名</th><th>値</th><th>説明</th></tr>
+<tr><td><code>BuiltInMaterials.Default</code></td><td><code>&quot;Default&quot;</code></td><td>デフォルトマテリアル（テクスチャなし単色）</td></tr>
+<tr><td><code>BuiltInMaterials.Sprite</code></td><td><code>&quot;Sprite&quot;</code></td><td>テクスチャ付きスプライト描画用</td></tr>
+</table>
+<hr>
+<h2>NDC 座標系</h2>
+<p>スプライトの座標・サイズはすべて NDC (Normalized Device Coordinates) で指定する。</p>
+<pre><code>(-1, 1) ─────────── (1, 1)
+    │                  │
+    │   画面中央 (0,0) │
+    │                  │
+(-1,-1) ─────────── (1,-1)</code></pre>
+<table>
+<tr><th>パラメータ</th><th>意味</th><th>範囲</th></tr>
+<tr><td><code>cx</code></td><td>スプライト中心X</td><td>-1.0 〜 1.0</td></tr>
+<tr><td><code>cy</code></td><td>スプライト中心Y</td><td>-1.0 〜 1.0</td></tr>
+<tr><td><code>w</code></td><td>スプライト幅</td><td>0.0 〜 2.0</td></tr>
+<tr><td><code>h</code></td><td>スプライト高さ</td><td>0.0 〜 2.0</td></tr>
+</table>
+<hr>
+<h2>エラーハンドリング</h2>
+<p><code>GetRuntimeLastErrorText()</code> で最後のエラーメッセージを UTF-8 文字列として取得できる。</p>
+<div class='puml'><pre class='puml-src'>@startuml
+skinparam backgroundColor #FAFAFA
+
+title エラー確認フロー
+
+start
+:API 呼び出し;
+if (戻り値が BOOL の関数?) then (yes)
+  if (FALSE が返った?) then (yes)
+    :GetRuntimeLastErrorText() で\nエラー内容を確認;
+  endif
+else (void / handle の関数)
+  :GetRuntimeStatusText() で\n現在の状態を確認;
+endif
+stop
+
+@enduml</pre><div class='puml-msg'>⏳ 図を読み込み中...</div></div>
+<hr>
+<h2>バージョン互換性</h2>
+<p>現時点では API バージョン管理は行っていない。  </p>
+<p>ApplicationDLL と PieGameManaged は同一ソリューション内でビルドし、バイナリの整合性を保つこと。</p>
+
+</section><div class='pb'></div>
+
+
+<script>
+// PlantUML エンコーダ (raw deflate + カスタムBase64)
+function pumlEncode(src){
+  var s=unescape(encodeURIComponent(src));
+  var b=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++) b[i]=s.charCodeAt(i);
+  var c=pako.deflateRaw(b,{level:9});
+  var r='';
+  for(var i=0;i<c.length;i+=3){
+    var b1=c[i],b2=i+1<c.length?c[i+1]:0,b3=i+2<c.length?c[i+2]:0;
+    r+=e6(b1>>2);r+=e6(((b1&3)<<4)|(b2>>4));
+    r+=e6(((b2&15)<<2)|(b3>>6));r+=e6(b3&63);
+  }
+  return r;
+}
+function e6(b){
+  b&=63;
+  if(b<10) return String.fromCharCode(48+b);
+  b-=10; if(b<26) return String.fromCharCode(65+b);
+  b-=26; if(b<26) return String.fromCharCode(97+b);
+  b-=26; return b===0?'-':'_';
+}
+
+window.addEventListener('load',function(){
+  document.querySelectorAll('.puml').forEach(function(box){
+    var pre=box.querySelector('.puml-src');
+    if(!pre) return;
+    var src=pre.textContent.trim();
+    var encoded=pumlEncode(src);
+    var img=document.createElement('img');
+    img.alt='PlantUML Diagram';
+    img.onload=function(){ var m=box.querySelector('.puml-msg'); if(m) m.style.display='none'; };
+    img.onerror=function(){ var m=box.querySelector('.puml-msg'); if(m) m.textContent='図の読み込みに失敗しました (インターネット接続を確認してください)'; };
+    img.src='https://www.plantuml.com/plantuml/png/'+encoded;
+    box.insertBefore(img, box.querySelector('.puml-msg'));
+  });
+});
+</script>
+</body>
+</html>
