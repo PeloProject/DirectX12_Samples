@@ -76,8 +76,10 @@ internal static class GameEntry
         NativeMethods.SetGameClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         if (_scene != null && _spriteRendererSystem != null)
         {
-            _scene.DestroyAllGameObjects();
+            // 初めにNativeを削除した後にC#側を削除
+            _spriteRendererSystem.ProcessDestroyedComponents(_scene);
             _spriteRendererSystem.Release(_scene);
+            _scene.DestroyAllGameObjects();
         }
 
         _spriteRendererSystem = null;

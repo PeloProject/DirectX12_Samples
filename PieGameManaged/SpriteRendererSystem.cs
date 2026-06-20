@@ -215,7 +215,7 @@ internal sealed class SpriteRendererSystem
     /// </summary>
     /// <param name="scene"></param>
     ///=============================================================================================================================
-    private void ProcessDestroyedComponents(Scene scene)
+    public void ProcessDestroyedComponents(Scene scene)
     {
         foreach( var component in scene.DestroyedComponents )
         {
